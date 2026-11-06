@@ -1,0 +1,138 @@
+<h1>Develop kernel code for GKI</h1>  <p>The Generic Kernel Image (GKI) reduces kernel fragmentation by aligning closely with the upstream Linux kernel. However, there are valid reasons why some patches can't be accepted upstream, and there are product schedules that must be met, so some patches are maintained in the Android Common Kernel (ACK) sources from which the GKI is built.</p> <p>Developers must submit code changes upstream using the Linux Kernel Mailing List (LKML) as the first choice, and submit code changes to the ACK <code translate="no" dir="ltr">android-mainline</code> branch only when there's a strong reason why upstream isn't viable. Examples of valid reasons and how to handle them are listed as follows.</p> <ul> <li>
+<p>The patch was submitted to LKML, but wasn't accepted in time for a product release. To handle this patch:</p> <ul> <li>Provide evidence that the patch was submitted to LKML and comments received for the patch, or an estimated time by which the patch is submitted upstream.</li> <li>Decide on a course of action to land the patch in ACK, get it approved upstream, and then take it out of ACK when the final upstream version is merged into ACK.</li> </ul>
+</li> <li><p>The patch defines <code translate="no" dir="ltr">EXPORT_SYMBOLS_GPL()</code> for a vendor module, but couldn't be submitted upstream because there are no in-tree modules that consume that symbol. To handle this patch, provide details on why your module can't be submitted upstream and the alternatives you considered before making this request.</p></li> <li><p>The patch isn't generic enough for upstream and there isn't time to refactor it prior to a product release. To handle this patch, provide an estimated time by which a refactored patch is submitted upstream (the patch won't be accepted in ACK without a plan to submit a refactored patch upstream for review).</p></li> <li><p>The patch can't be accepted by upstream because... <strong>&lt;insert reason here&gt;</strong>. To handle this patch, reach out to the Android kernel team and work with us on options to refactor the patch so that it can be submitted for review and accepted upstream.</p></li> </ul> <p>There are plenty more potential justifications. When you submit your bug or your patch, include a valid justification and expect some iteration and discussion. We recognize that the ACK carries some patches, especially in the early phases of GKI while everyone is learning how to work upstream but can't relax product schedules to do so. Expect the upstreaming requirements to become more stringent over time.</p> <h2 id="patch-requirements">Patch requirements</h2> <p>Patches must conform to the Linux kernel coding standards described in the <a href="https://www.kernel.org/doc/html/latest/process/">Linux source tree</a>, whether they're submitted upstream or to ACK. The <code translate="no" dir="ltr">scripts/checkpatch.pl</code> script is run as part of Gerrit presubmit testing, so run it in advance to make sure it passes. To run the checkpatch script with the same configuration as the presubmit testing, use <code translate="no" dir="ltr">//build/kernel/static_analysis:checkpatch_presubmit</code>. For details, see <a href="https://android.googlesource.com/kernel/build/+/refs/heads/main-kernel/kleaf/docs/checkpatch.md">build/kernel/kleaf/docs/checkpatch.md</a>.</p> <h3 id="ack-patches">ACK patches</h3> <p>Patches submitted to ACK must conform to the Linux kernel coding standards and the <a href="https://android.googlesource.com/kernel/common/+/refs/heads/android-mainline/README.md">contribution guidelines</a>. You must include a <a href="https://gerrit-review.googlesource.com/Documentation/user-changeid.html"><code translate="no" dir="ltr">Change-Id</code></a> tag in the commit message; if you submit the patch to multiple branches (for example, <code translate="no" dir="ltr">android-mainline</code> and <code translate="no" dir="ltr">android12-5.4</code>), you must use the same <code translate="no" dir="ltr">Change-Id</code> for all instances of the patch.</p> <p>Submit patches to LKML first for an upstream review. If the patch is:</p> <ul> <li>Accepted upstream, it's merged automatically into <code translate="no" dir="ltr">android-mainline</code>.</li> <li>Not accepted upstream, submit it to <code translate="no" dir="ltr">android-mainline</code> with a reference to the upstream submission or an explanation for why it wasn't submitted to LKML.</li> </ul> <p>After a patch is accepted either upstream or in <code translate="no" dir="ltr">android-mainline</code>, it can be backported to the appropriate LTS-based ACK (such as <code translate="no" dir="ltr">android12-5.4</code> and <code translate="no" dir="ltr">android11-5.4</code> for patches that fix Android-specific code). Submitting to <code translate="no" dir="ltr">android-mainline</code> enables testing with new upstream release candidates and guarantees that the patch is in the next LTS-based ACK. Exceptions include cases where an upstream patch is backported to <code translate="no" dir="ltr">android12-5.4</code> (because the patch is likely to already be in <code translate="no" dir="ltr">android-mainline</code>).</p> <h3 id="upstream-patches">Upstream patches</h3> <p>As specified in the <a href="https://android.googlesource.com/kernel/common/+/refs/heads/android-mainline/README.md">contribution guidelines</a>, upstream patches destined for ACK kernels fall into the following groups (listed in order of likelihood of being accepted).</p> <ul> <li>
+<code translate="no" dir="ltr">UPSTREAM:</code> - Patches cherrypicked from 'android-mainline` are likely to be accepted into ACK if there's a reasonable use case.</li> <li>
+<code translate="no" dir="ltr">BACKPORT:</code> - Patches from upstream that don't cherrypick cleanly and need modification are also likely to be accepted if there's a reasonable use case.</li> <li>
+<code translate="no" dir="ltr">FROMGIT:</code> - Patches cherrypicked from a maintainer branch in preparation for submitting to Linux mainline might be accepted if there's an upcoming deadline. These must be justified both for content and schedule.</li> <li>
+<code translate="no" dir="ltr">FROMLIST:</code> - Patches that have been submitted to LKML but haven't been accepted into a maintainer branch yet are unlikely to be accepted, unless the justification is compelling enough that the patch would be accepted whether or not it lands in upstream Linux (we assume that it won't). There must be an issue associated with <code translate="no" dir="ltr">FROMLIST</code> patches to facilitate discussion with the Android kernel team.</li> </ul> <h2 id="android-specific-patches">Android-specific patches</h2> <p>If you can't land required changes upstream, you can attempt to submit out-of-tree patches to ACK directly. Submitting out-of-tree patches requires that you create an issue in the IT that cites the patch and rationale for why the patch can't be submitted upstream (see the previous list for examples). However, there are a few cases where the code can't be submitted upstream. These cases are covered as follows and must follow the <a href="https://android.googlesource.com/kernel/common/+/refs/heads/android-mainline/README.md">contribution guidelines</a> for Android-specific patches and be tagged with <code translate="no" dir="ltr">ANDROID:</code> prefix in the subject.</p> <h3 id="changes-to-gki-defconfig">Changes to gki_defconfig</h3> <p>All <code translate="no" dir="ltr">CONFIG</code> changes to <code translate="no" dir="ltr">gki_defconfig</code> must be applied to both the arm64 and x86 versions unless the <code translate="no" dir="ltr">CONFIG</code> is architecture-specific. To request a change to a <code translate="no" dir="ltr">CONFIG</code> setting, create an issue in the IT to discuss the change. Any <code translate="no" dir="ltr">CONFIG</code> change that affects the Kernel Module Interface (KMI) after it's frozen is rejected. In cases where partners request conflicting settings for a single config, we resolve conflicts through discussion on the related bugs.</p> <h3 id="code-that-does-not-exist-upstream">Code that doesn't exist upstream</h3> <p>Modifications to code that's already Android-specific can't be sent upstream. For example, even though the binder driver is maintained upstream, modifications to priority inheritance features of the binder driver can't be sent upstream because they're Android-specific. Be explicit in your bug and patch why the code can't be sent upstream. If possible, split the patches into pieces that can be submitted upstream and Android-specific pieces that can't be submitted upstream to minimize the amount of out-of-tree code maintained in ACK.</p> <p>Other changes in this category are updates to KMI representation files, KMI symbol lists, <code translate="no" dir="ltr">gki_defconfig</code>, build scripts or configuration, or other scripts that don't exist upstream.</p> <h3 id="out-of-tree-modules">Out-of-tree modules</h3> <p>Upstream Linux actively discourages support for building out-of-tree modules. This is a reasonable position given that Linux maintainers don't make guarantees about in-kernel source or binary compatibility and don't want to support code that isn't in the tree. However, the GKI <strong>does</strong> make ABI guarantees for vendor modules, ensuring that KMI interfaces are stable for the supported lifetime of a kernel. Therefore, there's a class of changes to support vendor modules that are acceptable for ACK but aren't acceptable for upstream.</p> <p>For example, consider a patch that adds <code translate="no" dir="ltr">EXPORT_SYMBOL_GPL()</code> macros where the modules that use the export aren't in the source tree. While you must attempt to request <code translate="no" dir="ltr">EXPORT_SYMBOL_GPL()</code> upstream and supply a module that uses the newly exported symbol, if there's a valid justification for why the module isn't being submitted upstream, you can submit the patch to ACK instead. You need to include the justification for why the module can't be upstreamed in the issue. (Don't request the non-GPL variant, <code translate="no" dir="ltr">EXPORT_SYMBOL()</code>.)</p> <h3 id="hidden-configs">Hidden configs</h3> <p>Some in-tree modules automatically select hidden configs that can't be specified in <code translate="no" dir="ltr">gki_defconfig</code>. For example, <code translate="no" dir="ltr">CONFIG_SND_SOC_TOPOLOGY</code> is selected automatically when <code translate="no" dir="ltr">CONFIG_SND_SOC_SOF=y</code> is configured. To accommodate out-of-tree module building, GKI includes a mechanism to enable hidden configs.</p> <p>To enable a hidden config, add a <code translate="no" dir="ltr">select</code> statement in <code translate="no" dir="ltr">init/Kconfig.gki</code> so it is automatically selected based on the <code translate="no" dir="ltr">CONFIG_GKI_HACKS_TO_FIX</code> kernel config, which is enabled in <code translate="no" dir="ltr">gki_defconfig</code>. Use this mechanism only for hidden configs; if the config isn't hidden, it must be specified in <code translate="no" dir="ltr">gki_defconfig</code> either explicitly or as a dependency.</p> <h3 id="loadable-governors">Loadable governors</h3> <p>For kernel frameworks (such as <code translate="no" dir="ltr">cpufreq</code>) that support loadable governors, you can override the default governor (such as <code translate="no" dir="ltr">cpufreq</code>'s <code translate="no" dir="ltr">schedutil</code> governor. For frameworks (such as the thermal framework) that don't support loadable governors or drivers but still require a vendor-specific implementation, create an issue in the IT and consult with the <a href="mailto:kernel-team@android.com">Android kernel team</a>.</p> <p>We'll work with you and upstream maintainers to add the necessary support.</p> <h2 id="vendor-hooks">Vendor hooks</h2> <p>In past releases, you could add vendor-specific modifications directly into the core kernel. This isn't possible with GKI 2.0 because product-specific code must be implemented in modules and won't be accepted in the core kernels upstream or in ACK. To enable value-added features that partners rely on with minimal impact on core kernel code, GKI accepts vendor hooks that allow modules to be invoked from core kernel code. Additionally, key data structures can be padded with vendor data fields that are available to store vendor-specific data to implement these features.</p> <p>Vendor hooks come in two variants (normal and restricted) that are based on tracepoints (not trace events) that vendor modules can attach to. For example, instead of adding a new <code translate="no" dir="ltr">sched_exit()</code> function to do an accounting at task exit, vendors can add a hook in <code translate="no" dir="ltr">do_exit()</code> that a vendor module can attach to for processing. An example implementation includes the following vendor hooks.</p> <ul> <li>Normal vendor hooks use <code translate="no" dir="ltr">DECLARE_HOOK()</code> to create a tracepoint function with the name <code translate="no" dir="ltr">trace_<var translate="no">name</var></code> where <code translate="no" dir="ltr"><var translate="no">name</var></code> is the unique identifier for the trace. By convention, normal vendor hook names begin with <code translate="no" dir="ltr">android_vh</code>, so the name for <code translate="no" dir="ltr">sched_exit()</code> hook would be <code translate="no" dir="ltr">android_vh_sched_exit</code>.</li> <li>Restricted vendor hooks are needed for cases such as scheduler hooks where the attached function must be called even if the CPU is offline or requires a nonatomic context. Restricted vendor hooks can't be detached, so modules that attach to a restricted hook can never unload. Restricted vendor hook names begin with <code translate="no" dir="ltr">android_rvh</code>.</li> </ul> <p>To add a vendor hook, file an issue in IT and submit patches (as with all Android-specific patches, an issue must exist and you must provide justification). Support for vendor hooks is only in ACK, so don't send these patches to upstream Linux.</p> <h3 id="adding-vendor-fields-to-structures">Add vendor fields to structures</h3> <p>You can associate vendor data with key data structures by adding <code translate="no" dir="ltr">android_vendor_data</code> fields using the <code translate="no" dir="ltr">ANDROID_VENDOR_DATA()</code> macros. For example, to support value-added features, append fields to structures as shown in the following code sample.</p> <p>To avoid potential conflicts between fields needed by vendors and fields needed by OEMs, OEMs must never use fields declared using <code translate="no" dir="ltr">ANDROID_VENDOR_DATA()</code> macros. Instead, OEMs must use <code translate="no" dir="ltr">ANDROID_OEM_DATA()</code> to declare <code translate="no" dir="ltr">android_oem_data</code> fields.</p> 
+<pre>#include &lt;linux/android_vendor.h&gt;
+...
+struct important_kernel_data {
+  [all the standard fields];
+  /* Create vendor data for use by hook implementations. The
+   * size of vendor data is based on vendor input. Vendor data
+   * can be defined as single u64 fields like the following that
+   * declares a single u64 field named "android_vendor_data1" :
+   */
+  ANDROID_VENDOR_DATA(1);
+
+  /*
+   * ...or an array can be declared. The following is equivalent to
+   * u64 android_vendor_data2[20]:
+   */
+  ANDROID_VENDOR_DATA_ARRAY(2, 20);
+
+  /*
+   * SoC vendors must not use fields declared for OEMs and
+   * OEMs must not use fields declared for SoC vendors.
+   */
+  ANDROID_OEM_DATA(1);
+
+  /* no further fields */
+}
+</pre> <h3 id="defining-vendor-hooks">Define vendor hooks</h3> <p>Add vendor hooks to kernel code as tracepoints by declaring them using <code translate="no" dir="ltr">DECLARE_HOOK()</code> or <code translate="no" dir="ltr">DECLARE_RESTRICTED_HOOK()</code> and then adding them to code as a tracepoint. For example, to add <code translate="no" dir="ltr">trace_android_vh_sched_exit()</code> to the existing <code translate="no" dir="ltr">do_exit()</code> kernel function:</p> 
+<pre>#include &lt;trace/hooks/exit.h&gt;
+void do_exit(long code)
+{
+    struct task_struct *tsk = current;
+    ...
+    trace_android_vh_sched_exit(tsk);
+    ...
+}
+</pre> <p>The <code translate="no" dir="ltr">trace_android_vh_sched_exit()</code> function initially checks only if something is attached. However, if a vendor module registers a handler using <code translate="no" dir="ltr">register_trace_android_vh_sched_exit()</code>, the registered function is called. The handler must be aware of the context with regard to held locks, RCS state, and other factors. The hook must be defined in a header file in the <code translate="no" dir="ltr">include/trace/hooks</code> directory.</p> <p>For example, the following code gives a possible declaration for <code translate="no" dir="ltr">trace_android_vh_sched_exit()</code> in the file <code translate="no" dir="ltr">include/trace/hooks/exit.h</code>.</p> 
+<pre>/* SPDX-License-Identifier: GPL-2.0 */
+#undef TRACE_SYSTEM
+#define TRACE_SYSTEM sched
+#define TRACE_INCLUDE_PATH trace/hooks
+
+#if !defined(_TRACE_HOOK_SCHED_H) || defined(TRACE_HEADER_MULTI_READ)
+#define _TRACE_HOOK_SCHED_H
+#include &lt;trace/hooks/vendor_hooks.h&gt;
+/*
+ * Following tracepoints are not exported in tracefs and provide a
+ * mechanism for vendor modules to hook and extend functionality
+ */
+
+struct task_struct;
+
+DECLARE_HOOK(android_vh_sched_exit,
+             TP_PROTO(struct task_struct *p),
+             TP_ARGS(p));
+
+#endif /* _TRACE_HOOK_SCHED_H */
+
+/* This part must be outside protection */
+#include &lt;trace/define_trace.h&gt;
+</pre> <p>To instantiate the interfaces required for the vendor hook, add the header file with the hook declaration to <code translate="no" dir="ltr">drivers/android/vendor_hooks.c</code> and export the symbols. For example, the following code completes the declaration of the <code translate="no" dir="ltr">android_vh_sched_exit()</code> hook.</p> 
+<pre>#ifndef __GENKSYMS__
+/* struct task_struct */
+#include &lt;linux/sched.h&gt;
+#endif
+
+#define CREATE_TRACE_POINTS
+#include &lt;trace/hooks/vendor_hooks.h&gt;
+#include &lt;trace/hooks/exit.h&gt;
+/*
+ * Export tracepoints that act as a bare tracehook (i.e. have no trace
+ * event associated with them) to allow external modules to probe
+ * them.
+ */
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_sched_exit);
+</pre> <p><strong>NOTE</strong>: Data structures that are used within the hook declaration need to be fully defined in order to guarantee ABI stability. Otherwise it is unsafe to dereference the opaque pointers or use the struct in sized contexts. The include which provides the full definition of such data structures should go inside the <code translate="no" dir="ltr">#ifndef __GENKSYMS__</code> section of <code translate="no" dir="ltr">drivers/android/vendor_hooks.c</code>. The header files in <code translate="no" dir="ltr">include/trace/hooks</code> should not include the kernel header file with the type definitions to avoid CRC changes which break the KMI. Instead forward declare the types.</p> <h3 id="attaching-to-vendor-hooks">Attach to vendor hooks</h3> <p>To use vendor hooks, the vendor module needs to register a handler for the hook (typically done during module initialization). For example, the following code shows the module <code translate="no" dir="ltr">foo.ko</code> handler for <code translate="no" dir="ltr">trace_android_vh_sched_exit()</code>.</p> 
+<pre>#include &lt;trace/hooks/sched.h&gt;
+...
+static void foo_sched_exit_handler(void *data, struct task_struct *p)
+{
+    foo_do_exit_accounting(p);
+}
+...
+static int foo_probe(..)
+{
+    ...
+    rc = register_trace_android_vh_sched_exit(foo_sched_exit_handler, NULL);
+    ...
+}
+</pre> <h3 id="using-vendor-hooks-from-headers">Use vendor hooks from header files</h3> <p>To use vendor hooks from header files, you may need to update the vendor hook header file to undefine <code translate="no" dir="ltr">TRACE_INCLUDE_PATH</code> to avoid build errors that indicate a trace point header file couldn't be found. For example,</p> 
+<pre>In file included from .../common/init/main.c:111:
+In file included from .../common/include/trace/events/initcall.h:74:
+.../common/include/trace/define_trace.h:95:10: fatal error: 'trace/hooks/initcall.h' file not found
+   95 | #include TRACE_INCLUDE(TRACE_INCLUDE_FILE)
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.../common/include/trace/define_trace.h:90:32: note: expanded from macro 'TRACE_INCLUDE'
+   90 | # define TRACE_INCLUDE(system) __TRACE_INCLUDE(system)
+      |                                ^~~~~~~~~~~~~~~~~~~~~~~
+.../common/include/trace/define_trace.h:87:34: note: expanded from macro '__TRACE_INCLUDE'
+   87 | # define __TRACE_INCLUDE(system) __stringify(TRACE_INCLUDE_PATH/system.h)
+      |                                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.../common/include/linux/stringify.h:10:27: note: expanded from macro '__stringify'
+   10 | #define __stringify(x...)       __stringify_1(x)
+      |                                 ^~~~~~~~~~~~~~~~
+.../common/include/linux/stringify.h:9:29: note: expanded from macro '__stringify_1'
+    9 | #define __stringify_1(x...)     #x
+      |                                 ^~
+&lt;scratch space&gt;:14:1: note: expanded from here
+   14 | "trace/hooks/initcall.h"
+      | ^~~~~~~~~~~~~~~~~~~~~~~~
+1 error generated.
+</pre> <p>To fix this type of build error, apply the equivalent fix to the vendor hook header file you're including. For additional information, refer to <a href="https://r.android.com/3066703">https://r.android.com/3066703</a>.</p> 
+<pre>diff --git a/include/trace/hooks/mm.h b/include/trace/hooks/mm.h
+index bc6de7e53d66..039926f7701d 100644
+--- a/include/trace/hooks/mm.h
++++ b/include/trace/hooks/mm.h
+@@ -2,7 +2,10 @@
+ #undef TRACE_SYSTEM
+ #define TRACE_SYSTEM mm
+
++#ifdef CREATE_TRACE_POINTS
+ #define TRACE_INCLUDE_PATH trace/hooks
++#define UNDEF_TRACE_INCLUDE_PATH
++#endif
+</pre> <p>Defining <code translate="no" dir="ltr">UNDEF_TRACE_INCLUDE_PATH</code> tells <code translate="no" dir="ltr">include/trace/define_trace.h</code> to undefine <code translate="no" dir="ltr">TRACE_INCLUDE_PATH</code> after creating the trace points.</p> <h2 id="core-kernel-features">Core kernel features</h2> <p>If none of the previous techniques enable you to implement a feature from a module, then you must add the feature as Android-specific modification to the core kernel. Create an issue in the issue tracker (IT) to start the conversation.</p> <h2 id="core-kernel-features">User application programming interface (UAPI)</h2> <ul> <li>
+<strong>UAPI header files.</strong> Changes to <a href="https://android.googlesource.com/kernel/common/+/refs/heads/android-mainline/include/uapi/">UAPI header files</a> must occur upstream unless the changes are to Android-specific interfaces. Use vendor-specific header files to define interfaces between vendor modules and vendor userspace code.</li> <li>
+<strong>sysfs nodes.</strong> Don't add new sysfs nodes to the GKI kernel (such additions are valid only in vendor modules). sysfs nodes used by the SoC- and device-agnostic libraries and Java code that comprises the Android framework can be changed only in compatible ways and must be changed upstream if they're not Android-specific sysfs nodes. You <strong>can</strong> create vendor-specific sysfs nodes to be used by vendor userspace. By default, access to sysfs nodes by userspace is denied using SELinux. It's up to the vendor to add the appropriate SELinux labels to allow access by authorized vendor software.</li> <li>
+<strong>DebugFS nodes.</strong> Vendor modules can define nodes in <code translate="no" dir="ltr">debugfs</code> for debugging only (as <code translate="no" dir="ltr">debugfs</code> isn't mounted during normal operation of the device).</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/kernel/kernel-code" class="_attribution-link">https://source.android.com/docs/core/architecture/kernel/kernel-code</a>
+  </p>
+</div>

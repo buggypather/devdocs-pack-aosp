@@ -1,0 +1,124 @@
+<h1>Implement business logic</h1>  <ol> <li>
+<p>Verify that your VSIDL catalog directory has the necessary build, protobuf, and VSIDL files. To start from an existing sample, you can find an example of a valid catalog folder under <code translate="no" dir="ltr">/system/software_defined_vehicle/samples/vsidl/stable/catalog</code>.</p> <p>Sample catalog structure:</p> 
+<pre>my_catalog/
+├── Android.bp          # Defines rust_protobuf modules for .proto files
+├── types.proto         # Protobuf message / RPC service definitions
+└── architecture.vsidl  # VSIDL service bundle definitions
+</pre>
+<aside class="note"><strong>Note:</strong><span> We recommend defining small, logically grouped <code translate="no" dir="ltr">rust_protobuf</code> libraries instead of one large library for the entire catalog. To avoid ambiguity, verify each <code translate="no" dir="ltr">.proto</code> file belongs to only one library target within the catalog.</span></aside>
+</li> <li>
+<p>Write custom code to implement your business logic.</p> <p><code translate="no" dir="ltr">vsidlc</code> generates middleware bindings and service bundle scaffolding (<code translate="no" dir="ltr">lib.rs</code>, <code translate="no" dir="ltr">service_bundle.rs</code>, and <code translate="no" dir="ltr">main.rs</code>) for Rust. If you write a service bundle in C++, implement the lifecycle (<code translate="no" dir="ltr">libsdv_lifecycle_client_cpp</code>) and communication (<code translate="no" dir="ltr">libsdv_comms_cpp</code>) interfaces directly:</p> <ul> <li>RPC servers (Rust): Implement the generated traits from <code translate="no" dir="ltr">lib.rs</code>.</li> <li>Publish, subscribe, and RPC clients (Rust): Call the generated functions within <code translate="no" dir="ltr">service_bundle.rs</code> to interact with other services.</li> <li><p>Lifecycle and communication (C++): Subclass <code translate="no" dir="ltr">ServiceBundle</code> and initialize your publishers, subscribers, or RPC endpoints in <code translate="no" dir="ltr">onStart</code>.</p></li> </ul> <div> <section><p class="_code-tab"><strong>Rust</strong></p>
+<ol> <li>
+<p>Generate a skeleton implementation by running:</p> 
+<pre data-language="">vsidlc -c /path/to/catalog -o /path/to/output --services
+</pre> <p>Running <code translate="no" dir="ltr">vsidlc</code> with the <code translate="no" dir="ltr">--services</code> flag generates a boilerplate Rust implementation for each service bundle. This provides the source code (<code translate="no" dir="ltr">main.rs</code>) and a build configuration file (<code translate="no" dir="ltr">Android.bp</code>) with all dependencies, so your bundle can exchange default messages right away while you focus on your business logic.</p>
+</li> <li>
+<p>For each service bundle, find the Rust implementation in:</p> <p> <code translate="no" dir="ltr"><var class="edit" scope="/path/to/output" translate="no">/path/to/output</var>/services/<var class="edit" scope="ServiceBundleName" translate="no">ServiceBundleName</var>/src/main.rs</code>.</p> <aside class="caution"><strong>Caution:</strong><span> If the output directory already contains a <code translate="no" dir="ltr">main.rs</code> file, <code translate="no" dir="ltr">vsidlc</code> creates a new file named <code translate="no" dir="ltr">main.rs.new</code> instead of overwriting your existing code. You must manually merge any changes from the <code translate="no" dir="ltr">.new</code> file. If you want <code translate="no" dir="ltr">vsidlc</code> to overwrite files, add <code translate="no" dir="ltr">--purge</code>.</span></aside>
+</li> <li>
+<p>By default, the generated implementation creates messages with default values and sends them between publishers and subscribers or RPC clients and servers. To modify this behavior, find the <code translate="no" dir="ltr">TODO</code> comments in <code translate="no" dir="ltr">main.rs</code> and adjust them to your preferences. For example:</p> <p> <code translate="no" dir="ltr">rust
+async fn handle_tire_pressure_range_unique_publisher(
+    publisher: sdv::mw::Publisher&lt;TirePressureRange&gt;,
+) {
+    loop {
+        // TODO: Modify the frequency of publishing messages here.
+        sleep(Duration::from_secs(1)).await;
+        // TODO: Modify the message content here.
+        let message = TirePressureRange::default();
+        info!("Publishing on TirePressureRange#UNIQUE");
+        publisher.publish(&amp;message).unwrap();
+    }
+}</code></p>
+</li> <li><p>To help ensure that your modifications to the generated files aren't overwritten the next time <code translate="no" dir="ltr">vsidlc</code> runs, move the <code translate="no" dir="ltr">services</code> folder out of the <code translate="no" dir="ltr"><var class="edit" scope="/path/to/output" translate="no">/path/to/output</var></code> folder.</p></li> </ol></section> <section><p class="_code-tab"><strong>C++</strong></p>
+<aside class="note"><strong>Note:</strong><span> <code translate="no" dir="ltr">vsidlc --services</code> generates Rust code only. For C++ service bundles, create the header, source, and <code translate="no" dir="ltr">Android.bp</code> files manually using <code translate="no" dir="ltr">libsdv_lifecycle_client_cpp</code> and <code translate="no" dir="ltr">libsdv_comms_cpp</code>.</span></aside> <ol> <li>
+<p>Create a new header file, <code translate="no" dir="ltr"><var class="edit" scope="src/lib" translate="no">src/lib</var>.hpp</code>, with a class for your service bundle:</p> 
+<pre data-language="cpp">#pragma once
+#include &lt;sdv/service_bundle.h&gt;
+#include &lt;sdv/context.hpp&gt;
+
+namespace com::sdv::oem::service_bundle {
+
+// Sample implementation of the service bundle interface.
+class ServiceBundleName : public android::sdv::service_bundle::ServiceBundle {
+public:
+    ServiceBundleName(sdv_comms::ctx::Context context);
+    ~ServiceBundleName();
+    void onStart() override;
+    void onStop() override;
+};
+}  // namespace com::sdv::oem::service_bundle
+</pre>
+</li> <li>
+<p>Create a new source file, <code translate="no" dir="ltr"><var class="edit" scope="src/lib" translate="no">src/lib</var>.cpp</code>, with the class implementation:</p> 
+<pre data-language="cpp">#include "src/lib.hpp"
+#include &lt;sdv/sb_macro.h&gt;
+#include &lt;iostream&gt;
+using com::sdv::oem::service_bundle::ServiceBundleName;
+
+// Register the new service bundle.
+REGISTER_SERVICE_BUNDLE(ServiceBundleName);
+
+// Sample implementation of the service bundle interface.
+namespace com::sdv::oem::service_bundle {
+// Creates a new instance of the ServiceBundleName.
+// Called when service bundle is created by the system.
+// Context object is provided as a parameter that gives access to the
+// communication stack APIs.
+ServiceBundleName::ServiceBundleName([[maybe_unused]] sdv_comms::ctx::Context context) :
+  ServiceBundle(context) {
+    // Memory allocations and static data loading should be done as
+    // part of this method.
+    //
+    // Loading of the dynamic resources (sockets, files, etc)
+    // is strongly discouraged due to possible Suspend-to-RAM scenario.
+    //
+    // The dynamic data can be loaded in the onStart method.
+}
+
+// Called when the service bundle is started by the system.
+void ServiceBundleName::onStart() {
+    // Allocate dynamic resources (sockets, files, publishers, and
+    // subscribers such as TirePressureRange#UNIQUE) during this call.
+}
+
+// Called when the service bundle is stopped by the system in preparation
+// for shutdown or suspend to RAM/Disc.
+void ServiceBundleName::onStop() {
+    // Stop active publishing loops and release the dynamic resources
+    // that were allocated in the onStart method.
+}
+
+// Called when the service bundle is destroyed by the system.
+ServiceBundleName::~ServiceBundleName() {
+    // Static resources deallocation needs to be implemented in the destructor.
+}
+}  // namespace com::sdv::oem::service_bundle
+</pre>
+</li> <li>
+<p>Create a service bundle library Soong target in a new or an existing <a href="https://source.android.com/docs/setup/reference/androidbp"><code translate="no" dir="ltr">Android.bp</code></a> file:</p> 
+<pre data-language="cpp">// Service bundle library.
+cc_library_shared {
+  name: "libservice_bundle",
+  srcs: ["src/lib.cpp",],
+  // Allows the library to be available inside APEX.
+  apex_available: [
+      "//apex_available:platform",
+      "//apex_available:anyapex",
+  ],
+  shared_libs: [
+    // Service Bundle lifecycle C++ API.
+    "libsdv_lifecycle_client_cpp",
+    // commstack library that provides context object reference
+    "libsdv_comms_cpp",
+  ],
+
+  // Service bundle package is packed into /product apexes.
+  product_specific: true,
+}
+</pre>
+</li> </ol></section> </div>
+</li> </ol> <h2 id="whats-next">What's next</h2> <p>To deploy your service bundles, see <a href="create-apex">Build and deploy service bundles</a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/core-areas/vsidl/implement-business" class="_attribution-link">https://source.android.com/docs/automotive/sdv/core-areas/vsidl/implement-business</a>
+  </p>
+</div>

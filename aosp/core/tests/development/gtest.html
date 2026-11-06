@@ -1,0 +1,36 @@
+<h1>GoogleTest</h1>  <p>A GoogleTest (GTest, also sometimes called "native tests") for the platform typically accesses lower-level HALs or performs raw IPC against various system services. Because of this, the testing approach is usually tightly coupled with the service under test.</p> <p>To integrate with continuous testing infrastructure, build your GTests using the <a href="https://github.com/google/googletest">GTest</a> framework.</p> <h2 id="examples">Examples</h2> <p>Here are some examples of GTest in the platform source:</p> <ul> <li><a href="https://android.googlesource.com/platform/frameworks/av/+/android17-release/camera/tests/">frameworks/av/camera/tests</a></li> <li><a href="https://android.googlesource.com/platform/frameworks/native/+/android17-release/libs/gui/tests/">frameworks/native/libs/gui/tests</a></li> </ul> <h2 id="workflow">Summary of steps</h2> <ol> <li><p>Follow the <a href="https://android.googlesource.com/platform/frameworks/base/+/android17-release/libs/hwui/tests/unit/">example GTest module setup</a>.</p></li> <li><p>To automatically include GTest dependencies, use the <code translate="no" dir="ltr">BUILD_NATIVE_TEST</code> build rule in your test module configuration.</p></li> <li><p>Write a test configuration, following the examples for <a href="blueprints">simple</a> and <a href="test-config">complex</a> options.</p></li> <li>
+<p>Build the test module with <code translate="no" dir="ltr">mmm</code> for incremental builds, or <code translate="no" dir="ltr">mma</code> for full builds:</p> 
+<pre>make hwui_unit_tests -j
+</pre>
+</li> <li>
+<p>Run the test locally using <a href="atest">Atest</a>:</p> 
+<pre>  atest hwui_unit_tests
+</pre> <p>You can also add arguments to your GTests. The following are especially useful arguments:</p> <ul> <li>
+<code translate="no" dir="ltr">native-test-flag</code> specifies additional flag values to pass to the GTest shell command.</li> <li>
+<p><code translate="no" dir="ltr">native-test-timeout</code> specifies a test timeout value in microseconds.</p> <p>The following example code uses both of these arguments:</p> 
+<pre>atest test-name -- --module-arg test-name:native-test-flag:"\"argument1 argument2\"" \
+   --module-arg test-name:native-test-timeout:60000
+</pre>
+</li> </ul>
+</li> <li>
+<p>Run the test with the Trade Federation test harness:</p> 
+<pre>make tradefed-all -j
+tradefed.sh run template/local_min --template:map test=hwui_unit_tests
+</pre>
+</li> <li>
+<p>Manually install and run:</p> <ol> <li>
+<p>Push the generated test binary onto your device:</p> 
+<pre> adb push ${OUT}/data/nativetest/hwui_unit_tests/hwui_unit_tests \
+ /data/nativetest/hwui_unit_tests/hwui_unit_tests
+</pre>
+</li> <li>
+<p>Launch GTest and execute the test by invoking the test binary on the device:</p> 
+<pre> adb shell /data/nativetest/hwui_unit_tests/hwui_unit_tests
+</pre> <p>For more information about customizing test execution, add the <code translate="no" dir="ltr">--help</code> parameter to your test binary. For more information on parameters, refer to the <a href="https://github.com/google/googletest/blob/master/googletest/docs/advanced.md">GTest advanced guide</a>.</p>
+</li> </ol>
+</li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/development/gtest" class="_attribution-link">https://source.android.com/docs/core/tests/development/gtest</a>
+  </p>
+</div>

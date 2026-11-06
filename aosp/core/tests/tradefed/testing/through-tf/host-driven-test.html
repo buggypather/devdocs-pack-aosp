@@ -1,0 +1,46 @@
+<h1>Write a host-driven test in Trade Federation</h1>  <p>This page describes how to write a JUnit4-style device test driven by the host. This means that the host side of the harness is going to trigger actions against the device.</p> <p>Note that we consider "host-side" tests and "host-driven" tests to be slightly different:</p> <ul> <li>host-driven test: Is a test running on the host that interacts with one or more devices. The system under test (SUT) is not on the host itself but is being tested from the host.</li> <li>host-side test: Is a test purely running on the host and testing something only on the host, for example unit tests.</li> </ul> <h2 id="why_create_a_host-driven_test_rather_than_an_instrumentation_test">Why create a host-driven test rather than an instrumentation test?</h2> <p>Some tests might require you to affect the device overall state, like issuing a reboot command. In the instrumentation test case, a reboot would kill the instrumentation, the test could not continue, and no results would be available.</p> <p>Host-driven tests can also drive additional setup steps that require interaction with external devices on which the test depends on.</p> <p>A host-driven test can handle these use cases and allow for advanced testing of the device with more scenarios. If you are in that situation, writing a host-driven test makes the most sense.</p> <h2 id="how_are_host-driven_tests_written_in_tf">How are host-driven tests written in TF?</h2> <p>Here is a sample:</p> 
+<pre>@RunWith(DeviceJUnit4ClassRunner.class)
+public class SampleHostJUnit4DeviceTest extends BaseHostJUnit4Test {
+    @Before
+    public void setUp() throws Exception {
+       // Some setup
+    }
+
+    @Test
+    public void testCheckWeHaveDevice() throws Exception {
+        Assert.assertNotNull(getDevice());
+    }
+}
+</pre> <p>Host-driven tests in Trade Federation are driven by the <a href="https://android.googlesource.com/platform/tools/tradefederation/+/refs/heads/android17-release/test_framework/com/android/tradefed/testtype/DeviceJUnit4ClassRunner.java">DeviceJUnit4ClassRunner</a> JUnit4 test runner. The overall structure of the test class is the same as a regular JUnit4 test:</p> <ul> <li><code translate="no" dir="ltr">@BeforeClass</code></li> <li><code translate="no" dir="ltr">@Before</code></li> <li><code translate="no" dir="ltr">@Test</code></li> <li><code translate="no" dir="ltr">@After</code></li> <li><code translate="no" dir="ltr">@AfterClass</code></li> <li>
+<code translate="no" dir="ltr">Assume</code>, <code translate="no" dir="ltr">Assert</code>
+</li> </ul> <p>Extending <a href="https://android.googlesource.com/platform/tools/tradefederation/+/refs/heads/android17-release/test_framework/com/android/tradefed/testtype/junit4/BaseHostJUnit4Test.java">BaseHostJunit4Test</a> is a way to inherit useful testing utilities API such as:</p> <ul> <li>
+<code translate="no" dir="ltr">installPackage</code>: Allows to install an APK on the target device.</li> <li>
+<code translate="no" dir="ltr">installPackageAsUser</code>: Allows to install an APK as a user on the target device.</li> <li>
+<code translate="no" dir="ltr">uninstallPackage</code>: Allows to uninstall an APK.</li> <li>
+<code translate="no" dir="ltr">isPackageInstalled</code>: Check whether a package is installed or not.</li> <li>
+<code translate="no" dir="ltr">hasDeviceFeature</code>: Check whether device supports a feature or not. (<code translate="no" dir="ltr">pm list features</code>)</li> <li>
+<code translate="no" dir="ltr">runDeviceTests(DeviceTestRunOptions options)</code>: Run an instrumentation test against a target device using <a href="https://android.googlesource.com/platform/tools/tradefederation/+/refs/heads/android17-release/test_framework/com/android/tradefed/testtype/junit4/DeviceTestRunOptions.java">DeviceTestRunOptions</a> to handle all the possible options.</li> </ul> <p>Also provide access to the Tradefed device object:</p> <ul> <li>
+<code translate="no" dir="ltr">getDevice()</code>: Returns a TF device object for manipulating the device.</li> <li>
+<code translate="no" dir="ltr">getBuild()</code>: Returns a build info TF object to get information about the build.</li> <li>
+<code translate="no" dir="ltr">getAbi()</code>: Returns the ABI the test is running against.</li> </ul> <h2 id="tradefed_support_per-class_device_preparation_and_clean_up">Tradefed support: Per-class device preparation and clean up</h2> <p>JUnit4 <code translate="no" dir="ltr">@BeforeClass</code> and <code translate="no" dir="ltr">@AfterClass</code> are only applicable to static methods, which makes it impossible to use the <code translate="no" dir="ltr">#getDevice()</code> handler to do some device-specific, one-time, per-class setup or clean up. To solve this issue, use the Tradefed annotation.</p> <ul> <li>@BeforeClassWithInfo: Runs before @BeforeClass annotations</li> <li>@AfterClassWithInfo: Runs after @AfterClass annotations</li> </ul> 
+<pre>   @BeforeClassWithInfo
+   public static void beforeClassWithDevice(TestInformation testInfo) {
+       assertNotNull(testInfo.getDevice());
+       testInfo.properties().put("mytest:test-prop", "test");
+   }
+
+   @AfterClassWithInfo
+   public static void afterClassWithDevice(TestInformation testInfo) {
+       assertNotNull(testInfo.getDevice());
+       testInfo.properties().put("mytest:test-prop", "test");
+   }
+</pre> <p><code translate="no" dir="ltr">TestInformation</code> allows you to use the device and store properties that can be used either in the static or non-static scope. <code translate="no" dir="ltr">BaseHostJUnit4Test</code> supports getting the <code translate="no" dir="ltr">TestInformation</code> in a non-static scope via <code translate="no" dir="ltr">#getTestInformation()</code>.</p> <p>If you are not extending <code translate="no" dir="ltr">BaseHostJUnit4Test</code>, you can implement <code translate="no" dir="ltr">ITestInformationReceiver</code> in order to receive the <code translate="no" dir="ltr">TestInformation</code> object.</p> <h2 id="how_to_configure_a_host-driven_test_in_tradefed">How to configure a host-driven test in Tradefed?</h2> <p>In Tradefed XML configuration file, host-driven tests are run through the <a href="https://android.googlesource.com/platform/tools/tradefederation/+/refs/heads/android17-release/test_framework/com/android/tradefed/testtype/HostTest.java">HostTest</a> runner.</p> 
+<pre>&lt;test class="com.android.tradefed.testtype.HostTest" &gt;
+    &lt;option name="class" value="android.sample.cts.SampleHostJUnit4DeviceTest" /&gt;
+&lt;/test&gt;
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/tradefed/testing/through-tf/host-driven-test" class="_attribution-link">https://source.android.com/docs/core/tests/tradefed/testing/through-tf/host-driven-test</a>
+  </p>
+</div>

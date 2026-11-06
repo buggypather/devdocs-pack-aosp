@@ -1,0 +1,58 @@
+<h1>HIDL Java</h1>  <p>In Android 8.0 the Android OS was re-architected to define clear interfaces between the device-independent Android platform, and device- and vendor-specific code. Android already defined many such interfaces in the form of HAL interfaces, defined as C headers in <code translate="no" dir="ltr">hardware/libhardware</code>. HIDL replaced these HAL interfaces with stable, versioned interfaces, which can either be in Java (described below) or be client- and server-side HIDL interfaces in <a href="hidl-cpp">C++</a>.</p> <p>HIDL interfaces are intended to be used primarily from native code, and as a result HIDL is focused on the auto-generation of efficient code in C++. However, HIDL interfaces must also be available for use directly from Java, as some Android subsystems (such as Telephony) have Java HIDL interfaces.</p> <p>The pages in this section describe the Java frontend for HIDL interfaces, detail how to create, register, and use services, and explain how HALs and HAL clients written in Java interact with the HIDL RPC system.</p> <h2 id="client">Client example</h2> <p>This is an example of a client for an interface <code translate="no" dir="ltr">IFoo</code> in package <code translate="no" dir="ltr">android.hardware.foo@1.0</code> that is registered as service name <code translate="no" dir="ltr">default</code> and an additional service with the custom service name <code translate="no" dir="ltr">second_impl</code>.</p> <h3 id="adding-libraries">Add libraries</h3> <p>You need to add dependencies on the corresponding HIDL stub library if you want to use it. Usually, this is a static library:</p> 
+<pre>// in Android.bp
+static_libs: [ "android.hardware.foo-V1.0-java", ],
+// in Android.mk
+LOCAL_STATIC_JAVA_LIBRARIES += android.hardware.foo-V1.0-java</pre> <p>If you know that you're already pulling in dependencies on these libraries, you can also use shared linkage:</p> 
+<pre>// in Android.bp
+libs: [ "android.hardware.foo-V1.0-java", ],
+// in Android.mk
+LOCAL_JAVA_LIBRARIES += android.hardware.foo-V1.0-java</pre> <h4 id="q-libraries">Additional considerations for adding libraries in Android 10</h4> <p>If you have a system or vendor app that targets Android 10 or higher, you can statically include these libraries. You can also use (only) HIDL classes from custom JARs installed on the device with stable Java APIs made available using the existing <code translate="no" dir="ltr">uses-library</code> mechanism for system apps. The latter approach saves space on the device. For more details, see <a href="java-library">Implementing Java SDK Library</a>. For older apps, the old behavior is preserved.</p> <p>Starting in Android 10, "shallow" versions of these libraries are also available. These include the class in question but don't include any of the dependent classes. For instance, <code translate="no" dir="ltr">android.hardware.foo-V1.0-java-shallow</code> includes classes in the foo package, but doesn't include classes in <code translate="no" dir="ltr">android.hidl.base-V1.0-java</code>, which contains the base class of all HIDL interfaces. If you're creating a library that already has the preferred interface's base classes available as a dependency, you can use the following: </p> 
+<pre>// in Android.bp
+static_libs: [ "android.hardware.foo-V1.0-java-shallow", ],
+// in Android.mk
+LOCAL_STATIC_JAVA_LIBRARIES += android.hardware.foo-V1.0-java-shallow</pre> <p>HIDL base and manager libraries are also no longer available on the boot classpath for apps (previously, they were sometimes used as hidden API, due to Android's delegate-first classloader). Instead, they've been moved into a new namespace with <code translate="no" dir="ltr">jarjar</code>, and apps which use these (necessarily priv apps) must have their own separate copies. Modules on the boot classpath using HIDL must use the shallow variants of these Java libraries and to add <code translate="no" dir="ltr">jarjar_rules: ":framework-jarjar-rules"</code> to their <code translate="no" dir="ltr">Android.bp</code> to use the version of these libraries that exists in the boot classpath.</p> <h3 id="modify">Modify your Java source</h3> <p>There's only one version (<code translate="no" dir="ltr">@1.0</code>) of this service, so this code retrieves only that version. See <a href="hidl-java#extensions">interface extensions</a> for how to handle multiple different versions of the service.</p> 
+<pre>import android.hardware.foo.V1_0.IFoo;
+...
+// retry to wait until the service starts up if it is in the manifest
+IFoo server = IFoo.getService(true /* retry */); // throws NoSuchElementException if not available
+IFoo anotherServer = IFoo.getService("second_impl", true /* retry */);
+server.doSomething(…);</pre> <aside class="warning"><strong>Warning:</strong> Java <code translate="no" dir="ltr">getService</code> with no arguments doesn't wait for the service to start.</aside> <h2 id="service">Provide a service</h2> <p>Framework code in Java might need to serve interfaces to receive asynchronous callbacks from HALs.</p> <aside class="warning"><strong>Warning:</strong> Don't implement a driver (HAL) in Java. Google recommends that you implement drivers in C++.</aside> <aside class="warning"><strong>Warning:</strong> Java drivers must be in a separate process from their clients (same process communication isn't supported).</aside> <p>For the <code translate="no" dir="ltr">IFooCallback</code> interface in version 1.0 of the <code translate="no" dir="ltr">android.hardware.foo</code> package, you can implement your interface in Java using the following steps:</p> <ol> <li>Define your interface in HIDL.</li> <li>Open <code translate="no" dir="ltr">/tmp/android/hardware/foo/IFooCallback.java</code> as a reference.</li> <li>Create a new module for your Java implementation.</li> <li>Examine the abstract class <code translate="no" dir="ltr">android.hardware.foo.V1_0.IFooCallback.Stub</code>, then write a new class to extend it and implement the abstract methods.</li> </ol> <h3 id="autogen">View auto-generated files</h3> <p>To view the automatically generated files, run:</p> 
+<pre>hidl-gen -o /tmp -Ljava \
+  -randroid.hardware:hardware/interfaces \
+  -randroid.hidl:system/libhidl/transport android.hardware.foo@1.0</pre> <p>These commands generate the directory <code translate="no" dir="ltr">/tmp/android/hardware/foo/1.0</code>. For the file <code translate="no" dir="ltr">hardware/interfaces/foo/1.0/IFooCallback.hal</code>, this generates the file <code translate="no" dir="ltr">/tmp/android/hardware/foo/1.0/IFooCallback.java</code>, which encapsulates the Java interface, the proxy code, and the stubs (both proxy and stubs conform to the interface).</p> <p><code translate="no" dir="ltr">-Lmakefile</code> generates the rules that run this command at build time and allow you to include <code translate="no" dir="ltr">android.hardware.foo-V1.0-java</code> and link against the appropriate files. A script that automatically does this for a project full of interfaces can be found at <code translate="no" dir="ltr">hardware/interfaces/update-makefiles.sh</code>. The paths in this example are relative; hardware/interfaces can be a temporary directory under your code tree to enable you to develop a HAL prior to publishing it.</p> <h2 id="service">Run a service</h2> <p>The HAL provides the <code translate="no" dir="ltr">IFoo</code> interface, which must make asynchronous callbacks to the framework over the <code translate="no" dir="ltr">IFooCallback</code> interface. The <code translate="no" dir="ltr">IFooCallback</code> interface isn't registered by name as a discoverable service; instead, <code translate="no" dir="ltr">IFoo</code> must contain a method such as <code translate="no" dir="ltr">setFooCallback(IFooCallback x)</code>.</p> <p>To set up <code translate="no" dir="ltr">IFooCallback</code> from version 1.0 of the <code translate="no" dir="ltr">android.hardware.foo</code> package, add <code translate="no" dir="ltr">android.hardware.foo-V1.0-java</code> to <code translate="no" dir="ltr">Android.mk</code>. The code to run the service is:</p> 
+<pre>import android.hardware.foo.V1_0.IFoo;
+import android.hardware.foo.V1_0.IFooCallback.Stub;
+....
+class FooCallback extends IFooCallback.Stub {
+    // implement methods
+}
+....
+// Get the service from which you will be receiving callbacks.
+// This also starts the threadpool for your callback service.
+IFoo server = IFoo.getService(true /* retry */); // throws NoSuchElementException if not available
+....
+// This must be a persistent instance variable, not local,
+//   to avoid premature garbage collection.
+FooCallback mFooCallback = new FooCallback();
+....
+// Do this once to create the callback service and tell the "foo-bar" service
+server.setFooCallback(mFooCallback);</pre> <h2 id="extensions">Interface extensions</h2> <p>Assuming a given service implements the <code translate="no" dir="ltr">IFoo</code> interface across all devices, it's possible that on a particular device the service might provide additional capabilities implemented in the interface extension <code translate="no" dir="ltr">IBetterFoo</code>, as follows:</p> 
+<pre>interface IFoo {
+   ...
+};
+
+interface IBetterFoo extends IFoo {
+   ...
+};</pre> <p>Calling code aware of the extended interface can use the <code translate="no" dir="ltr">castFrom()</code> Java method to safely cast the base interface to the extended interface:</p> 
+<pre>IFoo baseService = IFoo.getService(true /* retry */); // throws NoSuchElementException if not available
+IBetterFoo extendedService = IBetterFoo.castFrom(baseService);
+if (extendedService != null) {
+  // The service implements the extended interface.
+} else {
+  // The service implements only the base interface.
+}</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/hidl-java" class="_attribution-link">https://source.android.com/docs/core/architecture/hidl-java</a>
+  </p>
+</div>

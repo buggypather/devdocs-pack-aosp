@@ -1,0 +1,146 @@
+<h1>Automotive display proxy service</h1>  <p>This simple framework service lets vendor processes use SurfaceFlinger/EGL in HAL implementations, without linking libgui. AOSP provides the default implementation of this service, which is fully functional. However, the vendor must also implement APIs to provide this service on their platform.</p> 
+<pre>package android.frameworks.automotive.display@1.0;
+
+import android.hardware.graphics.bufferqueue@2.0::IGraphicBufferProducer;
+
+interface IAutomotiveDisplayProxyService {
+    /**
+     * Gets an IGraphicBufferProducer instance from the service.
+     *
+     * @param  id   Target's stable display identifier
+     *
+     * @return igbp Returns an IGraphicBufferProducer object, that can be
+     *              converted to an ANativeWindow object.
+     */
+    getIGraphicBufferProducer(uint64_t id) generates (IGraphicBufferProducer igbp);
+
+    /**
+     * Sets the ANativeWindow, which is associated with the
+     * IGraphicBufferProducer, to be visible and to take over the display.
+     *
+     * @param  id      Target display ID
+     *
+     * @return success Returns true on success.
+     */
+    showWindow(uint64_t id) generates (bool success);
+
+    /**
+     * Sets the ANativeWindow, which is associated with the
+     * IGraphicBufferProducer, to be invisible and to release the control
+     * over display.
+     *
+     * @param  id      Target display ID
+     *
+     * @return success Returns true on success.
+     */
+    hideWindow(uint64_t id) generates (bool success);
+
+    /**
+     * Returns the stable identifiers of all available displays.
+     *
+     * @return ids A list of stable display identifiers.
+     */
+    getDisplayIdList() generates (vec&lt;uint64_t&gt; ids);
+
+    /**
+     * Returns the descriptor of the target display.
+     *
+     * @param  id    Stable ID of a target display.
+     * @return cfg   DisplayConfig of the active display.
+     * @return state Current state of the active display.
+     */
+    getDisplayInfo(uint64_t id) generates (HwDisplayConfig cfg, HwDisplayState state);
+}</pre> <p>To use this service:</p> <ol> <li>Get <code translate="no" dir="ltr">IAutomotiveDisplayProxyService</code>. 
+<pre>android::sp&lt;IAutomotiveDisplayProxyService&gt; windowProxyService =
+    IAutomotiveDisplayProxyService::getService("default");
+if (windowProxyService == nullptr) {
+    LOG(ERROR) &lt;&lt; "Cannot use AutomotiveDisplayProxyService. Exiting.";
+    return 1;
+}</pre> </li> <li>Retrieve an active display information from the service to determine the resolution. 
+<pre>// We use the first display in the list as the primary.
+pWindowProxy-&gt;getDisplayInfo(displayId, [this](auto dpyConfig, auto dpyState) {
+    DisplayConfig *pConfig = (DisplayConfig*)dpyConfig.data();
+    mWidth = pConfig-&gt;resolution.getWidth();
+    mHeight = pConfig-&gt;resolution.getHeight();
+
+    ui::DisplayState* pState = (ui::DisplayState*)dpyState.data();
+    if (pState-&gt;orientation != ui::ROTATION_0 &amp;&amp;
+        pState-&gt;orientation != ui::ROTATION_180) {
+        // rotate
+        std::swap(mWidth, mHeight);
+    }
+
+    LOG(DEBUG) &lt;&lt; "Display resolution is " &lt;&lt; mWidth &lt;&lt; " x " &lt;&lt; mHeight;
+});</pre> </li> <li>Retrieve a hardware <code translate="no" dir="ltr">IGraphicBufferProducer</code> (or, HIDL GraphicBufferProducer (HGBP) from <code translate="no" dir="ltr">IAutomotiveDisplayProxyService</code>: 
+<pre>mGfxBufferProducer = pWindowProxy-&gt;getIGraphicBufferProducer(displayId);
+if (mGfxBufferProducer == nullptr) {
+    LOG(ERROR) &lt;&lt; "Failed to get IGraphicBufferProducer from "
+               &lt;&lt; "IAutomotiveDisplayProxyService.";
+    return false;
+}</pre> </li> <li>Get a <code translate="no" dir="ltr">SurfaceHolder</code> from a retrieved HGBP, by using the API <code translate="no" dir="ltr">libbufferqueueconverter</code>: 
+<pre>mSurfaceHolder = getSurfaceFromHGBP(mGfxBufferProducer);
+if (mSurfaceHolder == nullptr) {
+    LOG(ERROR) &lt;&lt; "Failed to get a Surface from HGBP.";
+    return false;
+}</pre> </li> <li>Convert a <code translate="no" dir="ltr">SurfaceHolder</code> into a native window by using the API <code translate="no" dir="ltr">libbufferqueueconverter</code>: 
+<pre>mWindow = getNativeWindow(mSurfaceHolder.get());
+if (mWindow == nullptr) {
+    LOG(ERROR) &lt;&lt; "Failed to get a native window from Surface.";
+    return false;
+}</pre> </li> <li>Create an EGL window surface with a native window and then render: 
+<pre>// Set up our OpenGL ES context associated with the default display
+mDisplay = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+if (mDisplay == EGL_NO_DISPLAY) {
+    LOG(ERROR) &lt;&lt; "Failed to get egl display";
+    return false;
+}
+...
+
+// Create the EGL render target surface
+mSurface = eglCreateWindowSurface(mDisplay, egl_config, mWindow, nullptr);
+if (mSurface == EGL_NO_SURFACE) {
+    LOG(ERROR) &lt;&lt; "eglCreateWindowSurface failed.";
+    return false;
+}
+...</pre> </li> <li>Call <code translate="no" dir="ltr">IAutomotiveDisplayProxyService::showWindow()</code> to display the rendered view on the screen. This service has the highest priority and, therefore, always takes control of the screen from the current owner: 
+<pre>mAutomotiveDisplayProxyService-&gt;showWindow();</pre> </li> </ol> <p>See <code translate="no" dir="ltr">service.cpp</code> and <code translate="no" dir="ltr">GlWrapper.cpp</code> in <code translate="no" dir="ltr">$ANDROID_BUILD_TOP/packages/services/Car/evs/sampleDriver/</code> for more implementation details.</p> <p>An EVS HAL implementation requires the additional libraries displayed in <strong>bold</strong> below.</p> 
+<pre>cc_binary {
+    name: "android.hardware.automotive.evs@1.1-sample",
+
+    vendor: true,
+
+    srcs: [
+        ...
+    ],
+
+    shared_libs: [
+        ...
+        "libbufferqueueconverter",
+        "android.hidl.token@1.0-utils",
+        "android.frameworks.automotive.display@1.0",
+        "android.hardware.graphics.bufferqueue@1.0",
+        "android.hardware.graphics.bufferqueue@2.0",
+    ],</pre> <h2 id="multi-display-support">
+Multi-display support</h2> <h3 id="display-device-enumeration-and-retrieve-display-information">
+Display device enumeration and retrieve display information</h3> <p>Like the camera device enumeration, the EVS framework provides a method to enumerate the available displays. The <a href="https://source.android.com/devices/tech/display/multi_display/displays#static"> static display identifier</a> encodes a type-long identifier, the display port information in the lower byte and <code translate="no" dir="ltr">Extended Display IDentification
+Data</code> in upper bits. <code translate="no" dir="ltr">IAutomotiveDisplayProxyService::getDisplayIdList()</code> returns a list of display IDs of physical local displays, which are available to EVS service, and <code translate="no" dir="ltr">IEvsEnumerator::getDisplayIdList()</code> returns a list of display ports detected displays are connected to. The first ID in the list is always of the primary display.</p> 
+<pre>interface IEvsEnumerator extends @1.0::IEvsEnumerator {
+    ...
+    /**
+     * Returns a list of all EVS displays available to the system
+     *
+     * @return displayIds Identifiers of available displays.
+     */
+    getDisplayIdList() generates (vec&lt;uint8_t&gt; displayIds);
+};</pre> <h3 id="open-target-display-device">
+Open target display device</h3> <p>EVS app calls IEvsEnumerator::openDisplay_1_1() with a target display port number:</p> 
+<pre>android::sp&lt;IEvsDisplay&gt; pDisplay = pEvs-&gt;openDisplay_1_1(displayId);
+if (pDisplay.get() == nullptr) {
+    LOG(ERROR) &lt;&lt; "EVS Display unavailable. Exiting.";
+    return 1;
+}</pre> <p class="note"><strong>Note:</strong> Only a single display can be in use at one time, which means the current EVS client loses its display when another EVS client requests to open the display, even when they are not the same.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/camera/evs/display_proxy" class="_attribution-link">https://source.android.com/docs/automotive/camera/evs/display_proxy</a>
+  </p>
+</div>

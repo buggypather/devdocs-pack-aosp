@@ -1,0 +1,15 @@
+<h1>Employ module controllers</h1>  <p>Each suite module (defined by <code translate="no" dir="ltr">AndroidTest.xml</code>) can contain a special <code translate="no" dir="ltr">module_controller</code> object that can alter some behavior of the module:</p> <h2 id="whether_to_run_the_module_or_not_based_on_some_conditions">Whether to run the module or not based on some conditions</h2> <p>By implementing <a href="https://android.googlesource.com/platform/tools/tradefederation/+/refs/heads/android17-release/src/com/android/tradefed/testtype/suite/module/BaseModuleController.java">BaseModuleController</a> and adding it to the <code translate="no" dir="ltr">AndroidTest.xml</code> like this:</p> 
+<pre>&lt;object type="module_controller" class="com.android.tradefed.testtype.suite.module.&lt;NAME&gt;" /&gt;
+</pre> <p>The module controller will be used to determine whether the module should run or not, based on the <code translate="no" dir="ltr">public abstract RunStrategy shouldRun(IInvocationContext context);</code> implementation.</p> <h2 id="whether_to_collect_some_logs_or_not_on_failures">Whether to collect some logs or not on failures</h2> <p>When running a full suite, it's possible to request at the suite level the collection of some logs on failures (screenshot, bugreport, logcat). But for some modules, a particular log requested might not have any value and will simply waste time to be collected. In that situation, a module can explicitly specify which logs they are interested in:</p> 
+<pre>&lt;object type="module_controller"
+        class="com.android.tradefed.testtype.suite.module.TestFailureModuleController"&gt;
+    &lt;option name="screenshot-on-failure" value="&lt;true OR false&gt;" /&gt;
+    &lt;option name="bugreportz-on-failure" value="&lt;true OR false&gt;" /&gt;
+    &lt;option name="logcat-on-failure" value="&lt;true OR false&gt;" /&gt;
+&lt;/object&gt;
+</pre> <p>NOTE: Implementation of controllers should be generic if possible in order to maximize re-usability. And skipping a module based on its condition should be reviewed by the module owner to get the approval that skipping a module is the proper behavior for them.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/tradefed/testing/through-suite/module-controller" class="_attribution-link">https://source.android.com/docs/core/tests/tradefed/testing/through-suite/module-controller</a>
+  </p>
+</div>

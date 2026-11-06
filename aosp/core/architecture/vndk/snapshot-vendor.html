@@ -1,0 +1,50 @@
+<h1>Generate vendor snapshots</h1>  <p>Android 11 supports <a href="snapshot-generate#vendor-snapshots">VNDK snapshot build artifacts</a> and vendor snapshots, which you can use to build <code translate="no" dir="ltr">vendor.img</code> regardless of the Android version on the source tree. This enables mixed versions of images, such as an older vendor and a newer system image.</p> <p>Mixed image versions aren't supported for the following.</p> <ul> <li><p><code translate="no" dir="ltr">Android.mk.</code> Because Soong generates the vendor snapshot, modules defined in <code translate="no" dir="ltr">Android.mk</code> aren't captured as a vendor snapshot (SoC-proprietary modules in <code translate="no" dir="ltr">Android.mk</code> also aren't guaranteed to work).</p></li> <li><p><strong>Sanitizer.</strong> Vendor and VNDK snapshots don't support sanitizer as sanitizer variants need to be built separately.</p></li> </ul> <h2 id="about-vendor-snapshots">About vendor snapshots</h2> <p>A vendor snapshot is an OEM-owned snapshot. It's a set of prebuilt C++ modules installed in <code translate="no" dir="ltr">/vendor</code> but maintained on AOSP. Without capturing a vendor snapshot of the previous Android version, upgrading to a new Android version might break the vendor partition because vendor snapshot modules can be removed or changed without API or ABI compatibility.</p> <p>A vendor snapshot contains following modules on AOSP.</p> <ul> <li>Shared, static, and header libraries with <code translate="no" dir="ltr">vendor: true</code> or <code translate="no" dir="ltr">vendor_available:
+true</code>
+</li> <li>VNDK static libraries with <code translate="no" dir="ltr">vendor_available: true</code>
+</li> <li>Executables and object files with <code translate="no" dir="ltr">vendor: true</code> or <code translate="no" dir="ltr">vendor_available: true</code>
+</li> </ul> <p>Modules under the following directories are considered SoC-owned hardware code and are ignored.</p> <ul> <li><code translate="no" dir="ltr">device/</code></li> <li><code translate="no" dir="ltr">vendor/</code></li> <li>
+<code translate="no" dir="ltr">hardware/</code>, except for <ul> <li><code translate="no" dir="ltr">hardware/interfaces</code></li> <li><code translate="no" dir="ltr">hardware/libhardware</code></li> <li><code translate="no" dir="ltr">hardware/libhardware_legacy</code></li> </ul>
+</li> </ul> <p>SoC-owned hardware codes might also exist in other directories. At this time, vendor snapshots don't support such configurations.</p> <h2 id="building-vendor-snapshots">Build vendor snapshots</h2> <p>Build a vendor snapshot using the following commands.</p> 
+<pre>. build/envsetup.sh
+lunch target
+m dist vendor-snapshot</pre> <p>These commands create a <code translate="no" dir="ltr">vendor-$(TARGET_DEVICE).zip</code> file in <code translate="no" dir="ltr">$DIST_DIR</code>. The following example shows a vendor snapshot zip file:</p> 
+<pre>vendor-$(TARGET_DEVICE).zip
+├── arch-arm64-armv8-a
+│   ├── binary         -&gt; binary files, *.json files
+│   ├── header         -&gt; *.json files
+│   ├── object         -&gt; *.o files, *.json files
+│   ├── shared         -&gt; *.so files, *.json files
+│   └── static         -&gt; *.a files, *.json files
+├── arch-arm-armv8-a   -&gt; (arch-arm64-armv8-a)
+├── configs            -&gt; *.rc files, *.xml files
+├── include            -&gt; exported header files (*.h, *.hh, etc.)
+└── NOTICE_FILES       -&gt; license txt files
+</pre> <ul> <li>The JSON files contain flags such as module name, exported directories, <code translate="no" dir="ltr">init_rc</code> files, and <code translate="no" dir="ltr">vintf_fragments</code> files.</li> <li>The <code translate="no" dir="ltr">configs</code> directory contains <code translate="no" dir="ltr">.rc</code> and <code translate="no" dir="ltr">.xml</code> files from flags <code translate="no" dir="ltr">init_rc</code> and <code translate="no" dir="ltr">vintf_fragments</code>.</li> </ul> <h2 id="installing-vendor-snapshots">Install vendor snapshots</h2> <aside class="note"><strong>Note:</strong><span> For details on uploading VNDK snapshots, see <a href="snapshot-generate#using-local-snapshots">Using locally built VNDK snapshots</a>.</span></aside> <p>To install a vendor snapshot, navigate to the destination directory and use the following commands.</p> 
+<pre>python3 development/vendor_snapshot/update.py --local $DIST_DIR --install-dir \
+    vendor/vendor name/vendor_snapshot VER</pre> <p>This command generates <code translate="no" dir="ltr">/vendor/<var translate="no">vendor name</var>/vendor_snapshot/v<var translate="no">VER</var>/$(TARGET_ARCH)/Android.bp</code>. The following example shows the directory structure of a vendor snapshot:</p> 
+<pre>vendor/vendor name/vendor_snapshot/
+├── v30
+│   ├── arm64
+│   │   ├── arch-arm64-armv8-a
+│   │   │   ├── binary         -&gt; (prebuilt libs)
+│   │   │   ├── object         -&gt; (prebuilt libs)
+│   │   │   ├── shared         -&gt; (prebuilt libs)
+│   │   │   └── static         -&gt; (prebuilt libs)
+│   │   ├── arch-arm-armv8-a   -&gt; (same as above)
+│   │   ├── configs            -&gt; (config files)
+│   │   ├── include            -&gt; (exported header files)
+│   │   ├── NOTICE_FILES       -&gt; (license files)
+│   │   └── Android.bp         -&gt; (snapshot modules)
+│   ├── arm                    -&gt; (same as above)
+│   ├── x86_64                 -&gt; (same as above)
+│   └── x86                    -&gt; (same as above)
+└── (other vendor versions)    -&gt; (same as above)
+</pre> <h2 id="building-vendor-images">Build vendor images</h2> <p>Using <a href="snapshot-generate#vendor-snapshots">VNDK snapshot build artifacts</a> and a vendor snapshot, you can build <code translate="no" dir="ltr">vendor.img</code> regardless of the Android version on the source tree, making it possible to create mixed versions of images. After installing both the VNDK snapshot and vendor snapshot, set <code translate="no" dir="ltr">BOARD_VNDK_VERSION</code> to the vendor's version. For example:</p> 
+<pre># BoardConfig.mk
+BOARD_VNDK_VERSION := 29
+</pre> <p>When <code translate="no" dir="ltr">BOARD_VNDK_VERSION</code> is set to a value other than <code translate="no" dir="ltr">current</code>, the build system:</p> <ul> <li>Enables VNDK snapshot modules and vendor snapshot modules of <code translate="no" dir="ltr">BOARD_VNDK_VERSION</code>. Each snapshot module overrides a C++ source module having the same name.</li> <li>Sets <code translate="no" dir="ltr">ro.vndk.version</code> to <code translate="no" dir="ltr">BOARD_VNDK_VERSION</code>.</li> <li>Installs VNDK snapshot modules of <code translate="no" dir="ltr">BOARD_VNDK_VERSION</code> to <code translate="no" dir="ltr">system_ext</code>.</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/vndk/snapshot-vendor" class="_attribution-link">https://source.android.com/docs/core/architecture/vndk/snapshot-vendor</a>
+  </p>
+</div>

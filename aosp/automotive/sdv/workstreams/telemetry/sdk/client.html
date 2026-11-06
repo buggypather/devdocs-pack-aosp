@@ -1,0 +1,22 @@
+<h1>Rust telemetry client library</h1>  <p>A telemetry client is an app that interacts with the Telemetry service to configure data collection, manage metric configurations, and receive telemetry reports. Clients use the <code translate="no" dir="ltr">libsdv_telemetry_rust_wrapper</code> Rust library to interact with the service.</p> <aside class="note"><strong>Note:</strong><span> The Telemetry service supports only one client connection at a time.</span></aside> <h2 id="api-surface-overview">API surface overview</h2> <p>See the <a href="client/api">Rust telemetry client library API Reference</a> for API documentation.</p> <p>The library provides a Rust interface for interacting with the underlying Telemetry service. The library is responsible for the following areas:</p> <ul> <li>
+<p><strong>Service lifecycle management:</strong> Manages the connection to the Telemetry service.</p> <ul> <li>
+<strong>Initialization:</strong> Establishes a connection to the service using a blocking call. After connecting, you can register callbacks to receive asynchronous notifications about system status and the availability of new reports.</li> <li>
+<strong>Shutdown:</strong> Provides a way to gracefully disconnect from the service and clean up all associated resources.</li> </ul>
+</li> <li>
+<p><strong>Metrics configuration lifecycle management:</strong> Offers control over the lifecycle of <a href="../metrics-configuration">metrics configurations</a>.</p> <ul> <li>
+<strong>Management:</strong> Clients can add, remove, activate, and deactivate metrics configurations.</li> <li>
+<strong>Inspection:</strong> You can query for the list of active and inactive configurations.</li> </ul>
+</li> <li>
+<p><strong>Report handling and retrieval:</strong> Facilitates access to the data collected by the Telemetry service.</p> <ul> <li>
+<strong>Notifications:</strong> Notifies clients asynchronously using a callback whenever a new metrics report is ready for retrieval.</li> <li>
+<strong>Data access:</strong> Provides methods to fetch specific reports by their UUID and to retrieve a list of all available reports.</li> </ul>
+</li> <li>
+<p><strong>Status and error reporting:</strong> Provides insight into the health and status of the Telemetry service.</p> <ul> <li>
+<strong>Asynchronous status updates:</strong> Clients receive real-time status updates, including errors and warnings, through a dedicated callback. This lets you implement robust error handling and monitor the service's state.</li> </ul>
+</li> </ul> <h2 id="example-usage">Example usage</h2> <p>For a complete, compilable app demonstrating the full lifecycle, see the sample client implementation: <code translate="no" dir="ltr">samples/telemetry/client/rust/telemetry_client/telemetry_rust_c_client.rs</code>.</p> <p>The sample client is a command-line utility that interacts with the full library API. The sample demonstrates how to bridge the library's callback-based interface with an asynchronous Rust runtime (Tokio) using channels.</p> <p>The client performs this sequence of operations:</p> <ol> <li>Establishes a connection to the Telemetry service and registers callbacks for status updates and metrics report notifications.</li> <li>Reads metrics configuration files provided as command-line arguments, and then adds and activates the configurations in the service.</li> <li>Uses a background task to log asynchronous status messages (errors or warnings) received from the service.</li> <li>Manages the data retrieval loop by performing the following actions: <ul> <li>Waits for a notification that a metrics report is ready.</li> <li>Fetches the full metrics report data.</li> <li>Optionally writes the report to disk as a binary protocol buffer file.</li> </ul>
+</li> <li>Removes metrics configuration from the service once it produces the first metrics report. Note that this is a demo implementation, and your own clients can receive any number of reports.</li> <li>Gracefully closes the connection to the service.</li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/telemetry/sdk/client" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/telemetry/sdk/client</a>
+  </p>
+</div>

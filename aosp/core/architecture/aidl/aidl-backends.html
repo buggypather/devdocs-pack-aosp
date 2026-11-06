@@ -1,0 +1,382 @@
+<h1>AIDL backends</h1>  <p>An AIDL backend is a target for stub code generation. Always use AIDL files in a particular language with a specific runtime. Depending on the context, you should use different AIDL backends.</p> <p>In the following table, the stability of the API surface refers to the ability to compile code against this API surface in a way that the code can be delivered independently from the <code translate="no" dir="ltr">system.img</code> <code translate="no" dir="ltr">libbinder.so</code> binary.</p> <p>AIDL has the following backends:</p> <table> <tr>
+<th>Backend</th> <th>Language</th> <th>API surface</th> <th>Build systems</th>
+</tr> <tr>
+<td>Java</td> <td>Java</td> <td>SDK or <code translate="no" dir="ltr">SystemApi</code> (stable*)</td> <td>All</td>
+</tr> <tr>
+<td>NDK</td> <td>C++</td> <td>
+<code translate="no" dir="ltr">libbinder_ndk</code> (stable*)</td> <td><code translate="no" dir="ltr">aidl_interface</code></td>
+</tr> <tr>
+<td>CPP</td> <td>C++</td> <td>
+<code translate="no" dir="ltr">libbinder</code> (unstable)</td> <td>All</td>
+</tr> <tr>
+<td>Rust</td> <td>Rust</td> <td>
+<code translate="no" dir="ltr">libbinder_rs</code> (stable*)</td> <td><code translate="no" dir="ltr">aidl_interface</code></td>
+</tr> </table> <ul> <li>These API surfaces are stable, but many of the APIs, such as those for service management, are reserved for internal platform use and aren't available to apps. For more information on how to use AIDL in apps, see <a href="https://developer.android.com/guide/components/aidl">Android Interface Definition Language (AIDL)</a>.</li> <li>The Rust backend was introduced in Android 12; the NDK backend has been available as of Android 10.</li> <li>The Rust crate is built on top of <code translate="no" dir="ltr">libbinder_ndk</code>, which lets it be stable and portable. APEXes use the binder crate in the standard way on the system side. The Rust portion is bundled into an APEX and shipped inside it. This portion depends on the <code translate="no" dir="ltr">libbinder_ndk.so</code> on the system partition.</li> </ul> <h2 id="build-systems">Build systems</h2> <p>Depending on the backend, there are two ways to compile AIDL into stub code. For more details on the build systems, see <a href="https://ci.android.com/builds/latest/branches/aosp-build-tools/targets/linux/view/soong_build.html">Soong Modules Reference</a>.</p> <h3 id="core-build-system">Core build system</h3> <p>In any <code translate="no" dir="ltr">cc_</code> or <code translate="no" dir="ltr">java_</code> <code translate="no" dir="ltr">Android.bp module</code> (or in their <code translate="no" dir="ltr">Android.mk</code> equivalents), you can specify AIDL (<code translate="no" dir="ltr">.aidl</code>) files as source files. In this case, the Java or CPP backends of AIDL are used (not the NDK backend), and the classes to use the corresponding AIDL files are added to the module automatically. You can specify options such as <code translate="no" dir="ltr">local_include_dirs</code> (which tells the build system the root path to AIDL files in that module) in these modules under an <code translate="no" dir="ltr">aidl:</code> group.</p> <p>The Rust backend is only for use with Rust. <code translate="no" dir="ltr">rust_</code> modules are handled differently in that AIDL files aren't specified as source files. Instead, the <code translate="no" dir="ltr">aidl_interface</code> module produces a <code translate="no" dir="ltr">rustlib</code> called <code translate="no" dir="ltr"><var translate="no">aidl_interface_name</var>-rust</code>, which can be linked against. For details, see the <a href="../../../setup/build/rust/building-rust-modules/android-rust-patterns#rust-aidl-example">Rust AIDL example</a>.</p> <aside class="warning"><strong>Warning:</strong><span> In Android 13 and lower, the NDK backend compiles only with weak symbols and requires <code translate="no" dir="ltr">__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__</code> to be set. In the Android platform build system, this is set by default.</span></aside><aside class="warning"><strong>Warning:</strong><span> <code translate="no" dir="ltr">libbinder_ndk</code> has two sets of headers. For platform devs, these are shipped together, but if you're an app developer, you need to include (usually with <code translate="no" dir="ltr">-I</code> for C++ compilers, such as <code translate="no" dir="ltr">clang</code>) them from different places. The core headers for APIs that are provided on device (such as <code translate="no" dir="ltr">android/binder_ibinder.h</code>, defined in the Android tree at <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/native/libs/binder/ndk/include_ndk/android/"><code translate="no" dir="ltr">frameworks/native/libs/binder/ndk/include_ndk</code></a>) are shipped with the NDK. However, other helper files (such as <code translate="no" dir="ltr">android/binder_interface_utils.h</code>, defined in the Android tree <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/native/libs/binder/ndk/include_cpp/android/"><code translate="no" dir="ltr">frameworks/native/libs/binder/ndk/include_cpp</code></a>) provide C++ utilities that are required to use with the AIDL compiler and shipped with it in the SDK under <code translate="no" dir="ltr">platforms/<var translate="no">$PLATFORM_NAME</var>/optional/libbinder_ndk_cpp/</code>.</span></aside> <h3 id="aidl_interface">aidl_interface</h3> <p>Types used with the <code translate="no" dir="ltr">aidl_interface</code> build system must be structured. In order to be structured, parcelables must contain fields directly and not be declarations of types defined directly in target languages. For how structured AIDL fits in with stable AIDL, see <a href="stable-aidl#structured-vs-stable">Structured versus stable AIDL</a>.</p> <h2 id="types">Types</h2> <p>Consider the <code translate="no" dir="ltr">aidl</code> compiler as a reference implementation for types. When you create an interface, invoke <code translate="no" dir="ltr">aidl --lang=&lt;backend&gt; ...</code> to see the resulting interface file. When you use the <code translate="no" dir="ltr">aidl_interface</code> module, you can view the output in <code translate="no" dir="ltr">out/soong/.intermediates/<var translate="no">&lt;path to module&gt;</var>/</code>.</p> <table> <tr> <th>Java or AIDL type</th> <th>C++ type</th> <th>NDK type</th> <th>Rust type</th> </tr> <tr> <td><code translate="no" dir="ltr">boolean</code></td> <td><code translate="no" dir="ltr">bool</code></td> <td><code translate="no" dir="ltr">bool</code></td> <td><code translate="no" dir="ltr">bool</code></td> </tr> <tr> <td>
+<code translate="no" dir="ltr">byte</code><sup>8</sup>
+</td> <td><code translate="no" dir="ltr">int8_t</code></td> <td><code translate="no" dir="ltr">int8_t</code></td> <td><code translate="no" dir="ltr">i8</code></td> </tr> <tr> <td><code translate="no" dir="ltr">char</code></td> <td><code translate="no" dir="ltr">char16_t</code></td> <td><code translate="no" dir="ltr">char16_t</code></td> <td><code translate="no" dir="ltr">u16</code></td> </tr> <tr> <td><code translate="no" dir="ltr">int</code></td> <td><code translate="no" dir="ltr">int32_t</code></td> <td><code translate="no" dir="ltr">int32_t</code></td> <td><code translate="no" dir="ltr">i32</code></td> </tr> <tr> <td><code translate="no" dir="ltr">long</code></td> <td><code translate="no" dir="ltr">int64_t</code></td> <td><code translate="no" dir="ltr">int64_t</code></td> <td><code translate="no" dir="ltr">i64</code></td> </tr> <tr> <td><code translate="no" dir="ltr">float</code></td> <td><code translate="no" dir="ltr">float</code></td> <td><code translate="no" dir="ltr">float</code></td> <td><code translate="no" dir="ltr">f32</code></td> </tr> <tr> <td><code translate="no" dir="ltr">double</code></td> <td><code translate="no" dir="ltr">double</code></td> <td><code translate="no" dir="ltr">double</code></td> <td><code translate="no" dir="ltr">f64</code></td> </tr> <tr> <td><code translate="no" dir="ltr">String</code></td> <td><code translate="no" dir="ltr">android::String16</code></td> <td><code translate="no" dir="ltr">std::string</code></td> <td>In: <code translate="no" dir="ltr">&amp;str</code><br> Out: <code translate="no" dir="ltr">String</code>
+</td> </tr> <tr> <td><code translate="no" dir="ltr">android.os.Parcelable</code></td> <td><code translate="no" dir="ltr">android::Parcelable</code></td> <td>N/A</td> <td>N/A</td> </tr> <tr> <td><code translate="no" dir="ltr">IBinder</code></td> <td><code translate="no" dir="ltr">android::IBinder</code></td> <td><code translate="no" dir="ltr">ndk::SpAIBinder</code></td> <td>
+<code translate="no" dir="ltr">binder::SpIBinder</code><sup>9</sup>
+</td> </tr> <tr> <td><code translate="no" dir="ltr">T[]</code></td> <td><code translate="no" dir="ltr">std::vector&lt;T&gt;</code></td> <td><code translate="no" dir="ltr">std::vector&lt;T&gt;</code></td> <td>In: <code translate="no" dir="ltr">&amp;[T]</code><br> Out: <code translate="no" dir="ltr">Vec&lt;T&gt;</code>
+</td> </tr> <tr> <td><code translate="no" dir="ltr">byte[]</code></td> <td><code translate="no" dir="ltr">std::vector</code></td> <td>
+<code translate="no" dir="ltr">std::vector</code><sup>1</sup>
+</td> <td>In: <code translate="no" dir="ltr">&amp;[u8]</code><br> Out: <code translate="no" dir="ltr">Vec&lt;u8&gt;</code>
+</td> </tr> <tr> <td><code translate="no" dir="ltr">List&lt;T&gt;</code></td> <td>
+<code translate="no" dir="ltr">std::vector&lt;T&gt;</code><sup>2</sup>
+</td> <td>
+<code translate="no" dir="ltr">std::vector&lt;T&gt;</code><sup>3</sup>
+</td> <td>In: <code translate="no" dir="ltr">In: &amp;[T]</code><sup>4</sup><br>Out: <code translate="no" dir="ltr">Vec&lt;T&gt;</code>
+</td> </tr> <tr> <td><code translate="no" dir="ltr">FileDescriptor</code></td> <td><code translate="no" dir="ltr">android::base::unique_fd</code></td> <td>N/A</td> <td>N/A</td> </tr> <tr> <td><code translate="no" dir="ltr">ParcelFileDescriptor</code></td> <td><code translate="no" dir="ltr">android::os::ParcelFileDescriptor</code></td> <td><code translate="no" dir="ltr">ndk::ScopedFileDescriptor</code></td> <td>
+<code translate="no" dir="ltr">binder::parcel::ParcelFileDescriptor</code><sup>9</sup>
+</td> </tr> <tr> <td>Interface type (<code translate="no" dir="ltr">T</code>)</td> <td><code translate="no" dir="ltr">android::sp&lt;T&gt;</code></td> <td>
+<code translate="no" dir="ltr">std::shared_ptr&lt;T&gt;</code><sup>7</sup>
+</td> <td>
+<code translate="no" dir="ltr">binder::Strong&lt;dyn T&gt;</code><sup>9</sup>
+</td> </tr> <tr> <td>Parcelable type (<code translate="no" dir="ltr">T</code>)</td> <td><code translate="no" dir="ltr">T</code></td> <td><code translate="no" dir="ltr">T</code></td> <td>
+<code translate="no" dir="ltr">T</code><sup>9</sup>
+</td> </tr> <tr> <td>Union type (<code translate="no" dir="ltr">T</code>)<sup>5</sup>
+</td> <td><code translate="no" dir="ltr">T</code></td> <td><code translate="no" dir="ltr">T</code></td> <td><code translate="no" dir="ltr">T</code></td> </tr> <tr> <td>
+<code translate="no" dir="ltr">T[N]</code><sup>6</sup>
+</td> <td><code translate="no" dir="ltr">std::array&lt;T, N&gt;</code></td> <td><code translate="no" dir="ltr">std::array&lt;T, N&gt;</code></td> <td><code translate="no" dir="ltr">[T; N]</code></td> </tr> </table> <p><sup> 1. In Android 12 or higher, byte arrays use <code translate="no" dir="ltr">uint8_t</code> instead of <code translate="no" dir="ltr">int8_t</code> for compatibility reasons. </sup></p> <p><sup> 2. The C++ backend supports <code translate="no" dir="ltr">List&lt;T&gt;</code> where <code translate="no" dir="ltr">T</code> is one of <code translate="no" dir="ltr">String</code>, <code translate="no" dir="ltr">IBinder</code>, <code translate="no" dir="ltr">ParcelFileDescriptor</code> or parcelable. In Android 13 or higher, <code translate="no" dir="ltr">T</code> can be any nonprimitive type (including interface types) except arrays. AOSP recommends using array types like <code translate="no" dir="ltr">T[]</code>, because they work in all backends.</sup></p> <p><sup> 3. The NDK backend supports <code translate="no" dir="ltr">List&lt;T&gt;</code> where <code translate="no" dir="ltr">T</code> is one of <code translate="no" dir="ltr">String</code>, <code translate="no" dir="ltr">ParcelFileDescriptor</code> or parcelable. In Android 13 or higher, <code translate="no" dir="ltr">T</code> can be any nonprimitive type except arrays. </sup></p> <p><sup> 4. Types are passed differently for Rust code depending on whether they are input (an argument), or an output (a returned value). </sup></p> <p><sup> 5. Union types are supported in Android 12 and higher. </sup></p> <p><sup> 6. In Android 13 or higher, fixed-size arrays are supported. Fixed-size arrays can have multiple dimensions (for example, <code translate="no" dir="ltr">int[3][4]</code>). In the Java backend, fixed-size arrays are represented as array types. </sup></p> <p><sup> 7. To instantiate a binder <code translate="no" dir="ltr">SharedRefBase</code> object, use <code translate="no" dir="ltr">SharedRefBase::make\&lt;My\&gt;(... args ...)</code>. This function creates a <code translate="no" dir="ltr">std::shared_ptr\&lt;T\&gt;</code> object, which is also managed internally, in case the binder is owned by another process. Creating the object other ways causes double ownership. </sup></p> <p><sup> 8. See also Java or AIDL type <code translate="no" dir="ltr">byte[]</code>. </sup></p> <p><sup> 9. In Rust, types that don't implement <code translate="no" dir="ltr">Default</code> (<code translate="no" dir="ltr">IBinder</code>, <code translate="no" dir="ltr">ParcelFileDescriptor</code>, interface types, and unstructured parcelables) map to <code translate="no" dir="ltr">Option&lt;T&gt;</code> when a default value is required (such as in parcelable fields, <code translate="no" dir="ltr">out</code> parameters, and fixed-size arrays in those contexts), even without the <code translate="no" dir="ltr">@nullable</code> annotation. Non-nullability is still enforced at runtime during parceling, returning <code translate="no" dir="ltr">StatusCode::UNEXPECTED_NULL</code> if the value is <code translate="no" dir="ltr">None</code>. For method return values, <code translate="no" dir="ltr">in</code> parameters (passed as <code translate="no" dir="ltr">&amp;T</code>), and <code translate="no" dir="ltr">inout</code> parameters (passed as <code translate="no" dir="ltr">&amp;mut T</code>), these types aren't wrapped in <code translate="no" dir="ltr">Option&lt;T&gt;</code> unless annotated with <code translate="no" dir="ltr">@nullable</code>. </sup></p> <h3 id="directionality">Directionality (in, out, and inout)</h3> <p>When specifying the types of the arguments to functions, you can specify them as <code translate="no" dir="ltr">in</code>, <code translate="no" dir="ltr">out</code>, or <code translate="no" dir="ltr">inout</code>. This controls the direction that information is passed for an IPC call.</p> <ul> <li><p>The <code translate="no" dir="ltr">in</code> argument specifier indicates data is passed from the caller to the callee. The <code translate="no" dir="ltr">in</code> specifier is the default direction, but if data types can also be <code translate="no" dir="ltr">out</code>, then you must specify the direction.</p></li> <li><p>The <code translate="no" dir="ltr">out</code> argument specifier means that data is passed from the callee to the caller.</p></li> <li><p>The <code translate="no" dir="ltr">inout</code> argument specifier is the combination of both of these. However, we recommend avoiding using the argument specifier <code translate="no" dir="ltr">inout</code>. If you use <code translate="no" dir="ltr">inout</code> with a versioned interface and an older callee, the additional fields that are present only in the caller get reset to their default values. With respect to Rust, a normal <code translate="no" dir="ltr">inout</code> type receives <code translate="no" dir="ltr">&amp;mut T</code>, and a list <code translate="no" dir="ltr">inout</code> type receives <code translate="no" dir="ltr">&amp;mut Vec&lt;T&gt;</code>.</p></li> </ul> 
+<pre>interface IRepeatExamples {
+    MyParcelable RepeatParcelable(MyParcelable token); // implicitly 'in'
+    MyParcelable RepeatParcelableWithIn(in MyParcelable token);
+    void RepeatParcelableWithInAndOut(in MyParcelable param, out MyParcelable result);
+    void RepeatParcelableWithInOut(inout MyParcelable param);
+}
+</pre> <h3 id="utf">UTF-8 and UTF-16</h3> <p>With the CPP backend, you can choose whether strings are UTF-8 or UTF-16. Declare strings as <code translate="no" dir="ltr">@utf8InCpp String</code> in AIDL to automatically convert them to UTF-8. The NDK and Rust backends always use UTF-8 strings. For more information about the <code translate="no" dir="ltr">utf8InCpp</code> annotation, see <a href="aidl-annotations#utf8incpp">utf8InCpp</a>.</p> <h3 id="nullability">Nullability</h3> <p>You can annotate types that can be null with <code translate="no" dir="ltr">@nullable</code>. For more information about the <code translate="no" dir="ltr">nullable</code> annotation, see <a href="aidl-annotations#nullable">nullable</a>.</p> <aside class="warning"><strong>Warning:</strong><span> <strong>Guard against unexpected values.</strong> Even if your client or server always passes a nonnull value, input must be checked in case of a malicious client or in some cases, for values that become null. For example, in the NDK backend an interface type might appear as null if its host process quits during a transaction.</span></aside> <h3 id="custom-parcelables">Custom parcelables</h3> <p>A <em>custom parcelable</em> is a parcelable that's implemented manually in a target backend. Use custom parcelables only when you're trying to add support to other languages for an existing custom parcelable which can't be changed.</p> <aside class="warning"><strong>Warning:</strong><span> <strong>Custom parcelables are error prone.</strong> When creating a new parcelable, use structured AIDL parcelables. Custom parcelables need to be implemented in each backend separately, and they can be out of sync or have other issues.</span></aside> <p>Here's an example of an AIDL parcelable declaration:</p> 
+<pre>    package my.pack.age;
+    parcelable Foo;
+</pre> <p>By default, this declares a Java parcelable where <code translate="no" dir="ltr">my.pack.age.Foo</code> is a Java class implementing the <code translate="no" dir="ltr">Parcelable</code> interface.</p> <p>For a declaration of a custom CPP backend parcelable in AIDL, use <code translate="no" dir="ltr">cpp_header</code>:</p> 
+<pre>    package my.pack.age;
+    parcelable Foo cpp_header "my/pack/age/Foo.h";
+</pre> <p>The C++ implementation in <code translate="no" dir="ltr">my/pack/age/Foo.h</code> looks like this:</p> 
+<pre>    #include &lt;binder/Parcelable.h&gt;
+
+    class MyCustomParcelable : public android::Parcelable {
+    public:
+        status_t writeToParcel(Parcel* parcel) const override;
+        status_t readFromParcel(const Parcel* parcel) override;
+
+        std::string toString() const;
+        friend bool operator==(const MyCustomParcelable&amp; lhs, const MyCustomParcelable&amp; rhs);
+        friend bool operator!=(const MyCustomParcelable&amp; lhs, const MyCustomParcelable&amp; rhs);
+    };
+</pre> <p>For a declaration of a custom NDK parcelable in AIDL, use <code translate="no" dir="ltr">ndk_header</code>:</p> 
+<pre>    package my.pack.age;
+    parcelable Foo ndk_header "android/pack/age/Foo.h";
+</pre> <p>The NDK implementation in <code translate="no" dir="ltr">android/pack/age/Foo.h</code> looks like this:</p> 
+<pre>    #include &lt;android/binder_parcel.h&gt;
+
+    class MyCustomParcelable {
+    public:
+
+        binder_status_t writeToParcel(AParcel* _Nonnull parcel) const;
+        binder_status_t readFromParcel(const AParcel* _Nonnull parcel);
+
+        std::string toString() const;
+
+        friend bool operator==(const MyCustomParcelable&amp; lhs, const MyCustomParcelable&amp; rhs);
+        friend bool operator!=(const MyCustomParcelable&amp; lhs, const MyCustomParcelable&amp; rhs);
+    };
+</pre> <p>In Android 15, for declaration of a custom Rust parcelable in AIDL, use <code translate="no" dir="ltr">rust_type</code>:</p> 
+<pre>package my.pack.age;
+@RustOnlyStableParcelable parcelable Foo rust_type "rust_crate::Foo";
+</pre> <p>The Rust implementation in <code translate="no" dir="ltr">rust_crate/src/lib.rs</code> looks like this:</p> 
+<pre>use binder::{
+    binder_impl::{BorrowedParcel, UnstructuredParcelable},
+    impl_deserialize_for_unstructured_parcelable, impl_serialize_for_unstructured_parcelable,
+    StatusCode,
+};
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct Foo {
+    pub bar: String,
+}
+
+impl UnstructuredParcelable for Foo {
+    fn write_to_parcel(&amp;self, parcel: &amp;mut BorrowedParcel) -&gt; Result&lt;(), StatusCode&gt; {
+        parcel.write(&amp;self.bar)?;
+        Ok(())
+    }
+
+    fn from_parcel(parcel: &amp;BorrowedParcel) -&gt; Result&lt;Self, StatusCode&gt; {
+        let bar = parcel.read()?;
+        Ok(Self { bar })
+    }
+}
+
+impl_deserialize_for_unstructured_parcelable!(Foo);
+impl_serialize_for_unstructured_parcelable!(Foo);
+</pre> <p>Then you can use this parcelable as a type in AIDL files, but it won't be generated by AIDL. Provide <code translate="no" dir="ltr">&lt;</code> and <code translate="no" dir="ltr">==</code> operators for CPP and NDK backend custom parcelables to use them in <code translate="no" dir="ltr">union</code>.</p> <aside class="warning"><strong>Warning:</strong><span> <strong>Custom parcelables in Java and C++ should be final.</strong> If a subclass of a parcelable is sent as a superclass, then the underlying format is mismatched. A parent class parcelable would need to encode how subclasses are written to a parcel. The easiest solution is to avoid subclassing parcelables. Use composition instead.</span></aside> <h3 id="default-values">Default values</h3> <p>Structured parcelables can declare per-field default values for primitives, <code translate="no" dir="ltr">String</code> fields, and arrays of these types.</p> 
+<pre>    parcelable Foo {
+      int numField = 42;
+      String stringField = "string value";
+      char charValue = 'a';
+      ...
+    }
+</pre> <p>In the Java backend, when default values are missing, fields are initialized as zero values for primitive types and <code translate="no" dir="ltr">null</code> for nonprimitive types.</p> <p>In other backends, fields are initialized with default initialized values when default values aren't defined. For example, in the C++ backend, <code translate="no" dir="ltr">String</code> fields are initialized as an empty string and <code translate="no" dir="ltr">List&lt;T&gt;</code> fields are initialized as an empty <code translate="no" dir="ltr">vector&lt;T&gt;</code>. <code translate="no" dir="ltr">@nullable</code> fields are initialized as null-value fields.</p> <h3 id="unions">Unions</h3> <p>AIDL unions are tagged and their features are similar in all backends. They're constructed to the first field's default value and they have a language-specific way to interact with them:</p> 
+<pre>    union Foo {
+      int intField;
+      long longField;
+      String stringField;
+      MyParcelable parcelableField;
+      ...
+    }
+</pre> <h4 id="java-example">Java example</h4> 
+<pre>    Foo u = Foo.intField(42);              // construct
+
+    if (u.getTag() == Foo.intField) {      // tag query
+      // use u.getIntField()               // getter
+    }
+
+    u.setStringField("abc");               // setter
+</pre> <h4 id="c-ndk-example">C++ and NDK example</h4> 
+<pre>    Foo u;                                            // default constructor
+
+    assert (u.getTag() == Foo::intField);             // tag query
+    assert (u.get&lt;Foo::intField&gt;() == 0);             // getter
+
+    u.set&lt;Foo::stringField&gt;("abc");                   // setter
+
+    assert (u == Foo::make&lt;Foo::stringField&gt;("abc")); // make&lt;tag&gt;(value)
+</pre> <h4 id="rust-example">Rust example</h4> <p>In Rust, unions are implemented as enums and don't have explicit getters and setters.</p> 
+<pre>    let mut u = Foo::Default();              // default constructor
+    match u {                                // tag match + get
+      Foo::IntField(x) =&gt; assert!(x == 0);
+      Foo::LongField(x) =&gt; panic!("Default constructed to first field");
+      Foo::StringField(x) =&gt; panic!("Default constructed to first field");
+      Foo::ParcelableField(x) =&gt; panic!("Default constructed to first field");
+      ...
+    }
+    u = Foo::StringField("abc".to_string()); // set
+</pre> <h2 id="error_handling">Error handling</h2> <p>The Android OS provides built-in error types for services to use when reporting errors. These are used by binders and can be used by any services implementing a binder interface. Their use is well documented in the AIDL definition and they don't require any user-defined status or return type.</p> <h3 id="out_param_errors">Output parameters with errors</h3> <p>When an AIDL function reports an error, the function might not initialize or modify output parameters. Specifically, output parameters might be modified if the error occurs during unparceling, as opposed to happening during the processing of the transaction itself. In general, when getting an error from an AIDL function, all <code translate="no" dir="ltr">inout</code> and <code translate="no" dir="ltr">out</code> parameters as well as the return value (which acts like an <code translate="no" dir="ltr">out</code> parameter in some backends) should be considered to be in an indefinite state.</p> <h3 id="which_values">Which error values to use</h3> <p>Many of the built-in error values can be used in any AIDL interfaces, but some are treated in a special way. For example, <code translate="no" dir="ltr">EX_UNSUPPORTED_OPERATION</code> and <code translate="no" dir="ltr">EX_ILLEGAL_ARGUMENT</code> are OK to use when they describe the error condition, but <code translate="no" dir="ltr">EX_TRANSACTION_FAILED</code> must not be used because it's treated specially by the underlying infrastructure. Check the backend specific definitions for more information on these built-in values.</p> <p>If the AIDL interface requires additional error values that aren't covered by the built-in error types, they can use the special service-specific built-in error that allows the inclusion of a service-specific error value that's defined by the user. These service-specific errors are typically defined in the AIDL interface as a <code translate="no" dir="ltr">const int</code> or <code translate="no" dir="ltr">int</code>-backed <code translate="no" dir="ltr">enum</code> and aren't parsed by binder.</p> <p>In Java, errors map to exceptions, such as <code translate="no" dir="ltr">android.os.RemoteException</code>. For service-specific exceptions, Java uses <code translate="no" dir="ltr">android.os.ServiceSpecificException</code> along with the user-defined error.</p> <p>Native code in Android doesn't use exceptions. The CPP backend uses <code translate="no" dir="ltr">android::binder::Status</code>. The NDK backend uses <code translate="no" dir="ltr">ndk::ScopedAStatus</code>. Every method generated by AIDL returns one of these, representing the status of the method. The Rust backend uses the same exception code values as the NDK, but converts them into native Rust errors (<code translate="no" dir="ltr">StatusCode</code>, <code translate="no" dir="ltr">ExceptionCode</code>) before delivering them to the user. For service-specific errors, the returned <code translate="no" dir="ltr">Status</code> or <code translate="no" dir="ltr">ScopedAStatus</code> uses <code translate="no" dir="ltr">EX_SERVICE_SPECIFIC</code> along with the user-defined error.</p> <p>The built-in error types can be found in the following files:</p> <table> <tr> <th>Backend</th> <th>Definition</th> </tr> <tr> <td>Java</td> <td><code translate="no" dir="ltr">android/os/Parcel.java</code></td> </tr> <tr> <td>CPP</td> <td><code translate="no" dir="ltr">binder/Status.h</code></td> </tr> <tr> <td>NDK</td> <td><code translate="no" dir="ltr">android/binder_status.h</code></td> </tr> <tr> <td>Rust</td> <td><code translate="no" dir="ltr">android/binder_status.h</code></td> </tr> </table> <h2 id="how-to">Use various backends</h2> <p>These instructions are specific to Android platform code. These examples use a defined type, <code translate="no" dir="ltr">my.package.IFoo</code>. For instructions on how to use the Rust backend, see the <a href="../../../setup/build/rust/building-rust-modules/android-rust-patterns#rust-aidl-example">Rust AIDL example</a> in <a href="../../../setup/build/rust/building-rust-modules/android-rust-patterns">Android Rust patterns</a>.</p> <h3 id="importing-types">Import types</h3> <p>Whether the defined type is an interface, parcelable, or union, you can import it in Java:</p> 
+<pre>import my.package.IFoo;
+</pre> <p>Or in the CPP backend:</p> 
+<pre>#include &lt;my/package/IFoo.h&gt;
+</pre> <p>Or in the NDK backend (notice the extra <code translate="no" dir="ltr">aidl</code> namespace):</p> 
+<pre>#include &lt;aidl/my/package/IFoo.h&gt;
+</pre> <p>Or in the Rust backend:</p> 
+<pre>use my_package::aidl::my::package::IFoo;
+</pre> <p>Although you can import a nested type in Java, in the CPP and NDK backends you must include the header for its root type. For example, when importing a nested type <code translate="no" dir="ltr">Bar</code> defined in <code translate="no" dir="ltr">my/package/IFoo.aidl</code> (<code translate="no" dir="ltr">IFoo</code> is the root type of the file) you must include <code translate="no" dir="ltr">&lt;my/package/IFoo.h&gt;</code> for the CPP backend (or <code translate="no" dir="ltr">&lt;aidl/my/package/IFoo.h&gt;</code> for the NDK backend).</p> <h3 id="implementing-interfaces">Implement an interface</h3> <p>To implement an interface, you must inherit from the native stub class. An implementation of an interface is often called a <em>service</em> when it's registered with the service manager or <code translate="no" dir="ltr">android.app.ActivityManager</code> and called a <em>callback</em> when it's registered by a client of a service. However, a variety of names are used to describe interface implementations depending on the exact usage. The stub class reads commands from the binder driver and executes the methods that you implement. Imagine that you have an AIDL file like this:</p> 
+<pre>    package my.package;
+    interface IFoo {
+        int doFoo();
+    }
+</pre> <p>In Java, you must extend from the generated <code translate="no" dir="ltr">Stub</code> class:</p> 
+<pre>    import my.package.IFoo;
+    public class MyFoo extends IFoo.Stub {
+        @Override
+        int doFoo() { ... }
+    }
+</pre> <p>In the CPP backend:</p> 
+<pre>    #include &lt;my/package/BnFoo.h&gt;
+    class MyFoo : public my::package::BnFoo {
+        android::binder::Status doFoo(int32_t* out) override;
+    }
+</pre> <p>In the NDK backend (notice the extra <code translate="no" dir="ltr">aidl</code> namespace):</p> 
+<pre>    #include &lt;aidl/my/package/BnFoo.h&gt;
+    class MyFoo : public aidl::my::package::BnFoo {
+        ndk::ScopedAStatus doFoo(int32_t* out) override;
+    }
+</pre> <p>In the Rust backend:</p> 
+<pre>    use aidl_interface_name::aidl::my::package::IFoo::{BnFoo, IFoo};
+    use binder;
+
+    /// This struct is defined to implement IRemoteService AIDL interface.
+    pub struct MyFoo;
+
+    impl Interface for MyFoo {}
+
+    impl IFoo for MyFoo {
+        fn doFoo(&amp;self) -&gt; binder::Result&lt;()&gt; {
+           ...
+           Ok(())
+        }
+    }
+</pre> <p>Or with async Rust:</p> 
+<pre>    use aidl_interface_name::aidl::my::package::IFoo::{BnFoo, IFooAsyncServer};
+    use binder;
+
+    /// This struct is defined to implement IRemoteService AIDL interface.
+    pub struct MyFoo;
+
+    impl Interface for MyFoo {}
+
+    #[async_trait]
+    impl IFooAsyncServer for MyFoo {
+        async fn doFoo(&amp;self) -&gt; binder::Result&lt;()&gt; {
+           ...
+           Ok(())
+        }
+    }
+</pre> <h3 id="service-management">Register and get services</h3> <p>Services in platform Android are usually registered with the <code translate="no" dir="ltr">servicemanager</code> process. In addition to the following APIs, some APIs check the service (meaning they return immediately if the service isn't available). Check the corresponding <code translate="no" dir="ltr">servicemanager</code> interface for exact details. You can perform these operations only when compiling against platform Android.</p> <aside class="warning"><strong>Warning:</strong><span> AIDL or the binder doesn't start a threadpool by default. If <code translate="no" dir="ltr">waitForService</code> is hanging, you might need to start the binder threadpool.</span></aside><aside class="warning"><strong>Warning:</strong><span> The <code translate="no" dir="ltr">getService</code> method can retrieve services in Android. In the CPP, NDK, or Rust backend and some pieces of the Java backend, this method polls for 5 seconds and returns the service only if it starts within that window. Because <code translate="no" dir="ltr">getService</code> is polling and can introduce races, we recommend avoiding this method.</span></aside> <p>In Java:</p> 
+<pre>    import android.os.ServiceManager;
+    // registering
+    ServiceManager.addService("service-name", myService);
+    // return if service is started now
+    myService = IFoo.Stub.asInterface(ServiceManager.checkService("service-name"));
+    // waiting until service comes up (new in Android 11)
+    myService = IFoo.Stub.asInterface(ServiceManager.waitForService("service-name"));
+    // waiting for declared (VINTF) service to come up (new in Android 11)
+    myService = IFoo.Stub.asInterface(ServiceManager.waitForDeclaredService("service-name"));
+</pre> <p>In the CPP backend:</p> 
+<pre>    #include &lt;binder/IServiceManager.h&gt;
+    // registering
+    defaultServiceManager()-&gt;addService(String16("service-name"), myService);
+    // return if service is started now
+    status_t err = checkService&lt;IFoo&gt;(String16("service-name"), &amp;myService);
+    // waiting until service comes up (new in Android 11)
+    myService = waitForService&lt;IFoo&gt;(String16("service-name"));
+    // waiting for declared (VINTF) service to come up (new in Android 11)
+    myService = waitForDeclaredService&lt;IFoo&gt;(String16("service-name"));
+</pre> <p>In the NDK backend (notice the extra <code translate="no" dir="ltr">aidl</code> namespace):</p> 
+<pre>    #include &lt;android/binder_manager.h&gt;
+    // registering
+    binder_exception_t err = AServiceManager_addService(myService-&gt;asBinder().get(), "service-name");
+    // return if service is started now
+    myService = IFoo::fromBinder(ndk::SpAIBinder(AServiceManager_checkService("service-name")));
+    // is a service declared in the VINTF manifest
+    // VINTF services have the type in the interface instance name.
+    bool isDeclared = AServiceManager_isDeclared("android.hardware.light.ILights/default");
+    // wait until a service is available (if isDeclared or you know it's available)
+    myService = IFoo::fromBinder(ndk::SpAIBinder(AServiceManager_waitForService("service-name")));
+</pre> <p>In the Rust backend:</p> <aside class="note"><strong>Note:</strong><span> <code translate="no" dir="ltr">myfoo</code> here is the crate name of the library containing the previously defined interface.</span></aside>
+<pre>use myfoo::MyFoo;
+use binder;
+use aidl_interface_name::aidl::my::package::IFoo::BnFoo;
+
+fn main() {
+    binder::ProcessState::start_thread_pool();
+    // [...]
+    let my_service = MyFoo;
+    let my_service_binder = BnFoo::new_binder(
+        my_service,
+        BinderFeatures::default(),
+    );
+    binder::add_service("myservice", my_service_binder).expect("Failed to register service?");
+    // Does not return - spawn or perform any work you mean to do before this call.
+    binder::ProcessState::join_thread_pool()
+}
+</pre> <p>In the async Rust backend, with a single-threaded runtime:</p> 
+<pre>use myfoo::MyFoo;
+use binder;
+use binder_tokio::TokioRuntime;
+use aidl_interface_name::aidl::my::package::IFoo::BnFoo;
+
+#[tokio::main(flavor = "current_thread")]
+async fn main() {
+    binder::ProcessState::start_thread_pool();
+    // [...]
+    let my_service = MyFoo;
+    let my_service_binder = BnFoo::new_async_binder(
+        my_service,
+        TokioRuntime(Handle::current()),
+        BinderFeatures::default(),
+    );
+
+    binder::add_service("myservice", my_service_binder).expect("Failed to register service?");
+
+    // Sleeps forever, but does not join the binder threadpool.
+    // Spawned tasks run on this thread.
+    std::future::pending().await
+}
+</pre> <p>One important difference from the other options is that you <em>don't</em> call <code translate="no" dir="ltr">join_thread_pool</code> when using async Rust and a single-threaded runtime. This is because you need to give Tokio a thread where it can execute spawned tasks. In the following example, the main thread serves that purpose. Any tasks spawned using <a href="https://docs.rs/tokio/latest/tokio/task/fn.spawn.html"><code translate="no" dir="ltr">tokio::spawn</code></a> execute on the main thread.</p> <p>In the async Rust backend, with a multithreaded runtime:</p> 
+<pre>use myfoo::MyFoo;
+use binder;
+use binder_tokio::TokioRuntime;
+use aidl_interface_name::aidl::my::package::IFoo::BnFoo;
+
+#[tokio::main(flavor = "multi_thread", worker_threads = 2)]
+async fn main() {
+    binder::ProcessState::start_thread_pool();
+    // [...]
+    let my_service = MyFoo;
+    let my_service_binder = BnFoo::new_async_binder(
+        my_service,
+        TokioRuntime(Handle::current()),
+        BinderFeatures::default(),
+    );
+
+    binder::add_service("myservice", my_service_binder).expect("Failed to register service?");
+
+    // Sleep forever.
+    tokio::task::block_in_place(|| {
+        binder::ProcessState::join_thread_pool();
+    });
+}
+</pre> <p>With the multithreaded Tokio runtime, spawned tasks don't execute on the main thread. Therefore, it makes more sense to call <code translate="no" dir="ltr">join_thread_pool</code> on the main thread so that the main thread isn't idle. You must wrap the call in <a href="https://docs.rs/tokio/latest/tokio/task/fn.block_in_place.html"><code translate="no" dir="ltr">block_in_place</code></a> to leave the async context.</p> <h3 id="link-to-death">Link to death</h3> <p>You can request to get a notification for when a service hosting a binder dies. This can help to avoid leaking callback proxies or assist in error recovery. Make these calls on binder proxy objects.</p> <ul> <li>In Java, use <code translate="no" dir="ltr">android.os.IBinder::linkToDeath</code>.</li> <li>In the CPP backend, use <code translate="no" dir="ltr">android::IBinder::linkToDeath</code>.</li> <li>In the NDK backend, use <code translate="no" dir="ltr">AIBinder_linkToDeath</code>. Always use <code translate="no" dir="ltr">AIBinder_DeathRecipient_setOnUnlinked</code> to control the lifetime of your death recipient cookie.</li> <li>In the Rust backend, create a <code translate="no" dir="ltr">DeathRecipient</code> object, then call <code translate="no" dir="ltr">my_binder.link_to_death(&amp;mut my_death_recipient)</code>. Note that because <code translate="no" dir="ltr">DeathRecipient</code> owns the callback, you must keep that object alive as long as you want to receive notifications.</li> </ul> <h3 id="caller-info">Caller information</h3> <p>When receiving a kernel binder call, caller information is available in several APIs. The process ID (PID) refers to the Linux process ID of the process that's sending a transaction. The user ID (UI) refers to the Linux user ID. When receiving a one-way call, the calling PID is 0. Outside of a binder transaction context, these functions return the PID and UID of the current process.</p> <aside class="warning"><strong>Warning:</strong><span> <strong>PID is subject to races.</strong> As soon as you obtain a PID, the process containing the PID might die and another process might reuse the PID. Never assume that a PID represents a specific process. Generally, PIDs are useful only for debugging.</span></aside> <p>In the Java backend:</p> 
+<pre>    ... = Binder.getCallingPid();
+    ... = Binder.getCallingUid();
+</pre> <p>In the CPP backend:</p> 
+<pre>    ... = IPCThreadState::self()-&gt;getCallingPid();
+    ... = IPCThreadState::self()-&gt;getCallingUid();
+</pre> <p>In the NDK backend:</p> 
+<pre>    ... = AIBinder_getCallingPid();
+    ... = AIBinder_getCallingUid();
+</pre> <p>In the Rust backend, when implementing the interface, specify the following (instead of allowing it to default):</p> 
+<pre>    ... = ThreadState::get_calling_pid();
+    ... = ThreadState::get_calling_uid();
+</pre> <h3 id="dumpsys">Bug reports and debugging API for services</h3> <p>When bug reports run (for example, with <code translate="no" dir="ltr">adb bugreport</code>), they collect information from all around the system to aid with debugging various issues. For AIDL services, bug reports use the binary <code translate="no" dir="ltr">dumpsys</code> on all services registered with the service manager to dump their information into the bug report. You can also use <code translate="no" dir="ltr">dumpsys</code> on the command line to get information from a service with <code translate="no" dir="ltr">dumpsys SERVICE [ARGS]</code>. In the C++ and Java backends, you can control the order in which services get dumped by using additional arguments to <code translate="no" dir="ltr">addService</code>. You can also use <code translate="no" dir="ltr">dumpsys --pid SERVICE</code> to get the PID of a service while debugging.</p> <p>To add custom output to your service, override the <code translate="no" dir="ltr">dump</code> method in your server object like you're implementing any other IPC method defined in an AIDL file. When doing this, restrict dumping to the app permission <code translate="no" dir="ltr">android.permission.DUMP</code> or restrict dumping to specific UIDs.</p> <p>In the Java backend:</p> 
+<pre>    @Override
+    protected void dump(@NonNull FileDescriptor fd, @NonNull PrintWriter fout,
+        @Nullable String[] args) {...}
+</pre> <p>In the CPP backend:</p> 
+<pre>    status_t dump(int, const android::android::Vector&lt;android::String16&gt;&amp;) override;
+</pre> <p>In the NDK backend:</p> 
+<pre>    binder_status_t dump(int fd, const char** args, uint32_t numArgs) override;
+</pre> <p>In the Rust backend, when implementing the interface, specify the following (instead of allowing it to default):</p> 
+<pre>    fn dump(&amp;self, mut file: &amp;File, args: &amp;[&amp;CStr]) -&gt; binder::Result&lt;()&gt;
+</pre> <h3 id="weak-pointers">Use weak pointers</h3> <p>You can hold a weak reference to a binder object.</p> <aside class="warning"><strong>Warning:</strong><span> In Android binder, you can promote a weak reference only if there is already a strong reference in the same process. If you only have a weak reference to a remote binder, you can't promote it.</span></aside> <p>While Java supports <code translate="no" dir="ltr">WeakReference</code>, it doesn't support weak binder references at the native layer.</p> <p>In the CPP backend, the weak type is <code translate="no" dir="ltr">wp&lt;IFoo&gt;</code>.</p> <p>In the NDK backend, use <code translate="no" dir="ltr">ScopedAIBinder_Weak</code>:</p> 
+<pre>#include &lt;android/binder_auto_utils.h&gt;
+
+AIBinder* binder = ...;
+ScopedAIBinder_Weak myWeakReference = ScopedAIBinder_Weak(AIBinder_Weak_new(binder));
+</pre> <p>In the Rust backend, use <code translate="no" dir="ltr">WpIBinder</code> or <code translate="no" dir="ltr">Weak&lt;IFoo&gt;</code>:</p> 
+<pre>let weak_interface = myIface.downgrade();
+let weak_binder = myIface.as_binder().downgrade();
+</pre> <h3 id="dynamic-interface-descriptor">Dynamically get interface descriptor</h3> <p>The interface descriptor identifies the type of an interface. This is useful when debugging or when you have an unknown binder.</p> <p>In Java, you can get the interface descriptor with code such as:</p> 
+<pre>    service = /* get ahold of service object */
+    ... = service.asBinder().getInterfaceDescriptor();
+</pre> <p>In the CPP backend:</p> 
+<pre>    service = /* get ahold of service object */
+    ... = IInterface::asBinder(service)-&gt;getInterfaceDescriptor();
+</pre> <p>The NDK and Rust backends don't support this capability.</p> <h3 id="static-interface-descriptor">Statically get interface descriptor</h3> <p>Sometimes (such as when registering <code translate="no" dir="ltr">@VintfStability</code> services), you need to know what the interface descriptor is statically. In Java, you can get the descriptor by adding code such as:</p> 
+<pre>    import my.package.IFoo;
+    ... IFoo.DESCRIPTOR
+</pre> <p>In the CPP backend:</p> 
+<pre>    #include &lt;my/package/BnFoo.h&gt;
+    ... my::package::BnFoo::descriptor
+</pre> <p>In the NDK backend (notice the extra <code translate="no" dir="ltr">aidl</code> namespace):</p> 
+<pre>    #include &lt;aidl/my/package/BnFoo.h&gt;
+    ... aidl::my::package::BnFoo::descriptor
+</pre> <p>In the Rust backend:</p> 
+<pre>    aidl::my::package::BnFoo::get_descriptor()
+</pre> <h3 id="enum-range">Enum range</h3> <p>In native backends, you can iterate over the possible values an enum can take on. Due to code size considerations, this isn't supported in Java.</p> <p>For an enum <code translate="no" dir="ltr">MyEnum</code> defined in AIDL, iteration is provided as follows.</p> <p>In the CPP backend:</p> 
+<pre>    ::android::enum_range&lt;MyEnum&gt;()
+</pre> <p>In the NDK backend:</p> 
+<pre>   ::ndk::enum_range&lt;MyEnum&gt;()
+</pre> <p>In the Rust backend:</p> 
+<pre>    MyEnum::enum_values()
+</pre> <h3 id="thread-management">Thread management</h3> <p>Every instance of <code translate="no" dir="ltr">libbinder</code> in a process maintains one threadpool. For most use cases, this should be exactly one threadpool, shared across all backends. The only exception is if vendor code loads another copy of <code translate="no" dir="ltr">libbinder</code> to talk to <code translate="no" dir="ltr">/dev/vndbinder</code>. This is on a separate binder node, so the threadpool isn't shared.</p> <p>For the Java backend, the threadpool can only increase in size (because it's already started):</p> 
+<pre>    BinderInternal.setMaxThreads(&lt;new larger value&gt;);
+</pre> <p>For the CPP backend, the following operations are available:</p> 
+<pre>    // set max threadpool count (default is 15)
+    status_t err = ProcessState::self()-&gt;setThreadPoolMaxThreadCount(numThreads);
+    // create threadpool
+    ProcessState::self()-&gt;startThreadPool();
+    // add current thread to threadpool (adds thread to max thread count)
+    IPCThreadState::self()-&gt;joinThreadPool();
+</pre> <p>Similarly, in the NDK backend:</p> 
+<pre>    bool success = ABinderProcess_setThreadPoolMaxThreadCount(numThreads);
+    ABinderProcess_startThreadPool();
+    ABinderProcess_joinThreadPool();
+</pre> <p>In the Rust backend:</p> 
+<pre>    binder::ProcessState::start_thread_pool();
+    binder::add_service("myservice", my_service_binder).expect("Failed to register service?");
+    binder::ProcessState::join_thread_pool();
+</pre> <p>With the async Rust backend, you need two threadpools: binder and Tokio. This means that apps using async Rust need special considerations, especially when it comes to the use of <code translate="no" dir="ltr">join_thread_pool</code>. See <a href="#service-management">the section on registering services</a> for more information on this.</p> <h3 id="reserved-names">Reserved names</h3> <p>C++, Java, and Rust reserve some names as keywords or for language-specific use. While AIDL doesn't enforce restrictions based on language rules, using field or type names that match a reserved name can result in a compilation failure for C++ or Java. For Rust, the field or type is renamed using the raw identifier syntax, accessible using the <code translate="no" dir="ltr">r#</code> prefix.</p> <p>We recommend avoiding using reserved names in your AIDL definitions where possible to avoid unergonomic bindings or outright compilation failure.</p> <p>If you already have reserved names in your AIDL definitions, you can safely rename fields while remaining protocol compatible. You might need to update your code to continue building, but any already built programs continue to interoperate.</p> <p>Names to avoid:</p> <ul> <li><a href="https://en.cppreference.com/w/cpp/keyword">C++ keywords</a></li> <li><a href="https://en.wikipedia.org/wiki/List_of_Java_keywords">Java keywords</a></li> <li><a href="https://doc.rust-lang.org/reference/keywords.html">Rust keywords</a></li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/aidl/aidl-backends" class="_attribution-link">https://source.android.com/docs/core/architecture/aidl/aidl-backends</a>
+  </p>
+</div>

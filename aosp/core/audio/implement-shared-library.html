@@ -1,0 +1,41 @@
+<h1>Configure a shared library</h1>  <p>After creating an <a href="implement-policy">audio policy configuration</a>, you must package the HAL implementation into a shared library and copy it to the appropriate location:</p> <ol> <li>Create a <code translate="no" dir="ltr">device/&lt;company&gt;/&lt;device&gt;/audio</code> directory to contain your library's source files.</li> <li>Create an <code translate="no" dir="ltr">Android.mk</code> file to build the shared library. Ensure the Makefile contains the following line: <br> 
+<pre>
+LOCAL_MODULE := audio.primary.&lt;device&gt;
+</pre> <br> <p>Your library must be named <code translate="no" dir="ltr">audio.primary.&lt;device&gt;.so</code> so Android can correctly load the library. The <code translate="no" dir="ltr">primary</code> portion of this filename indicates that this shared library is for the primary audio hardware located on the device. The module names <code translate="no" dir="ltr">audio.a2dp.&lt;device&gt;</code> and <code translate="no" dir="ltr">audio.usb.&lt;device&gt;</code> are also available for Bluetooth and USB audio interfaces. Here is an example of an <code translate="no" dir="ltr">Android.mk</code> from the Galaxy Nexus audio hardware:</p> 
+<pre>
+LOCAL_PATH := $(call my-dir)
+
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := audio.primary.tuna
+LOCAL_MODULE_RELATIVE_PATH := hw
+LOCAL_SRC_FILES := audio_hw.c ril_interface.c
+LOCAL_C_INCLUDES += \
+        external/tinyalsa/include \
+        $(call include-path-for, audio-utils) \
+        $(call include-path-for, audio-effects)
+LOCAL_SHARED_LIBRARIES := liblog libcutils libtinyalsa libaudioutils libdl
+LOCAL_MODULE_TAGS := optional
+
+include $(BUILD_SHARED_LIBRARY)
+</pre> </li> <br> <li>If your product supports low latency audio as specified by the Android CDD, copy the corresponding XML feature file into your product. For example, in your product's <code translate="no" dir="ltr">device/&lt;company&gt;/&lt;device&gt;/device.mk</code> Makefile: 
+<pre>
+PRODUCT_COPY_FILES := ...
+
+PRODUCT_COPY_FILES += \
+frameworks/native/data/etc/android.hardware.audio.low_latency.xml:system/etc/permissions/android.hardware.audio.low_latency.xml \
+</pre> </li> <br> <li>Copy the audio policy configuration file you created earlier to the <code translate="no" dir="ltr">system/etc/</code> directory in your product's <code translate="no" dir="ltr">device/&lt;company&gt;/&lt;device&gt;/device.mk</code> Makefile. For example: 
+<pre>
+PRODUCT_COPY_FILES += \
+        device/samsung/tuna/audio/audio_policy.conf:system/etc/audio_policy.conf
+</pre> </li> <br> <li>Declare the shared modules of your audio HAL that are required by your product in the product's <code translate="no" dir="ltr">device/&lt;company&gt;/&lt;device&gt;/device.mk</code> Makefile. For example, the Galaxy Nexus requires the primary and Bluetooth audio HAL modules: 
+<pre>
+PRODUCT_PACKAGES += \
+        audio.primary.tuna \
+        audio.a2dp.default
+</pre> </li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/audio/implement-shared-library" class="_attribution-link">https://source.android.com/docs/core/audio/implement-shared-library</a>
+  </p>
+</div>

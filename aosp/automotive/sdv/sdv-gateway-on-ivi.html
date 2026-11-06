@@ -1,0 +1,942 @@
+<h1>Use the SDV Gateway on IVI</h1>  <p>The Software Defined Vehicle (SDV) Gateway on In-Vehicle Infotainment (IVI) systems facilitates communication between IVI systems and remote SDV services. The gateway lets original equipment manufacturer (OEM) Java apps and native services, such as vehicle hardware abstraction layer (VHAL), interact with SDV services. The gateway uses established communication methods, including service registration, discovery, and remote procedure calls (RPCs).</p> <p>This gateway fulfills specific AAOS SDV project requirements, such as enabling a VHAL reference implementation using SDV Data Tunnel for property information. It also allows Java and Kotlin Android apps on IVI to use the SDV Comms stack, register as services, find other SDV services, and communicate with them.</p> <p>For the SDV Gateway code locations and example SDV Gateway clients, see <a href="#code-locations">Code locations</a>.</p> <h2 id="integration-models">SDV Gateway integration models</h2> <h3 id="architecture">Use SDV-IVI Comms through the SDV Gateway on IVI architecture</h3> <p>The SDV Gateway interacts with Java apps, native services, the SDV Comms stack, and the vehicle network. Figure 1 illustrates these interactions:</p> <p><img src="https://source.android.com/static/docs/automotive/sdv/images/sdv-ivi-01.svg" alt="SDV Gateway interactions" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> SDV Gateway interactions.</p> <p>In this system diagram:</p> <ul> <li>Apps interact with the SDV Gateway through its client services.</li> <li>The AAOS SDV SDK provides you with: <ul> <li>ISdvGateway AIDL API for interprocess communication.</li> <li>Comms libraries for network interaction.</li> <li>Convenience C API for native service integration.</li> </ul>
+</li> <li>The ISdvGateway AIDL API is implemented by the SDV Gateway service and subsystem.</li> <li>The SDV Gateway service manages: <ul> <li>Bidirectional service discovery.</li> <li>Communication with remote SDV services.</li> <li>Core business logic.</li> </ul>
+</li> <li>The SDV Gateway subsystem connects to the vehicular network.</li> <li>Native services, including the VHAL implementation, can use the ISdvGateway AIDL API directly or through the SDK's C API.</li> <li>The VHAL proxy serves as a reference VHAL implementation, incorporating VSIDL mapping integration.</li> </ul> <h3 id="ivi">Integration model for SDV Gateway on an IVI native service</h3> <p>The integration model is illustrated in Figure 2:</p> <p><img src="https://source.android.com/static/docs/automotive/sdv/images/sdv-ivi-02.svg" alt="SDV Gateway integration model" class="android-image-dark-theme-background"> </p> <p><strong>Figure 2.</strong> SDV Gateway integration model.</p> <h3 id="ivi-native">Use SDV Gateway on an IVI native service</h3> <p>Figure 3 illustrates the use of the SDV Gateway on IVI:</p> <p class="screenshot"><img src="https://source.android.com/static/docs/automotive/sdv/images/sdv-ivi-03.svg" alt="SDV Gateway on IVI" class="android-image-dark-theme-background"></p> <p><strong>Figure 3.</strong> SDV Gateway on IVI.</p> <h4 id="preconditions">Preconditions</h4> <p>Start the Binder thread pool:</p> <ul> <li><p>SDV Gateway client library requires a started Binder thread pool to receive asynchronous callbacks from Binder services.</p></li> <li><p>The API needed to create an SDV Gateway client fails when a Binder thread pool is not started.</p></li> </ul> <h4 id="include_native_gateway_client_library">Include native Gateway client library</h4> <p>The Native Gateway Client library exposes a C API. Add an instance of <code translate="no" dir="ltr">libsdvgatewayclient</code> as a dependency to use the C API:</p> 
+<pre>cc_binary {
+    name: "your_binary_name",
+    srcs: ["main.cpp"],
+    shared_libs: [
+        "libsdvgatewayclient",
+    ],
+}
+</pre> <h4 id="load_the_native_gateway_client">Load the native Gateway client</h4> 
+<pre>#include "libsdvgatewayclient.h"
+</pre> <h4 id="create_a_native_client_instance">Create a native client instance</h4> 
+<pre>ASDVGateway_Client* client;
+ASDVGateway_StatusCode_t statusCode = ASDVGateway_Client_new(
+     &amp;client, /*outStatus*/nullptr);
+</pre> <p>After the client is created, the client:</p> <ul> <li><p>Holds state for all subsequent interactions with the Gateway service.</p></li> <li><p>Acts as the context of all interactions with other SDV-enabled services and is passed as the first parameters to the C API functions.</p></li> </ul> <h4 id="status_codes_and_error_messages">Status codes and error messages</h4> <p>Most C API functions have this definition:</p> 
+<pre>ASDVGateway_StatusCode_t ApiFunctionName(..., ASDVGateway_Status_t* outStatus);
+</pre> <p>To evaluate success, you can inspect the returned status code, which is of the type <code translate="no" dir="ltr">ASDVGateway_StatusCode_t</code>. You can also pass a pointer to a structure where the function can fill the status code and an error message. The pointer is passed as the last parameter, named <code translate="no" dir="ltr">outStatus</code>. A null value means that the output structure isn't used.</p> <p>The caller must allocate the memory status structure for the error message. The status structure can hold both the status code and an error message. An example of retrieving the error message when creating a new client is available.</p> <p>To evaluate success:</p> <ol> <li><p>Inspect the returned status code, which is of the type <code translate="no" dir="ltr">ASDVGateway_StatusCode_t</code>.</p></li> <li>
+<p>Pass a pointer to a structure where the function can fill the status code and an error message.</p> <ul> <li>The pointer is passed as the last parameter, named <code translate="no" dir="ltr">outStatus</code>.</li> <li>A null value means the output structure isn't used.</li> <li>The caller must allocate the memory status structure for the error message.</li> <li>The status structure can hold the status code and an error message.</li> </ul>
+</li> </ol> <p>Here's a sample that shows how to retrieve the error message for a new client:</p> 
+<pre>#include &lt;iostream&gt;
+#include &lt;array&gt;
+
+struct StatusWithErrorMsg : ASDVGateway_Status_t {
+    StatusWithErrorMsg() {
+        // Ensure the base struct pointers point to our internal buffer
+        errorMessage = errorMessageBuffer.data();
+        maxErrorMessageSize = errorMessageBuffer.size();
+
+        // Good practice: Zero-initialize the buffer
+        errorMessageBuffer.fill(0);
+    }
+
+    std::array&lt;char, 256&gt; errorMessageBuffer;
+};
+
+// --- Execution ---
+
+ASDVGateway_Client* client = nullptr;
+StatusWithErrorMsg status;
+
+// Initialize the client
+ASDVGateway_StatusCode_t statusCode = ASDVGateway_Client_new(&amp;client, &amp;status);
+
+// Log Results
+std::cout &lt;&lt; "Returned statusCode:    " &lt;&lt; statusCode &lt;&lt; std::endl;
+std::cout &lt;&lt; "Status Struct Code:     " &lt;&lt; status.statusCode &lt;&lt; std::endl;
+std::cout &lt;&lt; "Status Error Message:   " &lt;&lt; status.errorMessage &lt;&lt; std::endl;
+</pre> <p>In this example:</p> <ul> <li><p>The status code contained in the status structure has the same value as the returned status code.</p></li> <li><p>The error message is filled only to the <code translate="no" dir="ltr">maxErrorMessageSize</code> character limit (including the null terminating character <code translate="no" dir="ltr">\0</code>). If no error occurs (status code is <code translate="no" dir="ltr">OK</code>), the error message is an empty string.</p></li> </ul> <h3 id="init-comms">Init comms</h3> <p>Init comms initializes the communication between the caller app and other apps using the SDV Comm Stack and the SDV Gateway. Init comms can be called in both of these contexts::</p> <ul> <li><p><strong>After</strong> the client is created.</p></li> <li><p><strong>Before</strong> any Data Tunnel, RPC, or Service Discovery interactions.</p></li> </ul> <p>Here's an example:</p> 
+<pre>ASDVGateway_InitCommsParams_t params{
+    .packageName         = "android.sdv.samples.gateway.client",
+    .serviceBundleName   = "NativeTestApp",
+    .serviceInstanceName = "default",
+};
+
+// Initialize communications and capture the status code
+ASDVGateway_StatusCode_t statusCode = ASDVGateway_Client_initComms(client, &amp;params, &amp;status);
+
+// Recommended check
+if (statusCode != ASDVGateway_StatusCode_OK) {
+    std::cerr &lt;&lt; "Failed to init comms: " &lt;&lt; status.errorMessage &lt;&lt; std::endl;
+}
+</pre> <h3 id="service-discovery">Service discovery</h3> <p>You can receive notifications when service units of a specific type or name are registered or unregistered. The callback function is notified in a thread owned by the gateway client. This callback is initially triggered with all service units registered right after the C API call. After the initial trigger, notifications continue with updates until the listener is explicitly unregistered.</p> 
+<pre>class NativeSdvGatewayTestApp {
+public:
+    static void ServiceUnitChangeListenerCallback(
+        const ASDVGateway_ServiceUnitChangeEventType eventType,
+        const ASDVGateway_ServiceUnitDefinition* serviceUnitDefinition,
+        void* userData
+    ) {
+        auto* testApp = reinterpret_cast&lt;NativeSdvGatewayTestApp*&gt;(userData);
+
+        if (testApp) {
+            // Logic to react when services are registered or unregistered
+            // e.g., testApp-&gt;handleServiceChange(eventType, serviceUnitDefinition);
+        }
+    }
+};
+
+// --- Listener Registration ---
+
+// Ensure thisApp remains in scope as long as the listener is active
+NativeSdvGatewayTestApp* thisApp = get_current_app_context();
+
+ASDVGateway_UnitType_t unitType{
+    .sdvPackageName     = "android.sdv.samples.sdv_gateway",
+    .serviceBundleName  = "DtPublisher",
+    .unitTypeName       = "TirePressure",
+};
+
+// Register the listener
+ASDVGateway_Client_registerListenerForServiceUnitChangeByType(
+    client,
+    &amp;unitType,
+    NativeSdvGatewayTestApp::ServiceUnitChangeListenerCallback,
+    static_cast&lt;void*&gt;(thisApp), // userData
+    &amp;listenerHandle,
+    &amp;status
+);
+
+// --- Cleanup ---
+
+// Unregistering stops all notification to the callback function
+ASDVGateway_Client_unregisterListenerForServiceUnitChangeByType(
+    client,
+    listenerHandle,
+    &amp;status
+);
+</pre> <p>To retrieve the registered service units without further notifications, use the <code translate="no" dir="ltr">ASDVGateway_Client_fetchServiceUnitsByType</code> and <code translate="no" dir="ltr">ASDVGateway_Client_fetchServiceUnitsByName</code> APIs.</p> 
+<pre>class NativeSdvGatewayTestApp {
+public:
+    /**
+     * Callback triggered for each service unit found that matches the requested type.
+     */
+    static void FetchServiceUnitsCallback(
+        const ASDVGateway_ServiceUnitDefinition* serviceUnitDefinition,
+        void* userData
+    ) {
+        auto* app = reinterpret_cast&lt;NativeSdvGatewayTestApp*&gt;(userData);
+
+        if (serviceUnitDefinition) {
+            // The service unit is registered with service discovery.
+            // Example: processServiceUnit(serviceUnitDefinition);
+        }
+    }
+};
+
+// --- Execution ---
+
+ASDVGateway_UnitType_t unitType{
+    .sdvPackageName     = "android.sdv.samples.sdv_gateway",
+    .serviceBundleName  = "DtPublisher",
+    .unitTypeName       = "TirePressure",
+};
+
+// Context used to differentiate between various fetchServiceUnits calls
+void* userData = static_cast&lt;void*&gt;(thisApp);
+
+ASDVGateway_Client_fetchServiceUnitsByType(
+    client,
+    &amp;unitType,
+    NativeSdvGatewayTestApp::FetchServiceUnitsCallback,
+    userData,
+    &amp;status
+);
+</pre> <p>The callback is triggered synchronously in the caller's thread during the <code translate="no" dir="ltr">ASDVGateway_Client_fetchServiceUnitsByType</code> API call. Use <code translate="no" dir="ltr">ASDVGateway_Client_fetchServiceUnitsByName</code> to get the registered service units by name instead of by unit type:</p> 
+<pre>ASDVGateway_StatusCode_t ASDVGateway_Client_fetchServiceUnitsByName(
+    // [in]  Opaque pointer to a client object.
+    const ASDVGateway_Client* client,
+
+    // [in]  Pointer to a structure containing the package name,
+    //       service bundle name, and service unit name.
+    const ASDVGateway_UnitNameDiscoveryArgs_t* unitName,
+
+    // [in]  Callback function to be called for each service unit
+    //       definition registered. Called synchronously in the
+    //       caller's thread before the fetch completes.
+    ASDVGateway_FetchServiceUnitsCallback callback,
+
+    // [in]  Optional value passed back as a parameter of the callback.
+    void* userData,
+
+    // [out] Optional pointer to status structure for result
+    //       codes and error messages.
+    ASDVGateway_Status_t* outStatus
+);
+</pre> <h3 id="rpc-flow">RPC flow</h3> <p>The Gateway client library handles Transport Layer Security (TLS) settings for communication with other SDV-enabled apps. Specifically, it retrieves the TLS settings required for communication. Here's how TLS usage is determined:</p> <ul> <li><p><strong>TLS</strong> is used when SDV Boot Mode is <code translate="no" dir="ltr">LOCKED</code>.</p></li> <li><p><strong>Insecure</strong> communication is used when SDV Boot Mode is <code translate="no" dir="ltr">UNLOCKED</code>. When TLS is used, the Gateway client library generates a key pair that is known only to the app process. The client retrieves the RPC credentials to create an RPC server or an RPC client channel. RPC uses a dedicated SDV-RPC VLAN. The Gateway client library calls <a href="https://developer.android.com/ndk/reference/group/networking#android_setprocnetwork">android_setprocnetwork</a> to switch the default network of the process to the SDV-RPC VLAN either during or after the <code translate="no" dir="ltr">ASDVGateway_Client_initComms</code> call.</p></li> </ul> <h4 id="rpc_availability">RPC availability</h4> <p>A client configured to start on early boot might start before the SDV-RPC VLAN is available. Check that RPC is available before attempting to create any RPC server or RPC client sockets:</p> 
+<pre>// Check if the RPC (Remote Procedure Call) service is available
+bool isRpcAvailable = ASDVGateway_Client_isRpcAvailable(client);
+
+if (isRpcAvailable) {
+    // Proceed with RPC calls
+} else {
+    // Handle the case where RPC is not yet ready or available
+}
+</pre> <p>or</p> 
+<pre>// Check if the process is correctly bound to the SDV RPC Network Interface/VLAN
+bool isRpcNetworkBound = ASDVGateway_Client_isProcessBoundToSdvRpcNetworkInterface(client);
+
+if (!isRpcNetworkBound) {
+    // Usually implies the process isn't running on the correct network interface
+    // or the VLAN configuration is missing.
+    std::cerr &lt;&lt; "Warning: Process is not bound to the SDV RPC VLAN." &lt;&lt; std::endl;
+}
+</pre> <p>Set a listener for client events using <code translate="no" dir="ltr">ASDVGateway_Client_setClientNotificationCallback</code> to get notified when the RPC availability status changes. <code translate="no" dir="ltr">ASDVGateway_Client_isProcessBoundToSdvRpcNetworkInterface</code> is preferred if the app switches the network of the process because it checks both that RPC is available and that the process is bound to the SDV-RPC VLAN.</p> <h4 id="switch_the_default_network_of_the_process">Switch the default network of the process</h4> <p>You might need to switch from SDV-RPC VLAN as the default network of the process to open sockets for internet-bound connections. Call <code translate="no" dir="ltr">ASDVGateway_Client_unbindProcessFromSdvRpcNetworkInterface</code> and <code translate="no" dir="ltr">ASDVGateway_Client_bindProcessToSdvRpcNetworkInterface</code> to unbind and rebind the process to the SDV-RPC VLAN. The two calls act like global switches, switching the network interface that sockets are bound to for all threads of the process.</p> 
+<pre>// 1. Unbind: Sockets return to the "default" network interface (e.g., wlan0, eth0)
+ASDVGateway_StatusCode_t unbindStatus =
+    ASDVGateway_Client_unbindProcessFromSdvRpcNetworkInterface(client, &amp;status);
+
+// 2. Bind: Sockets are now bound to the dedicated SDV-RPC VLAN
+ASDVGateway_StatusCode_t bindStatus =
+    ASDVGateway_Client_bindProcessToSdvRpcNetworkInterface(client, &amp;status);
+
+// Validation
+if (bindStatus == ASDVGateway_StatusCode_OK) {
+    // Sockets are successfully bound to the SDV-RPC VLAN
+}
+</pre> <h4 id="rpc_notifications">RPC notifications</h4> <p>Set the client listener to receive notifications for changes to the RPC availability and for updates to the root certificates that must be accepted by an RPC server:</p> 
+<pre>class NativeSdvGatewayTestApp {
+public:
+    static void ClientNotificationCallback(
+        ASDVGateway_ClientNotificationType_t notificationType,
+        void* userData
+    ) {
+        auto* testApp = reinterpret_cast&lt;NativeSdvGatewayTestApp*&gt;(userData);
+        if (!testApp) return;
+
+        switch (notificationType) {
+            case ASDVGateway_ClientNotificationType_RootCertsChanged:
+                std::cout &lt;&lt; "onClientNotification: Root Certs Changed" &lt;&lt; std::endl;
+                // Handle certificate rotation logic here
+                break;
+
+            case ASDVGateway_ClientNotificationType_RpcAvailabilityChanged:
+                std::cout &lt;&lt; "onClientNotification: RPC Availability Changed" &lt;&lt; std::endl;
+                // Handle reconnection or UI updates here
+                break;
+
+            default:
+                std::cout &lt;&lt; "onClientNotification: Received Unknown Notification ("
+                          &lt;&lt; notificationType &lt;&lt; ")" &lt;&lt; std::endl;
+                break;
+        }
+    }
+};
+
+// --- Registration ---
+
+NativeSdvGatewayTestApp* thisApp = get_current_app_context();
+
+// Register the notification callback to monitor system-level changes
+ASDVGateway_StatusCode_t statusCode = ASDVGateway_Client_setClientNotificationCallback(
+    client,
+    NativeSdvGatewayTestApp::ClientNotificationCallback,
+    static_cast&lt;void*&gt;(thisApp), // userData
+    &amp;status
+);
+</pre> <h4 id="rpc_server_flow">RPC server flow</h4> <p>You must use credentials to create the RPC server:</p> 
+<pre>ASDVGateway_RpcCredentials_t* rpcCredentials = nullptr;
+
+// Retrieve the credentials from the client
+ASDVGateway_StatusCode_t statusCode = ASDVGateway_Client_rpcCredentials(client, &amp;rpcCredentials, &amp;status);
+
+// Validation: Differentiating between an error and a deliberate "insecure mode"
+if (status.statusCode != ASDVGateway_StatusCode_OK) {
+    std::cerr &lt;&lt; "Error retrieving credentials: " &lt;&lt; status.errorMessage &lt;&lt; std::endl;
+    return;
+}
+
+// Logic for choosing Security Credentials
+if (rpcCredentials == nullptr) {
+    // If the call succeeded but credentials are null, the system expects insecure communication
+    std::cout &lt;&lt; "Configuring for Insecure Mode" &lt;&lt; std::endl;
+} else {
+    std::cout &lt;&lt; "Configuring for Secure Mode:" &lt;&lt; std::endl;
+    std::cout &lt;&lt; "  Private Key: " &lt;&lt; (rpcCredentials-&gt;privateKeyPem ? "Present" : "Missing") &lt;&lt; std::endl;
+    std::cout &lt;&lt; "  RootCerts:   " &lt;&lt; rpcCredentials-&gt;rootCertsPem &lt;&lt; std::endl;
+    std::cout &lt;&lt; "  CertChain:   " &lt;&lt; rpcCredentials-&gt;certChainPem &lt;&lt; std::endl;
+    std::cout &lt;&lt; "  SAN:         " &lt;&lt; rpcCredentials-&gt;subjectAlternativeName &lt;&lt; std::endl;
+}
+
+// --- Cleanup ---
+
+// Release the memory once the RPC server/client is initialized
+if (rpcCredentials != nullptr) {
+    ASDVGateway_Client_deleteRpcCredentials(client, rpcCredentials);
+}
+</pre> <p>When you've created the RPC server and its listening port is known, register the RPC server so it can discover other apps:</p> 
+<pre>ASDVGateway_RegisterRpcServerParams_t params{
+    .serviceUnitName = "android-sdv-samples-sunroof-sunroof",
+    .unitType = ASDVGateway_UnitType_t{
+        .sdvPackageName     = "android.sdv.samples.sunroof",
+        .serviceBundleName  = "SunroofServer",
+        .unitTypeName       = "Sunroof",
+    },
+    .listeningPort = listeningPort,
+    .serverUnitMetadata = ASDVGateway_ServerUnitMetadata_t{
+        .version = 1,
+    },
+};
+
+// Register the RPC server with the SDV Gateway
+ASDVGateway_StatusCode_t statusCode = ASDVGateway_Client_registerRpcServer(
+    client,
+    &amp;params,
+    &amp;status
+);
+
+// Basic error handling
+if (statusCode != ASDVGateway_StatusCode_OK) {
+    std::cerr &lt;&lt; "Failed to register RPC server: " &lt;&lt; status.errorMessage &lt;&lt; std::endl;
+}
+</pre> <p>When the system updates root certificates at run time (for example, during VM state changes), RPC servers must refresh their list of accepted certificates:</p> <ul> <li><p>Set a listener for client events using <code translate="no" dir="ltr">ASDVGateway_Client_setClientNotificationCallback</code> to get notified when the root certificates have been updated.</p></li> <li><p>Call <code translate="no" dir="ltr">ASDVGateway_Client_rpcCredentials</code> to get the updated root certificates.</p></li> </ul> <h4 id="rpc_client_flow">RPC client flow</h4> <p>Here is the flow for the RPC client:</p> 
+<pre>ASDVGateway_FindRpcServerByNameParams_t params{
+    .packageName        = "android.sdv.samples.cluster",
+    .serviceBundleName  = "ClusterServer",
+    .serviceUnitName    = "android-sdv-samples-cluster-cluster",
+};
+
+ASDVGateway_SocketAddress_t socketAddress;
+ASDVGateway_RpcCredentials_t* rpcCredentials = nullptr;
+
+// Perform the lookup to find the server's location and security requirements
+ASDVGateway_StatusCode_t statusCode = ASDVGateway_Client_findRpcServerByName(
+    mClient,
+    &amp;params,
+    &amp;socketAddress,
+    &amp;rpcCredentials,
+    &amp;status
+);
+
+// Mandatory check: Distinguish between system errors and intentional "Insecure Mode"
+if (status.statusCode != ASDVGateway_StatusCode_OK) {
+    std::cerr &lt;&lt; "Failed to find RPC server: " &lt;&lt; status.errorMessage &lt;&lt; std::endl;
+    return;
+}
+
+// Logic for establishing the RPC channel
+if (rpcCredentials == nullptr) {
+    std::cout &lt;&lt; "Connecting via Insecure Mode to "
+              &lt;&lt; socketAddress.address &lt;&lt; ":" &lt;&lt; socketAddress.port &lt;&lt; std::endl;
+} else {
+    std::cout &lt;&lt; "Connecting via Secure Mode to "
+              &lt;&lt; socketAddress.address &lt;&lt; ":" &lt;&lt; socketAddress.port &lt;&lt; std::endl;
+
+    std::cout &lt;&lt; "  RootCerts: " &lt;&lt; rpcCredentials-&gt;rootCertsPem &lt;&lt; std::endl;
+    std::cout &lt;&lt; "  SAN:       " &lt;&lt; rpcCredentials-&gt;subjectAlternativeName &lt;&lt; std::endl;
+    // Note: privateKeyPem and certChainPem are typically used if the client
+    // needs to perform mutual TLS (mTLS).
+}
+
+// Cleanup: Release the credential memory once the RPC channel is established
+if (rpcCredentials != nullptr) {
+    ASDVGateway_Client_deleteRpcCredentials(client, rpcCredentials);
+}
+</pre> <h3 id="create-messages">Create publisher and publish messages</h3> <p>The <code translate="no" dir="ltr">ASDVGateway_Client_createPublication</code> API is used to register a publisher service unit with the SDV Gateway through its AIDL interface and create a Fast Message Queue (FMQ) in the app process. Binder is involved only to set up the FMQ, but not when writing messages. The <code translate="no" dir="ltr">ASDVGateway_Client_publishMessages</code> API is then used to publish messages to the created publication. This involves writing to the publication's FMQ and notifying that messages have been written.</p> 
+<pre>ASDVGateway_CreatePublicationParams_t params{
+    .serviceUnitName = "mirror-position-adjust-impl-1",
+    .unitType = ASDVGateway_UnitType_t{
+        .sdvPackageName     = "android.sdv.samples.sdv_gateway",
+        .serviceBundleName  = "DtPublisher",
+        .unitTypeName       = "MirrorPositionAdjust",
+    },
+    .publisherUnitMetadata = ASDVGateway_PublisherUnitMetadata_t{
+        .version          = 1,
+        .messageSizeBytes = 64,
+        .messageCount     = 16,
+    },
+};
+
+ASDVGateway_PublicationMetadata_t metadata;
+
+// 1. Create the Publication (allocates resources on the gateway)
+ASDVGateway_StatusCode_t createStatus = ASDVGateway_Client_createPublication(
+    client,
+    &amp;params,
+    &amp;metadata,
+    &amp;status
+);
+
+if (status.statusCode != ASDVGateway_StatusCode_OK) {
+    std::cerr &lt;&lt; "Failed to create publication: " &lt;&lt; status.errorMessage &lt;&lt; std::endl;
+    return;
+}
+
+// 2. Publish Messages
+// Note: serializedMessage should contain your encoded protobuf data
+std::vector&lt;uint8_t&gt; serializedMessage;
+
+ASDVGateway_Client_publishMessages(
+    client,
+    serializedMessage.data(),
+    serializedMessage.size(),
+    metadata.publicationId,
+    &amp;status
+);
+</pre> <h3 id="create-subscriber">Create a subscriber with notification listener</h3> <p>To subscribe to a publication and receive Data Tunnel notifications (such as message availability), use the <code translate="no" dir="ltr">ASDVGateway_Client_subscribeToPublicationByName</code> API. This API also sets up the FMQ for reading published messages. You can configure a notification callback either during the subscription process or afterward.</p> 
+<pre>#include &lt;map&gt;
+#include &lt;memory&gt;
+#include &lt;iostream&gt;
+
+class NativeSdvGatewayTestApp {
+public:
+    struct SubscriptionContext {
+        int32_t subscriptionId;
+        std::string topicName;
+        // Add other context-specific data here (e.g., counters, buffers)
+    };
+
+    /**
+     * Callback triggered when new data is published to a subscribed topic.
+     */
+    static void SubscriptionNotificationCallback(
+        const ASDVGateway_SubscriptionNotificationData_t* notification,
+        void* userData
+    ) {
+        // The SDV Gateway client passes back the userData pointer.
+        // We ensure validity by managing the lifecycle of SubscriptionContext
+        // within the mSubscriptions map.
+        auto* ctx = reinterpret_cast&lt;SubscriptionContext*&gt;(userData);
+
+        if (ctx &amp;&amp; notification) {
+            // React to data being available for the subscription.
+            // Example: handleIncomingData(notification-&gt;data, notification-&gt;size);
+            std::cout &lt;&lt; "Notification received for sub ID: " &lt;&lt; ctx-&gt;subscriptionId &lt;&lt; std::endl;
+        }
+    }
+
+private:
+    // Maps subscription handles/IDs to their respective contexts
+    std::map&lt;int32_t, std::unique_ptr&lt;SubscriptionContext&gt;&gt; mSubscriptions;
+};
+
+// --- Usage ---
+NativeSdvGatewayTestApp app;
+</pre> <p>When subscribing, you can specify additional options alongside the publisher's service unit name. These options let you retrieve the most recently published message before subscribing and define the minimum time interval between notifications.</p> 
+<pre>ASDVGateway_SubscribeToPublicationByNameParams_t params{
+    .sdvVmName           = "vm1",
+    .packageName         = "test.package.impl.name",
+    .serviceBundleName   = "TestBundleImpl",
+    .serviceUnitName     = "GrpcServerImpl",
+};
+
+ASDVGateway_Subscriber_Options_t options{
+    // Ensure we receive the most recent message immediately upon subscribing
+    .flags         = ASDVGATEWAY_SUBSCRIBER_OPTIONS_FLAG_FETCHLASTMESSAGE,
+    .minIntervalMs = 0, // No rate limiting; receive updates as they happen
+};
+
+// 1. Prepare the context for the callback
+auto subCtx = std::make_unique&lt;SubscriptionContext&gt;();
+ASDVGateway_PublicationMetadata_t metadata{};
+
+// 2. Perform the subscription
+ASDVGateway_StatusCode_t statusCode = ASDVGateway_Client_subscribeToPublicationByName(
+    client,
+    &amp;params,
+    &amp;options,
+    NativeSdvGatewayTestApp::SubscriptionNotificationCallback,
+    static_cast&lt;void*&gt;(subCtx.get()), // Pass the raw pointer as userData
+    &amp;metadata,
+    &amp;status
+);
+
+// 3. Validation and Lifecycle Management
+if (status.statusCode != ASDVGateway_StatusCode_OK) {
+    // Error handling: subCtx will be automatically deleted here
+    std::cerr &lt;&lt; "Subscription failed: " &lt;&lt; status.errorMessage &lt;&lt; std::endl;
+    return;
+}
+
+// Store the context using the publicationId as the key.
+// Once moved, the map owns the lifetime of subCtx.
+app.mSubscriptions.emplace(metadata.publicationId, std::move(subCtx));
+</pre> <p>Use the <code translate="no" dir="ltr">ASDVGateway_Client_readAvailableMessages</code> API to read messages from the publication:</p> 
+<pre>uint32_t messagesAvailable = 0;
+
+// 1. Check how many messages are waiting in the queue
+ASDVGateway_StatusCode_t availStatus = ASDVGateway_Client_availableToRead(
+    client,
+    metadata.publicationId,
+    &amp;messagesAvailable,
+    &amp;status
+);
+
+if (status.statusCode != ASDVGateway_StatusCode_OK) {
+    // Error handling for availability check
+    return;
+}
+
+if (messagesAvailable == 0) {
+    // No messages available for this publication at this time
+    return;
+}
+
+// 2. Prepare the buffer
+// metadata.messageSizeBytes was provided during the publication/subscription setup
+std::vector&lt;uint8_t&gt; bytesForMessages;
+bytesForMessages.resize(metadata.messageSizeBytes * messagesAvailable);
+
+// 3. Read the messages from the Gateway into your local buffer
+uint32_t actualMessageCount = 0; // Filled by the SDK with the number of messages read
+ASDVGateway_StatusCode_t readStatus = ASDVGateway_Client_readAvailableMessages(
+    client,
+    metadata.publicationId,
+    bytesForMessages.data(),
+    bytesForMessages.size(),
+    &amp;actualMessageCount,
+    &amp;status
+);
+
+if (status.statusCode == ASDVGateway_StatusCode_OK) {
+    // Successfully read 'actualMessageCount' messages
+    // Process bytesForMessages...
+}
+</pre> <p>To set the callback after subscribing, use the <code translate="no" dir="ltr">ASDVGateway_Client_setNotificationCallbackForPublicationId</code> API:</p> 
+<pre>ASDVGateway_StatusCode_t ASDVGateway_Client_setNotificationCallbackForPublicationId(
+    // [in]  Opaque pointer to the client object.
+    const ASDVGateway_Client* client,
+
+    // [in]  Identifies the specific publication to monitor.
+    const int32_t publicationId,
+
+    // [in]  Function pointer triggered when new data is available
+    //       for the specified publication.
+    ASDVGateway_SubscriptionNotificationCallback notificationCallback,
+
+    // [in]  Optional user-defined context passed back to the callback.
+    void* notificationCallbackUserData,
+
+    // [out] Optional pointer to a status structure for result codes
+    //       and error messages.
+    ASDVGateway_Status_t* outStatus
+);
+</pre> <h3 id="init-service">Set up init service</h3> <p>First, follow <a href="workstreams/identity-and-attestation/identity-for-native-services">Identity for native services</a> for assigning a <a href="core-areas/service-identity">service identity</a> to the service through its <a href="../../core/permissions/filesystem">Android ID (AID)</a>.</p> <p>Assume your service is called <code translate="no" dir="ltr">native_sdv_gateway_client_service</code>, the executable is located on the <code translate="no" dir="ltr">/vendor</code> partition at <code translate="no" dir="ltr">/vendor/bin/native_sdv_gateway_client_service</code>, and you use <code translate="no" dir="ltr">vendor_gateway_client</code> as the <a href="../../core/permissions/filesystem">Android ID (AID)</a> for running the service. With that setup, you can define the following <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:system/core/init/README.md">init service</a>:</p> 
+<pre>service native_sdv_gateway_client_service /vendor/bin/native_sdv_gateway_client_service
+    class core
+    user vendor_gateway_client
+    group inet
+    disabled
+    oneshot
+</pre> <p>This configuration uses the following parameters:</p> <ul> <li>
+<code translate="no" dir="ltr">vendor_gateway_client</code> is the AID created or selected for the service.</li> <li>
+<code translate="no" dir="ltr">group inet</code> is required for SDV gateway clients for using the network interface for communicating between SDV VMs. Other groups can be added when needed.</li> <li>This example uses <code translate="no" dir="ltr">disabled</code> and <code translate="no" dir="ltr">oneshot</code>. You might need to adjust the service options for your service. Start the service after <code translate="no" dir="ltr">sdv_gateway</code>.</li> </ul> <h3 id="create_selinux_rules_for_the_service">Create SELinux rules for the service</h3> <p>To use SDV Gateway APIs, you need the following SELinux rules for the service:</p> 
+<pre># Define the domain for the service
+type native_sdv_gateway_client_service, domain;
+
+# Define the executable file type on the vendor partition
+type native_sdv_gateway_client_service_exec, exec_type, file_type, vendor_file_type;
+
+# Macro to transition from 'init' to this service's domain upon execution
+init_daemon_domain(native_sdv_gateway_client_service)
+
+# Macro to grant the necessary permissions to communicate with the SDV Gateway
+sdv_gateway_client_domain(native_sdv_gateway_client_service)
+</pre> <p>In the SELinux rules:</p> <ul> <li><p><code translate="no" dir="ltr">init_daemon_domain</code> allows starting the service from <code translate="no" dir="ltr">init</code>.</p></li> <li>
+<p><code translate="no" dir="ltr">sdv_gateway_client_domain</code> provides all necessary SELinux permissions for interacting with the SDV Gateway. The following line grants these rules to the executable:</p> 
+<pre>/vendor/bin/native_sdv_gateway_client_service    u:object_r:native_sdv_gateway_client_service_exec:s0
+</pre>
+</li> </ul> <h3 id="code-sample">Code sample</h3> <p>To learn more about running the native code sample that demonstrates how the C APIs are documented, see <code translate="no" dir="ltr">system/software_defined_vehicle/samples/sdv_gateway/NativeSdvGatewayTestApp/README.md</code>.</p> <h2 id="sdv-gateway-ivi-java-app">SDV Gateway on IVI Java app</h2> <p>The interaction model for an SDV Gateway on IVI is illustrated in this diagram:</p> <p class="screenshot"><img src="https://source.android.com/static/docs/automotive/sdv/images/sdv-ivi-02-java.svg" alt="SDV Gateway on IVI Java app" class="android-image-dark-theme-background"></p> <p><strong>Figure 4.</strong> SDV Gateway on IVI Java app.</p> <p>Specifically, the model:</p> <ul> <li>Dispatches all calls to the JNI layer.</li> <li>Glues the Java and C API.</li> <li>Defines AIDL interactions with the <code translate="no" dir="ltr">ISdvGateway</code>: <ul> <li>Init comms</li> <li>Find or create the RPC server</li> <li>Create the pub/sub</li> <li>Perform service discovery Data Tunnel interactions</li> <li>Receive notifications (for example, data available)</li> <li>Read and write messages (FMQ for pub/sub) for key pair creation and certs for TLS</li> </ul>
+</li> </ul> <h3 id="include_gateway_client_libraries">Include Gateway client libraries</h3> <p>The Java library and JNI wrapper for the <code translate="no" dir="ltr">libsdvgatewayclient</code> C API are installed in an APEX on the IVI target. Add a compile time dependency to the Java library stub, the Java library that must be used at run time, and the required APEX containing the Java library.</p> 
+<pre>android_app {
+    name: "YourAppName",
+    // ...
+    static_libs: [
+        "libsdvgatewayclient-java",
+    ],
+    libs: [
+        "libsdvgatewayclient-java-sdk.stubs",
+    ],
+    uses_libs: [
+        "libsdvgatewayclient-java-sdk",
+    ],
+    required: [
+        "com.sdv.google.gateway.client",
+    ],
+    // ...
+}
+</pre> <p>In the case of an unbundled app built outside of the SDV tree, the process is similar:</p> <ol> <li><p>Copy the generated Java library stub JAR and supporting JAR for RPC in the app libs folder. For details, see <code translate="no" dir="ltr">system/software_defined_vehicle/sdv_gateway/libsdvgatewayclient_apex/README.md</code>.</p></li> <li>
+<p>Add the stubs JAR as a compile-only dependency. For example, update the Gradle configurations to depend on the stubs by adding a <code translate="no" dir="ltr">compileOnly</code> entry to the <code translate="no" dir="ltr">dependencies</code> section:</p> 
+<pre>dependencies {
+    // The library supporting functions for SDK RPC.
+    // Statically linked into the app APK.
+    implementation(files("libs/libsdvgatewayclient-java.jar"))
+
+    // Stub of the SDV-Gateway client library.
+    // Used only for compilation; the real implementation is provided
+    // by the com.sdv.google.gateway.client APEX at runtime.
+    compileOnly(files("libs/libsdvgatewayclient-java-sdk.jar"))
+}
+</pre>
+</li> <li>
+<p>Add the Java library to the app section of the <code translate="no" dir="ltr">AndroidManifest.xml</code> file.</p> 
+<pre>&lt;manifest xmlns:android="http://schemas.android.com/apk/res/android"&gt;
+
+    &lt;application&gt;
+
+        &lt;!--
+          Declares that this app requires the SDV Gateway client library.
+          The 'android:required="true"' attribute ensures the app won't
+          install/run if the library is missing from the system.
+        --&gt;
+        &lt;uses-library
+            android:name="libsdvgatewayclient-java-sdk"
+            android:required="true" /&gt;
+
+    &lt;/application&gt;
+
+&lt;/manifest&gt;
+</pre>
+</li> </ol> <h3 id="load_libraries">Load libraries</h3> <p>Create an <code translate="no" dir="ltr">SdvGatewayClient</code> object (provided by the client library):</p> 
+<pre>import google.sdv.gateway.client.SdvGatewayClient;
+
+// --- Inside your Activity, Service, or ViewModel ---
+
+// Initialize the SDV Gateway Client
+SdvGatewayClient gatewayClient = new SdvGatewayClient();
+</pre> <h3 id="init_comms_2">Init comms</h3> <p>Call <code translate="no" dir="ltr">initComms()</code> using an app name as the service bundle name:</p> 
+<pre>// Define a unique name for your service bundle (usually constant)
+private static final String SERVICE_BUNDLE_NAME = "MySdvServiceBundle";
+
+// ... inside an Activity or Service context ...
+
+try {
+    // Initialize communications with the SDV Gateway
+    // context.getPackageName() provides "android.sdv.samples.gateway.client" or similar
+    gatewayClient.initComms(context.getPackageName(), SERVICE_BUNDLE_NAME);
+
+    Log.i("SDV_GATEWAY", "Communications initialized successfully");
+} catch (Exception e) {
+    // Unlike the C API which uses status codes,
+    // the Java SDK often throws exceptions for initialization failures.
+    Log.e("SDV_GATEWAY", "Failed to initialize communications", e);
+}
+</pre> <h3 id="service_discovery_2">Service discovery</h3> <p>The Java API contains methods to:</p> <ul> <li><p>Get notified when service units with a specific unit type (or alternatively match a specific name) are being registered or unregistered.</p></li> <li><p>List the current service units with a specific unit type (or alternatively match a specific service unit type name). To get notified of service unit changes, create a listener:</p></li> </ul> 
+<pre>import google.sdv.gateway.client.ServiceUnitChangeListener;
+import google.sdv.gateway.client.ServiceUnitChangeEventType;
+import google.sdv.gateway.client.ServiceUnitDefinition;
+
+// --- Implementation ---
+
+ServiceUnitChangeListener listener = new ServiceUnitChangeListener() {
+    @Override
+    public void onServiceUnitChanged(
+        ServiceUnitChangeEventType eventType,
+        ServiceUnitDefinition serviceUnitDefinition
+    ) {
+        // This is triggered when services matching your criteria
+        // are registered or unregistered on the vehicle network.
+        if (eventType == ServiceUnitChangeEventType.REGISTERED) {
+            // Handle new service discovery
+        } else if (eventType == ServiceUnitChangeEventType.UNREGISTERED) {
+            // Handle service removal
+        }
+    }
+};
+</pre> <p>The <code translate="no" dir="ltr">addListenerForServiceUnitChangeByName</code> Java method notifies the listener:</p> 
+<pre>// 1. Register the listener for a specific service unit by name
+AutoCloseable handle = gatewayClient.addListenerForServiceUnitChangeByName(
+    new UnitNameDiscoveryArgs(
+        "",                                   // sdvVmName (empty for local/auto-discovery)
+        "android.sdv.samples.cluster",        // sdvPackageName
+        "ClusterServer",                      // serviceBundleName
+        "android-sdv-samples-cluster-cluster" // serviceUnitName
+    ),
+    listener
+);
+
+// --- Later in the application lifecycle ---
+
+// 2. To stop receiving notifications and clean up resources, close the handle.
+try {
+    if (handle != null) {
+        handle.close();
+    }
+} catch (Exception e) {
+    Log.e("SDV_GATEWAY", "Error while closing the listener handle", e);
+}
+</pre> <p>Alternatively, use the <code translate="no" dir="ltr">addListenerForServiceUnitChangeByType</code> Java method to notify the listener when services with the specified unit type are registered or unregistered:</p> 
+<pre>// 1. Register a listener based on the Service Unit Type
+AutoCloseable handle = gatewayClient.addListenerForServiceUnitChangeByType(
+    new UnitType(
+        "com.android.testapp.sdvcarmonitor", // sdvPackageName
+        "SunroofRpcServer",                  // serviceBundleName
+        "Sunroof"                            // unitTypeName
+    ),
+    listener
+);
+
+// --- Execution Loop / Lifecycle ---
+
+// 2. To stop receiving notifications and clean up memory, close the handle.
+// This effectively unregisters the listener from the SDV Gateway.
+try {
+    if (handle != null) {
+        handle.close();
+    }
+} catch (Exception e) {
+    Log.e("SDV_GATEWAY", "Failed to close the service unit listener handle", e);
+}
+</pre> <p>For <code translate="no" dir="ltr">addListenerForServiceUnitChangeByName</code> and <code translate="no" dir="ltr">addListenerForServiceUnitChangeByType</code>, after being added, the listener is notified of all registered service units. To get only registered service units by name or type, use the <code translate="no" dir="ltr">listServiceUnitsByName</code> and <code translate="no" dir="ltr">listServiceUnitsByType</code> Java APIs:</p> 
+<pre>import google.sdv.gateway.client.ServiceUnitDefinition;
+import google.sdv.gateway.client.UnitNameDiscoveryArgs;
+import google.sdv.gateway.client.UnitType;
+
+// --- 1. Synchronous Lookup by Specific Name ---
+ServiceUnitDefinition[] definitionsByName = gatewayClient.listServiceUnitsByName(
+    new UnitNameDiscoveryArgs(
+        "",                                   // sdvVmName
+        "android.sdv.samples.cluster",        // sdvPackageName
+        "ClusterServer",                      // serviceBundleName
+        "android-sdv-samples-cluster-cluster" // serviceUnitName
+    )
+);
+
+// --- 2. Synchronous Lookup by Service Type ---
+ServiceUnitDefinition[] definitionsByType = gatewayClient.listServiceUnitsByType(
+    new UnitType(
+        "com.android.testapp.sdvcarmonitor", // sdvPackageName
+        "SunroofRpcServer",                  // serviceBundleName
+        "Sunroof"                            // unitTypeName
+    )
+);
+
+// Example processing
+if (definitionsByType.length &gt; 0) {
+    ServiceUnitDefinition firstSunroof = definitionsByType[0];
+    // Proceed to connect...
+}
+</pre> <h3 id="rpc_server_flow_2">RPC server flow</h3> <p>SDV Gateway clients within IVI systems use Google remote procedure call (gRPC) for communication with SDV services. These interactions rely on proto definitions from the VSIDL catalog, which are consistent or similar to those used on SDV Core. For Java apps, gRPC-Java is the chosen implementation. A sample server proto definition, <code translate="no" dir="ltr">sunroof.proto</code>, is provided for an app server.</p> 
+<pre>service Sunroof {
+    /**
+     * Retrieves the current state of the sunroof (e.g., position, tilt, status).
+     *
+     * @param .google.protobuf.Empty - No input parameters required.
+     * @return SunroofStateResponse - The current telemetry data for the sunroof.
+     */
+    rpc GetSunroofState(.google.protobuf.Empty) returns (SunroofStateResponse) {}
+}
+</pre> <p>Link against the corresponding proto library and define the service:</p> 
+<pre>import com.android.sdv.sdvgrpclibrary.SunroofGrpc;
+import com.android.sdv.sdvgrpclibrary.SunroofStateResponse; // Assuming this is the generated class
+import com.google.protobuf.Empty;
+import io.grpc.stub.StreamObserver;
+
+/**
+ * Implementation of the Sunroof gRPC service.
+ * This class handles the logic for the RPCs defined in your .proto file.
+ */
+static class SunroofGrpcImpl extends SunroofGrpc.SunroofImplBase {
+
+    @Override
+    public void getSunroofState(Empty request, StreamObserver&lt;SunroofStateResponse&gt; responseObserver) {
+        // 1. Fetch current sunroof data (e.g., from a Hardware Abstraction Layer)
+        int currentPosition = 50; // Example value: 50% open
+
+        // 2. Build the Protobuf response message
+        SunroofStateResponse response = SunroofStateResponse.newBuilder()
+                .setPercentageOpen(currentPosition)
+                .build();
+
+        // 3. Send the response to the client using the observer
+        responseObserver.onNext(response);
+
+        // 4. Close the stream to signal that the RPC is finished
+        responseObserver.onCompleted();
+    }
+}
+</pre> <p>Register the gRPC server with secure and insecure channel credentials:</p> 
+<pre>// 1. Define the type signature for the service
+UnitType unitType = new UnitType(
+    "com.android.testapp.sdvcarmonitor", // sdvPackageName
+    "SunroofRpcServer",                  // serviceBundleName
+    "Sunroof"                            // typeName (Unit Type)
+);
+
+// 2. Register the RPC server with the Gateway
+// The gateway creates a mapping between the ServiceUnitName and your implementation.
+server = gatewayClient.registerRpcServer(
+    "SunroofRpcServerImpl-1",                       // serviceUnitName (Unique instance name)
+    unitType,                                       // unitType defined earlier
+    "SUNROOF_GRPC_SERVER_VALUE_HOLDER".getBytes(),  // appMetadataValueHolder (Static discovery data)
+    1,                                              // appMetadataVersion
+    new SunroofGrpcImpl()                           // The actual gRPC service implementation
+);
+</pre> <p>Internally, the client library creates the gRPC server object, <code translate="no" dir="ltr">SdvGatewayClient.java</code>, and also handles updates to the root certificates:</p> 
+<pre>// 1. Initialize credentials (Insecure for dev, TLS for production)
+ServerCredentials serverCredentials = InsecureServerCredentials.create();
+
+// 2. Build and start the OkHttp-based gRPC server
+final int bindAnyPort = 0;
+final Server server = OkHttpServerBuilder
+    .forPort(bindAnyPort, serverCredentials)
+    .addService(gRpcServerImplementation) // Your SunroofGrpcImpl
+    .build()
+    .start();
+
+// The assigned port can now be retrieved using server.getPort()
+int actualPort = server.getPort();
+
+// 3. Prepare the JNI data structure
+// This object mirrors the ASDVGateway_ServiceUnitDefinition_t C struct
+JniServiceUnitDefinition definition = new JniServiceUnitDefinition();
+
+// Fill the RPC service definition params (Port, Name, Type, etc.)
+definition.setPort(actualPort);
+definition.setServiceUnitName("SunroofRpcServerImpl-1");
+
+// 4. Perform the cross-language call
+// This jumps from Java -&gt; JNI -&gt; ASDVGateway_Client_registerRpcServer (C API)
+mJniClient.nativeRegisterRpcServer(definition);
+</pre> <h3 id="rpc_client_flow_2">RPC client flow</h3> <p>This code sample provides the server proto definition (<code translate="no" dir="ltr">tpms.proto</code>) for the server the app connects to as a client:</p> 
+<pre>/**
+ * The TPMS service provides real-time pressure and temperature
+ * data for all tires on the vehicle.
+ */
+service Tpms {
+    /**
+     * Returns the full state of all monitored tires.
+     */
+    rpc GetTpmsState(.google.protobuf.Empty) returns (TpmsStateResponse) {}
+
+    /**
+     * A filtered query that returns only the tires
+     * below the recommended pressure threshold.
+     */
+    rpc GetLowTires(.google.protobuf.Empty) returns (LowTiresResponse) {}
+}
+</pre> <p>Link against the corresponding proto library:</p> 
+<pre>import com.android.sdv.sdvgrpclibrary.TpmsGrpc;
+import io.grpc.ManagedChannel;
+
+// --- Inside your Client Application ---
+
+// 1. Request a ManagedChannel from the Gateway for a specific service unit
+ManagedChannel managedChannel = gatewayClient.connectToRpcServerByName(
+    "",                                     // sdvVmName (empty for local/auto-lookup)
+    "android.sdv.samples.cluster",          // packageName
+    "ClusterServer",                        // serviceBundleName
+    "android-sdv-samples-cluster-cluster"  // serviceUnitName
+);
+
+// 2. Use the channel to create a gRPC stub (e.g., for the TPMS service)
+TpmsGrpc.TpmsBlockingStub tpmsStub = TpmsGrpc.newBlockingStub(managedChannel);
+
+// 3. Now you can call RPC methods directly
+// TpmsStateResponse response = tpmsStub.getTpmsState(Empty.getDefaultInstance());
+</pre> <p>Internally, the <code translate="no" dir="ltr">ASDVGateway_Client_findRpcServerByName</code> API is called to find the RPC server. If the RPC server is found, the managed channel is created in insecure mode or designated to use the TLS configuration, similarly to the RPC server flow, depending on the Service Discovery configuration. The app creates the stubs with the <code translate="no" dir="ltr">ManagedChannel</code> object and call server methods:</p> 
+<pre>import com.android.sdv.sdvgrpclibrary.TpmsGrpc;
+import com.android.sdv.sdvgrpclibrary.TpmsStateResponse;
+import com.google.protobuf.Empty;
+import io.grpc.stub.MetadataUtils;
+
+// 1. Create a "Blocking Stub" from the existing ManagedChannel.
+// We apply an interceptor to attach mandatory metadata (headers)
+// required by the SDV Gateway for authorization.
+TpmsGrpc.TpmsBlockingStub tpmsStub = TpmsGrpc.newBlockingStub(managedChannel)
+    .withInterceptors(MetadataUtils.newAttachHeadersInterceptor(mMetadata));
+
+// 2. Execute the RPC call.
+// Because this is a "BlockingStub," the thread will wait here until
+// the vehicle service responds or times out.
+TpmsStateResponse tpmsStateResponse = tpmsStub.getTpmsState(Empty.getDefaultInstance());
+
+// 3. Extract the domain-specific state object from the Protobuf response.
+// 'newState' can now be used to update your UI or application logic.
+newState = tpmsStateResponse.getTpmsState();
+</pre> <h3 id="switch_the_default_network_of_the_process_2">Switch the default network of the process</h3> <p>You might need to switch from SDV-RPC VLAN as the default network of the process to open sockets for internet-bound connections. Call <code translate="no" dir="ltr">unbindProcessFromSdvRpcNetworkInterface</code> and <code translate="no" dir="ltr">bindProcessToSdvRpcNetworkInterface</code> to unbind and rebind the process to the SDV-RPC VLAN. The two calls act as global switches, switching the network interface that sockets are bound to for all threads of the process.</p> 
+<pre>// 1. Redirect all socket traffic from this process to the SDV-RPC VLAN.
+// This call is required for making RPC calls or hosting RPC services for SDV.
+gatewayClient.bindProcessToSdvRpcNetworkInterface();
+
+// --- Process is now communicating over the SDV-RPC interface ---
+
+// 2. Revert the process network binding back to the "default" interface.
+// This allows the app to access internet resources again.
+gatewayClient.unbindProcessFromSdvRpcNetworkInterface();
+</pre> <h3 id="create_publisher_and_publish_messages_2">Create publisher and publish messages</h3> 
+<pre>// 1. Define the interface and type for the publication
+UnitType unitType = new UnitType(
+    "android.sdv.samples.tires.interface", // sdvPackageName
+    "TirePressurePublisherInterface",      // serviceBundleName
+    "TirePressure"                         // typeName
+);
+
+// 2. Configure the Publisher's buffer and message constraints
+PublisherUnitMetadata publisherUnitMetadata = new PublisherUnitMetadata(
+    1,   // version
+    64,  // message size in bytes (fixed size for performance)
+    128  // max message count (buffer depth)
+);
+
+// 3. Create the Publication instance through the Gateway
+Publisher tirePublisher = gatewayClient.createPublication(
+    "tire-pressure-service-unit-name",
+    unitType,
+    publisherUnitMetadata
+);
+
+// 4. Prepare and publish a message
+// In a real app, you would encode your sensor data into this byte array
+byte[] msg = new byte[publisherUnitMetadata.messageSizeBytes];
+
+// ... fill msg with data ...
+
+tirePublisher.publish(msg);
+</pre> <p>Internally, the Java <code translate="no" dir="ltr">createPublication</code> and publish APIs rely on the native <code translate="no" dir="ltr">ASDVGateway_Client_createPublication</code> and <code translate="no" dir="ltr">ASDVGateway_Client_readAvailableMessages</code> APIs. For detailed information on the C API, see <a href="#ivi-native">Use SDV Gateway on an IVI native service</a>. The <code translate="no" dir="ltr">Publisher</code> object provides a context for writing messages and managing the publication's lifecycle.</p> <h3 id="create_subscriber_with_notification_listener">Create subscriber with notification listener</h3> <p>The Java API allows a listener to be passed as a parameter to the subscribe to publication method and returns a <code translate="no" dir="ltr">Subscription</code> object.</p> <ul> <li><p><code translate="no" dir="ltr">Listener</code> is notified when data is available for the subscribed publication.</p></li> <li><p><code translate="no" dir="ltr">Subscription</code> acts as a context object and can be used to read messages and close the subscription.</p></li> </ul> 
+<pre>// 1. Define the Listener to handle incoming data notifications
+SubscriptionNotificationListener listener = new SubscriptionNotificationListener() {
+    @Override
+    public void onSubscriptionNotification(
+        Subscription subscription,
+        SubscriptionNotificationType notificationType
+    ) {
+        // Only process if the notification indicates new data is ready
+        if (notificationType != SubscriptionNotificationType.DataAvailable) {
+            return;
+        }
+
+        // Read the message from the subscription buffer
+        byte[] content = subscription.readMessage();
+
+        // Note: This callback often runs on a background thread provided by the SDK.
+        // If you need to update the UI, use a Handler or View.post().
+        processTireData(content);
+    }
+};
+
+// 2. Subscribe to the publication by its unique name
+Subscription tireSubscription = gatewayClient.subscribeToPublicationByName(
+    "",                                  // sdvVmName (empty for auto-lookup)
+    "android.sdv.samples.dt_publisher",  // packageName
+    "SdvGatewayDtPublisher",             // serviceBundleName
+    "tire",                              // serviceUnitName
+    listener
+);
+
+// 3. Read Messages
+// You can poll or register callbacks for new messages.
+// When polling the message, call this method in a loop.
+// When registering callbacks, call this method to get the message payload.
+byte[] manualContent = tireSubscription.readMessage();
+</pre> <h4 id="code_sample_2">Code sample</h4> <p>Listener callbacks are invoked on a single thread managed by the client to minimize processing within listeners to prevent delays in receiving notifications for other subscriptions. The Java layer leverages a C API for subscription management, notification handling, and message retrieval. For a demonstration of API usage, see the Java app sample provided in the binary file at <code translate="no" dir="ltr">system/software_defined_vehicle/samples/sdv_gateway/README.md</code>.</p> <h3 id="required-permissions">Required permissions</h3> <p>Calling SDV Gateway client API doesn't need special permissions, but you need to apply proper <a href="#java-app-selinux-rules">SELinux Rules</a> for your apps.</p> <ul> <li>For data tunnel subscriptions and publications, you don't need any permissions.</li> <li>For SDV RPC, you need the following permissions: <ul> <li><code translate="no" dir="ltr">android.permission.INTERNET</code></li> <li><code translate="no" dir="ltr">android.permission.CONNECTIVITY_USE_RESTRICTED_NETWORKS</code></li> </ul>
+</li> </ul> <p>For <code translate="no" dir="ltr">android.permission.CONNECTIVITY_USE_RESTRICTED_NETWORKS</code>, you also need an allowlist file under <code translate="no" dir="ltr">etc/permissions</code> in the same partition as your app, for example, for the SdvCarMonitorTestApp (package name <code translate="no" dir="ltr">com.android.testapp.sdvcarmonitor</code>), the file looks like:</p> 
+<pre>&lt;?xml version="1.0" encoding="utf-8"?&gt;
+
+&lt;permissions&gt;
+    &lt;privapp-permissions package="com.android.testapp.sdvcarmonitor"&gt;
+        &lt;permission name="android.permission.CONNECTIVITY_USE_RESTRICTED_NETWORKS"/&gt;
+    &lt;/privapp-permissions&gt;
+&lt;/permissions&gt;
+</pre> <h3 id="java-app-selinux-rules">SELinux rules</h3> <p>To use SDV Gateway APIs, Java apps require the same permissions as the native services. Grant these permissions using the <code translate="no" dir="ltr">sdv_gateway_client_domain()</code> SELinux macro:</p> 
+<pre>sdv_gateway_client_domain(my_oem_sdv_gateway_client_app)
+</pre> <p>The OEM defines the <code translate="no" dir="ltr">my_oem_sdv_gateway_client_app</code> domain for the Java apps allowed to use the SDV Gateway. Use the SDV Gateway only from system and privileged apps.</p> <h2 id="code-locations">Code locations</h2> <p>Get the source code for the SDV Gateway at <code translate="no" dir="ltr">system/software_defined_vehicle/sdv_gateway/</code>. You can get SDV Gateway samples for:</p> <ul> <li>Client C API: <code translate="no" dir="ltr">system/software_defined_vehicle/samples/sdv_gateway/NativeSdvGatewayTestApp/</code>
+</li> <li>Client Java API: <code translate="no" dir="ltr">system/software_defined_vehicle/samples/sdv_gateway/SdvCarMonitorTestApp/</code>
+</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/sdv-gateway-on-ivi" class="_attribution-link">https://source.android.com/docs/automotive/sdv/sdv-gateway-on-ivi</a>
+  </p>
+</div>

@@ -1,0 +1,94 @@
+<h1>Resume-on-Reboot</h1>  <p>In Android 11, OTA updates can be applied using the <a href="ab">A/B update</a> or <a href="virtual_ab">virtual A/B update</a> mechanisms, combined with the <a href="https://developer.android.com/reference/android/os/RecoverySystem">RecoverySystem</a> class methods. After a device reboots to apply an OTA update, Resume-on-Reboot (RoR) unlocks the device <a href="../../security/features/encryption/file-based">Credential Encrypted (CE) storage</a>.</p> <p>Although partners can pair this process with an OTA system feature that applies updates when the device is expected to be idle in Android 11, in Android 12 partners don’t need an additional OTA system feature. The RoR process provides added security and convenience to users because the updates can be made during device idle times, while Android 12 multi-client and server-based update functionalities together provide device hardware-level type security.</p> <p>Although you must provide device permission for the <code translate="no" dir="ltr">android.hardware.reboot_escrow</code> feature to support RoR in Android 11, you don't need to do this to enable server-based RoR in Android 12 and higher, because they don't use the HAL.</p> <h2 id="ror-background">Background</h2> <p>Beginning with Android 7, Android supported <a href="https://developer.android.com/training/articles/direct-boot">Direct Boot</a>, which enables the apps on a device to start up before CE storage is unlocked by the user. The implementation of Direct Boot support provided Users with a better experience before the Lock Screen Knowledge Factor (LSKF) needed to be entered after a boot.</p> <p>RoR allows the CE storage of all the apps on a device to be unlocked, including those that don’t support Direct Boot, when a reboot is initiated following an OTA update. This feature enables users to receive notifications from all their installed apps, post reboot.</p> <h2 id="threat-model">Threat model</h2> <p>An implementation of RoR must ensure that when a device falls into an attacker’s hands, it’s extremely difficult for the attacker to recover the user’s CE- encrypted data, even if the device is powered on, CE storage is unlocked, and the <em>device</em> is unlocked by the user after receiving an OTA update. Insider attack resistance must be effective even if the attacker gains access to the broadcast cryptographic signing keys.</p> <p>Specifically, CE storage <strong>must not</strong> be read by an attacker who physically has the device, and has these capabilities and limitations:</p> <p><strong>Capabilities</strong></p> <ul> <li>Can use the signing key of any vendor or company to sign arbitrary messages.</li> <li>Can cause the device to receive an OTA update.</li> <li>Can modify the operation of any hardware (such as an application processor, or flash memory) - except as detailed in <a href="#limitations">Limitations</a> below. (However, such modification involves both a delay of at least one hour, and a power cycle that destroys RAM contents.)</li> </ul> <p id="limitations"><strong>Limitations</strong> </p> <ul> <li>Can’t modify the operation of tamper-resistant hardware (for example, a Titan M).</li> <li>Can’t read the RAM of the live device.</li> <li>Can’t guess the user’s credentials (PIN, pattern, password) or otherwise cause them to be entered.</li> </ul> <h2 id="solution">Solution</h2> <p>The Android 12 RoR update system provides security against very sophisticated attackers, and does so while on-device passwords and PINs stay on the device—they’re never sent to or stored on Google servers. This is an overview of the process that ensures the security levels provided are similar to a hardware-based, device-level RoR system:</p> <ul> <li>Android applies cryptographic protections to data stored on a device.</li> <li>All data is protected by keys stored in the <a href="../../security/features/trusty"><em>trusted execution environment</em></a> (TEE).</li> <li>The TEE only releases the keys if the running operating system passes cryptographic authentication (<em>verified boot</em>).</li> <li>The RoR service running on Google servers secures CE data by storing a secret that can be retrieved <em>for a limited time only</em>. This works across the Android ecosystem.</li> <li>A cryptographic key, protected by a user’s PIN, is used to unlock the device and decrypt CE storage. <ul> <li>When an overnight reboot is scheduled, Android prompts the user to enter their PIN, then calculates a synthetic password (SP).</li> <li>It then encrypts the SP twice: once with a key <code translate="no" dir="ltr">K_s</code> stored in RAM, and again with a key <code translate="no" dir="ltr">K_k</code> stored in TEE.</li> <li>The double-encrypted SP is stored on disk, and the SP gets wiped from RAM. Both keys are freshly generated and used for <em>one reboot only</em>.</li> </ul>
+</li> <li>When it’s time to reboot, Android entrusts <code translate="no" dir="ltr">K_s</code> to the server. The receipt with <code translate="no" dir="ltr">K_k</code> gets encrypted <em>before</em> it’s stored on disk.</li> <li>After the reboot, Android uses <code translate="no" dir="ltr">K_k</code> to decrypt the receipt, then sends it to the server to retrieve <code translate="no" dir="ltr">K_s</code>. <ul> <li>
+<code translate="no" dir="ltr">K_k</code> and <code translate="no" dir="ltr">K_s</code> are used to decrypt the SP stored on disk.</li> <li>Android uses the SP to unlock the CE storage and allow normal app startup.</li> <li>
+<code translate="no" dir="ltr">K_k</code> and <code translate="no" dir="ltr">K_s</code> are discarded.</li> </ul>
+</li> </ul> <p>The updates that keep your phone secure can happen at a time that's convenient for you: while you sleep.</p> <aside class="special"><strong>Important:</strong><span> The server-based RoR functionality works so that the server never learns the user’s PIN: the key <code translate="no" dir="ltr">K_s</code> is the only secret entrusted to the server, and it's randomly generated <em>each time</em>. On-device passwords and the PIN stay on the device—they’re never sent to servers, and they're never stored on them.</span></aside> <h2 id="sim-pin-replay">SIM-PIN replay</h2> <p>Under certain conditions the PIN code of a SIM card gets verified from a cache, a process called SIM-PIN replay.</p> <p>A SIM card with an enabled PIN must also undergo a seamless PIN code verification (a SIM-PIN replay) after an unattended reboot to restore cellular connectivity (required for phone calls, SMS messages, and data services). The SIM PIN and its matching SIM card information (the ICCID and SIM slot number) are securely stored, together. The stored PIN can be retrieved and used for verification only after a successful unattended reboot. If the device is secured, the SIM PIN is stored with keys protected by the LSKF. If the SIM has its PIN enabled, interaction with the RoR server <em>requires</em> a WiFi connection for the OTA update and server-based RoR, which ensures basic functionality (with cellular connectivity) after reboot.</p> <p>The SIM PIN is re-encrypted and stored each time the user successfully enables, verifies, or modifies it. The SIM PIN is discarded if any one of the following occurs:</p> <ul> <li>The SIM is removed or reset.</li> <li>The user disables the PIN.</li> <li>A non-RoR-initiated reboot has occurred.</li> </ul> <p>The stored SIM PIN can only be used <em>once</em> after the RoR-initiated reboot, and only for a very short time duration (20 seconds)–<em>if</em> the details of the SIM card match. The stored SIM PIN never leaves the TelephonyManager app and it can’t be retrieved by external modules.</p> <h2 id="implementation-guide">Implementation guidelines</h2> <p>In Android 12, the multi-client and server-based RoR functions provide a lighter load to partners when they push OTA updates. Necessary updates can occur during convenient device downtimes, such as during designated sleep hours.</p> <p>To ensure that OTA updates during such time periods don’t interrupt users, employ dark mode to mitigate light emissions. To do so, have the device bootloader search for the string reason <code translate="no" dir="ltr">unattended</code>. If <code translate="no" dir="ltr">unattended</code> is <code translate="no" dir="ltr">true</code>, put the device in dark mode. Note that it’s each OEM's responsibility to mitigate sound and light emissions.</p> <p>If you’re either upgrading to Android 12, or launching Android 12 devices, you don’t need to do anything to implement the new RoR functionality.</p> <p>There’s one new call in the multi-client flow, <code translate="no" dir="ltr">isPreparedForUnattendedUpdate</code>, shown below:</p> 
+<pre>@RequiresPermission(anyOf = {android.Manifest.permission.RECOVERY,
+            android.Manifest.permission.REBOOT})
+public static boolean isPreparedForUnattendedUpdate(@NonNull Context context)
+
+</pre> <p>You don’t need to implement this, because the HAL is deprecated as of Android 12.</p> <h3 id="telephony-manager">TelephonyManager</h3> <p>The OTA client invokes the <code translate="no" dir="ltr">TelephonyManager</code> system API when a reboot is imminent in Android 12. This API moves all cached PIN codes from the <code translate="no" dir="ltr">AVAILABLE</code> state to the <code translate="no" dir="ltr">REBOOT_READY</code> state. The <code translate="no" dir="ltr">TelephonyManager</code> system API is protected by the existing <a href="https://developer.android.com/reference/android/Manifest.permission#REBOOT"><code translate="no" dir="ltr">REBOOT</code></a> Manifest permission.</p> 
+<pre> /**
+    * The unattended reboot was prepared successfully.
+    * @hide
+    */
+   @SystemApi
+   public static final int PREPARE_UNATTENDED_REBOOT_SUCCESS = 0;
+
+   /**
+    * The unattended reboot was prepared, but the user will need to manually
+    * enter the PIN code of at least one SIM card present in the device.
+    * @hide
+    */
+   @SystemApi
+   public static final int PREPARE_UNATTENDED_REBOOT_PIN_REQUIRED = 1;
+
+   /**
+    * The unattended reboot was not prepared due to generic error.
+    * @hide
+    */
+   @SystemApi
+   public static final int PREPARE_UNATTENDED_REBOOT_ERROR = 2;
+
+   /** @hide */
+   @Retention(RetentionPolicy.SOURCE)
+   @IntDef(prefix = {"PREPARE_UNATTENDED_REBOOT_"},
+           value = {
+                   PREPARE_UNATTENDED_REBOOT_SUCCESS,
+                   PREPARE_UNATTENDED_REBOOT_PIN_REQUIRED,
+                   PREPARE_UNATTENDED_REBOOT_ERROR
+           })
+   public @interface PrepareUnattendedRebootResult {}
+
+   /**
+    * Prepare TelephonyManager for an unattended reboot. The reboot is
+    * required to be done shortly after the API is invoked.
+    *
+    * Requires system privileges.
+    *
+    * &lt;p&gt;Requires Permission:
+    *   {@link android.Manifest.permission#REBOOT}
+    *
+    * @return {@link #PREPARE_UNATTENDED_REBOOT_SUCCESS} in case of success.
+    * {@link #PREPARE_UNATTENDED_REBOOT_PIN_REQUIRED} if the device contains
+    * at least one SIM card for which the user needs to manually enter the PIN
+    * code after the reboot. {@link #PREPARE_UNATTENDED_REBOOT_ERROR} in case
+    * of error.
+    * @hide
+    */
+   @SystemApi
+   @RequiresPermission(android.Manifest.permission.REBOOT)
+   @PrepareUnattendedRebootResult
+   public int prepareForUnattendedReboot()
+</pre> <p>The TelephonyManager system API is used by privileged APKs.</p> <h2 id="testing">Testing</h2> <p>To test the new API, execute this command:</p> 
+<pre>    adb shell cmd phone unattended-reboot</pre> <p>This command only works when the shell is running as root (<code translate="no" dir="ltr">adb root</code>).</p> <h2 id="android-11">Android 11 only</h2> <p>The remainder of this page applies to Android 11.</p> <p>As of July 2020, implementations of RoR HAL fall into two categories:</p> <ol> <li>If the SoC hardware supports RAM persistence across reboots, OEMs can use the default implementation in AOSP (<a href="#default-ram-escrow">Default RAM Escrow</a>).</li> <li>If the device hardware or SoC supports a secure hardware enclave (a discrete security coprocessor with its own RAM and ROM), additionally it must do the following: <ul> <li>Be able to detect a main CPU reboot.</li> <li>Have a hardware timer source that persists across reboots. That is, the enclave must be able to detect the reboot and expire a timer set before the reboot.</li> <li>Support storing an escrowed key in the enclave RAM/ROM such that it can't be recovered with offline attacks. It must store the RoR key in a way that makes it impossible for insiders or attackers to recover it.</li> </ul>
+</li> </ol> <h3 id="default-ram-escrow">Default RAM escrow</h3> <p>AOSP has an implementation of the RoR HAL using RAM persistence. For this to work, OEMs must ensure that their SoCs support RAM persistence across reboots. Some SoCs are unable to persist RAM contents across a reboot, so OEMs are advised to consult their SoC partners before enabling this default HAL. The canonical reference for this in the following section.</p> <h3 id="ota-update-with-ror">Flow of OTA update using RoR</h3> <p>The OTA client app on the phone must have the <a href="https://developer.android.com/reference/android/Manifest.permission#REBOOT">Manifest.permission.REBOOT</a> and <code translate="no" dir="ltr">Manifest.permission.RECOVERY</code> permissions to call the necessary methods to implement RoR. With that prerequisite in place, the flow of an update follows these steps:</p> <ol> <li>OTA client app downloads the update.</li> <li>OTA client app calls to <code translate="no" dir="ltr">RecoverySystem#prepareForUnattendedUpdate</code> which triggers the user to be prompted for their PIN, pattern, or password on the lock screen during the next unlock.</li> <li>The user unlocks the device at the lockscreen, and the device is ready to have the update applied.</li> <li>OTA client app calls to <code translate="no" dir="ltr">RecoverySystem#rebootAndApply</code>, which immediately triggers a reboot.</li> </ol> <p>At the end of this flow, the device reboots and the RoR mechanism unlocks the credential encrypted (CE) storage. To apps, this appears as a normal user unlock, so they receive all the signals, such as <a href="https://developer.android.com/reference/android/content/Intent#ACTION_LOCKED_BOOT_COMPLETED">ACTION_LOCKED_BOOT_COMPLETED</a> and <a href="https://developer.android.com/reference/android/content/Intent#ACTION_BOOT_COMPLETED">ACTION_BOOT_COMPLETED</a> that they normally do.</p> <h3 id="modify-product-configs">Modify product configurations</h3> <p>A product marked as supporting the RoR feature in Android 11 must include an implementation of the RebootEscrow HAL and include the feature marker XML file. The default implementation works well on devices that use warm reboot (when the power to DRAM remains on during reboot).</p> <h4 id="reboot-escrow-feature-marker">Reboot escrow feature marker</h4> <p>The feature marker must also be present:</p> 
+<pre>PRODUCT_COPY_FILES += \
+    frameworks/native/data/etc/android.hardware.reboot_escrow.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.reboot_escrow.xml
+</pre> <h4 id="default-reboot-escrow-hal">Default reboot escrow HAL implementation</h4> <p>To use the default implementation, you must reserve 65536 (0x10000) bytes. Never write these bytes to non-volatile storage to ensure that the security properties persist.</p> <h5 id="linux-kernel-device-tree">Linux kernel device tree changes</h5> <p>In the Linux kernel's device tree, you must reserve memory for a <code translate="no" dir="ltr">pmem</code> region. The following example shows <code translate="no" dir="ltr">0x50000000</code> being reserved:</p> 
+<pre>  reserved-memory {
+    my_reservation@0x50000000 {
+      no-map;
+      reg = &lt;0x50000000 0x10000&gt;;
+    }
+  }
+
+  reboot_escrow@0 {
+    compatible = "pmem-region";
+    reg = &lt;0x50000000 0x10000&gt;;
+  };
+</pre> <p>Verify that you have a new device in the block directory with a name like <code translate="no" dir="ltr">/dev/block/pmem0</code> (such as <code translate="no" dir="ltr">pmem1</code> or <code translate="no" dir="ltr">pmem2</code>).</p> <h5 id="device.mk-changes">Device.mk changes</h5> <p>Assuming that your new device from the previous step is named <code translate="no" dir="ltr">pmem0</code>, you must ensure the following new entries get added to <code translate="no" dir="ltr">vendor/&lt;oem&gt;/&lt;product&gt;/device.mk</code>:</p> 
+<pre># Resume on Reboot support
+PRODUCT_PROPERTY_OVERRIDES += \
+    ro.rebootescrow.device=/dev/block/pmem0
+PRODUCT_PACKAGES += \
+    android.hardware.rebootescrow-service.default
+</pre> <h5 id="selinux-rules">SELinux rules</h5> <p>Add these new entries to the device's <code translate="no" dir="ltr">file_contexts</code>:</p> 
+<pre>/dev/block/pmem0  u:object_r:rebootescrow_device:s0
+/vendor/bin/hw/android\.hardware\.rebootescrow-service\.default  u:object_r:hal_rebootescrow_default_exec:s0
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/ota/resume-on-reboot" class="_attribution-link">https://source.android.com/docs/core/ota/resume-on-reboot</a>
+  </p>
+</div>

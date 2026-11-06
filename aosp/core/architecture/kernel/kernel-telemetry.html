@@ -1,0 +1,190 @@
+<h1>Collect kernel telemetry with eBPF</h1>  <p>This page provides an overview of the Extended Berkeley Packet Filter (eBPF) kernel telemetry framework in Android, describing the framework architecture, built-in metrics, and how to add new kernel metrics.</p> <p>Android includes a unified eBPF kernel telemetry framework for collecting low-overhead kernel metrics and exposing those metrics to userspace services such as <code translate="no" dir="ltr">statsd</code>. By attaching portable eBPF programs to kernel tracepoints and kprobes, the framework aggregates high-frequency kernel events in place and exports compact histograms or counters without modifying the <a href="generic-kernel-image">Generic Kernel Image (GKI)</a> or breaking the Kernel Module Interface (KMI).</p> <p>Traditional approaches to kernel telemetry rely on custom <code translate="no" dir="ltr">procfs</code> or <code translate="no" dir="ltr">sysfs</code> nodes, out-of-tree kernel patches, or vendor hooks that require custom plumbing across the kernel, SELinux, Java Native Interface (JNI), and userspace services. The eBPF kernel telemetry framework standardizes this pipeline across Android Common Kernels (ACKs) and provides the following benefits:</p> <ul> <li>
+<strong>Avoids kernel ABI and KMI churn:</strong> Attaches eBPF programs to existing kernel tracepoints or kprobes without modifying kernel source code, changing the kernel application binary interface (ABI), or adding Android vendor hooks such as <code translate="no" dir="ltr">TRACE_ANDROID_VH_*</code>. Device manufacturers and system-on-chip (SoC) partners can use eBPF telemetry in place of adding new telemetry vendor hooks or to migrate off existing vendor hooks.</li> <li>
+<strong>Maintains portability across kernel versions:</strong> Uses BPF Compile Once - Run Everywhere (CO-RE) and BPF Type Format (BTF) so that a single compiled eBPF program adapts automatically to internal kernel struct layout changes across GKI versions, such as <code translate="no" dir="ltr">android14-6.1</code> and higher.</li> <li>
+<strong>Minimizes system health overhead:</strong> Filters and aggregates high-frequency kernel events directly at the source into compact 32-bucket base-2 logarithmic (<code translate="no" dir="ltr">log2</code>) histograms, typically under 1 KB per BPF map. Userspace retrieves aggregated map entries once per day using a single <code translate="no" dir="ltr">BPF_MAP_LOOKUP_BATCH</code> batch syscall.</li> <li>
+<strong>Simplifies SELinux and JNI integration:</strong> Pins telemetry maps under <code translate="no" dir="ltr">/sys/fs/bpf/kernelstats/</code> to apply directory-level <code translate="no" dir="ltr">fs_bpf_kernelstats</code> SELinux type inheritance, and resolves struct member offsets at run time in JNI using BTF metadata to eliminate custom C++ parsing code when adding new metrics.</li> </ul> <p>For more information about how Android loads and pins eBPF programs and maps, see <a href="bpf">Extend the kernel with eBPF</a>.</p> <h2 id="architecture-overview">Architecture overview</h2> <p>The eBPF kernel telemetry pipeline separates generic infrastructure components from metric-specific definitions so that adding a new kernel metric requires minimal code changes. The following table describes the components of the pipeline:</p> <table> <tr>
+<th>Component</th>
+<th>Role in pipeline</th>
+<th>Scope</th>
+</tr> <tr>
+<td>BPF loader, <code translate="no" dir="ltr">bpfloader</code>
+</td>
+<td>Loads compiled eBPF programs from <code translate="no" dir="ltr">/system/etc/bpf/kernelstats/</code> at boot if compatible with the running kernel and pins maps to <code translate="no" dir="ltr">/sys/fs/bpf/kernelstats/</code>. Skips loading cleanly when disabled or unsupported.</td>
+<td>Generic</td>
+</tr> <tr>
+<td>SELinux policy, <code translate="no" dir="ltr">fs_bpf_kernelstats</code>
+</td>
+<td>Applies directory-level SELinux labels to <code translate="no" dir="ltr">/sys/fs/bpf/kernelstats/</code> so <code translate="no" dir="ltr">system_server</code> can read telemetry maps without per-metric SELinux policy updates.</td>
+<td>Generic</td>
+</tr> <tr>
+<td>eBPF program in <code translate="no" dir="ltr">system/bpfprogs/telemetry/</code>
+</td>
+<td>Attaches to kernel tracepoints or kprobes, filters events, and aggregates metrics into BPF maps.</td>
+<td>Custom per metric</td>
+</tr> <tr>
+<td>JNI BTF reader</td>
+<td>Parses BTF metadata from the compiled BPF Executable and Linkable Format (ELF) binary at run time, caches struct member offsets, and performs batch map reads into primitive Java arrays.</td>
+<td>Generic</td>
+</tr> <tr>
+<td>Userspace puller in <code translate="no" dir="ltr">statsd</code>
+</td>
+<td>Pulls cumulative histogram maps on a daily schedule, computes deltas against cached history, and builds strongly typed <code translate="no" dir="ltr">StatsEvent</code> pull atoms.</td>
+<td>Generic helper with a single <code translate="no" dir="ltr">case</code> entry per atom</td>
+</tr> <tr>
+<td>Telemetry schema</td>
+<td>Defines the strongly typed <code translate="no" dir="ltr">statsd</code> pull atom protobuf and server-side histogram or value metric aggregations.</td>
+<td>Custom per metric</td>
+</tr> </table> <h2 id="consumption-models">Userspace consumption models</h2> <p>When designing a kernel telemetry metric, choose between two userspace consumption models depending on whether the metric represents cumulative state or an ordered event sequence. The following table compares the two models:</p> <table> <tr>
+<th>Property</th>
+<th>Accumulators</th>
+<th>Streams</th>
+</tr> <tr>
+<td>Definition</td>
+<td>Stateful, monotonically increasing cumulative counters or histograms</td>
+<td>Ordered sequence of timestamped kernel events</td>
+</tr> <tr>
+<td>Access pattern</td>
+<td>Userspace polls on demand, such as once every 24 hours through <code translate="no" dir="ltr">statsd</code>
+</td>
+<td>Userspace consumes continuously from a ring buffer to avoid dropped events</td>
+</tr> <tr>
+<td>Typical BPF map types</td>
+<td>
+<code translate="no" dir="ltr">BPF_MAP_TYPE_HASH</code>, <code translate="no" dir="ltr">BPF_MAP_TYPE_LRU_HASH</code>, <code translate="no" dir="ltr">BPF_MAP_TYPE_PERCPU_HASH</code>, <code translate="no" dir="ltr">BPF_MAP_TYPE_LRU_PERCPU_HASH</code>
+</td>
+<td><code translate="no" dir="ltr">BPF_MAP_TYPE_RINGBUF</code></td>
+</tr> <tr>
+<td>Concurrency model</td>
+<td>Kernel map lookups are atomic; multiple readers can poll without userspace locking</td>
+<td>Destructive read semantics require a single reader thread dispatching to consumers</td>
+</tr> <tr>
+<td>Example use cases</td>
+<td>Memory management latency histograms, Direct Memory Access Buffer (DMA-BUF) allocation sizes, wakeup source iterators</td>
+<td>Filtered scheduler trace events, high-frequency subsystem power traces</td>
+</tr> </table> <aside class="note"><strong>Note:</strong><span> The initial framework implementation in <code translate="no" dir="ltr">statsd</code> targets accumulator maps. In a future Android release, we plan to extend streaming telemetry support for <a href="https://perfetto.dev/">Perfetto</a> <code translate="no" dir="ltr">traced_probes</code> using shared BTF metadata headers.</span></aside> <h2 id="built-in-metrics">Built-in kernel telemetry metrics</h2> <p>Android includes built-in eBPF kernel telemetry programs that work across GKI 6.1 and higher kernels, including <code translate="no" dir="ltr">android14-6.1</code>, <code translate="no" dir="ltr">android15-6.6</code>, <code translate="no" dir="ltr">android16-6.12</code>, and <code translate="no" dir="ltr">android17-6.18</code>. Each latency and size metric uses a 32-bucket exponential (<code translate="no" dir="ltr">log2</code>) histogram aggregated over a 24-hour window. The following table lists the built-in kernel telemetry metrics:</p> <table> <tr>
+<th>Metric atom</th>
+<th>Subsystem</th>
+<th>Description</th>
+<th>Dimension key</th>
+</tr> <tr>
+<td><code translate="no" dir="ltr">KswapdLatency</code></td>
+<td>Memory management</td>
+<td>Kernel swap daemon, <code translate="no" dir="ltr">kswapd</code>, wake-to-sleep execution latency in microseconds</td>
+<td>Non-Uniform Memory Access (NUMA) <code translate="no" dir="ltr">node_id</code>
+</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">DirectReclaimLatency</code></td>
+<td>Memory management</td>
+<td>Synchronous direct memory reclaim latency in microseconds</td>
+<td>Process out-of-memory (OOM) <code translate="no" dir="ltr">oom_score_adj</code> state</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">CompactionDuration</code></td>
+<td>Memory management</td>
+<td>System-wide memory compaction execution duration in microseconds, replacing legacy compaction vendor hooks</td>
+<td>System-wide</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">CmaAllocationLatency</code></td>
+<td>Memory management</td>
+<td>Contiguous Memory Allocator (CMA) page allocation latency in microseconds</td>
+<td>CMA heap name</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">DmabufRequestSizes</code></td>
+<td>Memory management</td>
+<td>DMA-BUF allocation request sizes in bytes</td>
+<td>Exporter heap name</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">SuspendResumeLatency</code></td>
+<td>Power management</td>
+<td>Latency across kernel suspend and resume stages in microseconds</td>
+<td>Suspend action stage</td>
+</tr> </table> <h2 id="add-metric">Add a kernel telemetry metric</h2> <p>To add a new accumulator metric to the eBPF kernel telemetry pipeline, complete the following steps in order:</p> <ol> <li>
+<a href="#write-ebpf-program">Write the eBPF program</a> under <code translate="no" dir="ltr">system/bpfprogs/telemetry/</code> and build the binary into <code translate="no" dir="ltr">/system/etc/bpf/kernelstats/</code>.</li> <li>
+<a href="#resolve-btf-layouts">Verify BTF struct layout compatibility</a> for the generic JNI BTF reader.</li> <li>
+<a href="#register-pull-atom">Register the pull atom in <code translate="no" dir="ltr">statsd</code></a>.</li> <li>
+<a href="#define-atom-proto">Define the pull atom protobuf</a> schema.</li> </ol> <p>The following sections use <code translate="no" dir="ltr">DirectReclaimLatency</code> (<code translate="no" dir="ltr">directReclaim.c</code>) as an example.</p> <h3 id="write-ebpf-program">Write the eBPF program</h3> <p>In <code translate="no" dir="ltr">system/bpfprogs/telemetry/</code>, include <code translate="no" dir="ltr">&lt;bpf_telemetry.h&gt;</code> and define the map key and output accumulator map. Use integer identifiers or enums in BPF map keys rather than raw strings to minimize map memory footprint and preserve privacy:</p> 
+<pre>#include &lt;android_bpf_defs.h&gt;
+#include &lt;bpf/bpf_core_read.h&gt;
+#include &lt;bpf/bpf_helpers.h&gt;
+#include &lt;bpf_telemetry.h&gt;
+#include &lt;stdint.h&gt;
+
+struct direct_reclaim_key {
+    uint32_t process_state;
+};
+
+#define DIRECT_RECLAIM_START_MAP_ENTRIES 128
+#define DIRECT_RECLAIM_OUTPUT_MAP_ENTRIES 8
+
+// Temporary map to store start time. Key: pid (thread_id), Value: start_time_ns
+DEFINE_BPF_MAP_GRO(direct_reclaim_start_map, HASH, uint32_t, uint64_t,
+                   DIRECT_RECLAIM_START_MAP_ENTRIES, AID_SYSTEM);
+
+// Output map. Key: direct_reclaim_key, Value: accumulator_value (32 log2 buckets)
+DEFINE_BPF_MAP_GRO(direct_reclaim_latency_map, HASH, struct direct_reclaim_key,
+                   struct accumulator_value, DIRECT_RECLAIM_OUTPUT_MAP_ENTRIES,
+                   AID_SYSTEM);
+</pre> <p>In the tracepoint handlers, record the start timestamp on entry, compute the <code translate="no" dir="ltr">log2</code> latency bucket on exit using <code translate="no" dir="ltr">GET_LATENCY_BUCKET</code>, and increment the accumulator map entry with <code translate="no" dir="ltr">INCREMENT_ACCUMULATOR</code>:</p> 
+<pre>DEFINE_BPF_PROG("tp_btf/mm_vmscan_direct_reclaim_begin", AID_ROOT, AID_SYSTEM,
+                tracepoint_vmscan_mm_vmscan_direct_reclaim_begin)(
+        uint64_t* args) {
+    (void)args;
+    uint32_t pid = (uint32_t)bpf_get_current_pid_tgid();
+    SAVE_FIRST_START_TIME(direct_reclaim_start_map, &amp;pid);
+    return 0;
+}
+
+DEFINE_BPF_PROG("tp_btf/mm_vmscan_direct_reclaim_end", AID_ROOT, AID_SYSTEM,
+                tracepoint_vmscan_mm_vmscan_direct_reclaim_end)(
+        uint64_t* args) {
+    (void)args;
+    uint32_t pid = (uint32_t)bpf_get_current_pid_tgid();
+    uint32_t bucket = GET_LATENCY_BUCKET(direct_reclaim_start_map, &amp;pid);
+    if (bucket == BPF_TELEMETRY_INVALID_BUCKET) return 0;
+
+    struct task_struct* task = (struct task_struct*)bpf_get_current_task();
+    int oom_score_adj = BPF_CORE_READ(task, signal, oom_score_adj);
+    enum process_state state = get_process_state(oom_score_adj);
+
+    struct direct_reclaim_key key = {.process_state = (uint32_t)state};
+    INCREMENT_ACCUMULATOR(direct_reclaim_latency_map, &amp;key, bucket);
+    return 0;
+}
+</pre> <h3 id="resolve-btf-layouts">Verify BTF struct layout compatibility</h3> <p>You don't need to write custom JNI C++ code when adding a new histogram map as long as your map key and value structs use standard integer, enum, and fixed array types. Instead of casting BPF map entries to hardcoded C structs at compile time, the generic JNI reader resolves struct layouts dynamically at run time in three phases:</p> <ul> <li>
+<strong>ELF-to-map association:</strong> The JNI layer parses BTF metadata directly from the compiled BPF ELF file on disk, such as <code translate="no" dir="ltr">/system/etc/bpf/kernelstats/directReclaim.bpf</code>, using the <code translate="no" dir="ltr">libbpf</code> <code translate="no" dir="ltr">btf__parse</code> function.</li> <li>
+<strong>BTF type resolution:</strong> On first access, the reader builds and caches a structural representation of the map's key and value C structs, calculating cumulative byte offsets for struct members, integer and enum byte widths, and array element sizes from the base pointer.</li> <li>
+<strong>Batch lookup and serialization:</strong> When <code translate="no" dir="ltr">statsd</code> pulls the map, the JNI layer issues a single <code translate="no" dir="ltr">BPF_MAP_LOOKUP_BATCH</code> command to the <code translate="no" dir="ltr">sys_bpf</code> syscall to read all hash entries in bulk and copies the resolved key IDs and bucket arrays directly into primitive Java <code translate="no" dir="ltr">long[]</code> arrays using the <code translate="no" dir="ltr">SetLongArrayRegion</code> JNI function.</li> </ul> <p>If a BPF C struct changes in a future release, the recompiled BTF section updates automatically and the JNI reader adapts at run time without requiring JNI recompilation.</p> <h3 id="register-pull-atom">Register the pull atom in statsd</h3> <p>In <code translate="no" dir="ltr">StatsPullAtomService.java</code>, the generic <code translate="no" dir="ltr">pullKernelTelemetry</code> helper reads the pinned BPF map, computes bucket deltas against the previous pull's cached counts, and emits <code translate="no" dir="ltr">StatsEvent</code> entries. Adding a new kernel telemetry metric requires only three small additions:</p> 
+<pre>// 1. Dispatch the atom tag to pullKernelTelemetry() in onPullAtomLocked():
+case FrameworkStatsLog.DIRECT_RECLAIM_LATENCY:
+    return pullKernelTelemetry(atomTag, data);
+
+// 2. Add the atom tag to the registered atoms list in registerKernelTelemetry():
+int[] atoms = {
+    FrameworkStatsLog.DIRECT_RECLAIM_LATENCY,
+    // ...
+};
+
+// 3. Map the atom tag to its pinned BPF map path:
+case FrameworkStatsLog.DIRECT_RECLAIM_LATENCY -&gt;
+    "/sys/fs/bpf/kernelstats/map_directReclaim_direct_reclaim_latency_map";
+</pre> <h3 id="define-atom-proto">Define the pull atom protobuf</h3> <p>Define the strongly typed pull atom message in <code translate="no" dir="ltr">frameworks/proto_logging/</code> to match the dimension key and 32-bucket <code translate="no" dir="ltr">log2</code> histogram array produced by the BPF map:</p> 
+<pre>message DirectReclaimLatency {
+    enum ProcessState {
+        PROCESS_STATE_UNSPECIFIED = 0;
+        STATE_NATIVE = 1;
+        STATE_SYSTEM = 2;
+        STATE_PERSISTENT = 3;
+        STATE_FOREGROUND = 4;
+        STATE_VISIBLE = 5;
+        STATE_PERCEPTIBLE = 6;
+        STATE_SERVICE_BACKGROUND = 7;
+        STATE_CACHED = 8;
+    }
+    optional ProcessState process_state = 1;
+    repeated int32 duration_log2_buckets_micros = 2;
+}
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/kernel/kernel-telemetry" class="_attribution-link">https://source.android.com/docs/core/architecture/kernel/kernel-telemetry</a>
+  </p>
+</div>

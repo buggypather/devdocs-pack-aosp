@@ -1,0 +1,21 @@
+<h1>Platform-signed shared UID allowlist</h1>  <p>Platform-signed apps are apps sharing the same (or compatible) signing certificate with the platform package (<code translate="no" dir="ltr">android</code>). A platform-signed app can be a system app (located on a system image partition), or a nonsystem app. Platform-signed shared UIDs are shared UIDs (<code translate="no" dir="ltr">android:sharedUserId</code>) that contain platform-signed apps. Debuggable builds are builds whose <code translate="no" dir="ltr">android.os.Build.isDebuggable()</code> return <code translate="no" dir="ltr">true</code>, such as <code translate="no" dir="ltr">userdebug</code> or <code translate="no" dir="ltr">eng</code> builds.</p> <p>Historically, device manufacturers had little control over which platform-signed nonsystem apps could join a platform-signed shared UID. Starting in Android 15, manufacturers can explicitly allow platform-signed nonsystem apps to join platform-signed shared UIDs in the system configuration XML files in the <code translate="no" dir="ltr">/etc/sysconfig</code> directory. If a platform-signed nonsystem app isn't added to the allowlist for a platform-signed shared UID, and the app still tries to join the platform-signed shared UID (with <code translate="no" dir="ltr">android:sharedUserId</code> in its manifest), that app can't be installed on nondebuggable builds.</p> <aside class="note"><strong>Note:</strong><span> The allowlist isn't enforced on debuggable builds to facilitate easier testing.</span></aside><aside class="note"><strong>Note:</strong><span> Platform-signed system apps aren't affected by this change.</span></aside> <h2 id="add-an-allowlist">Add an allowlist</h2> <p>You can list allowlists for apps in a single XML file or in multiple XML files, similar to <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/data/etc/package-shareduid-allowlist.xml"><code translate="no" dir="ltr">frameworks/base/data/etc/package-shareduid-allowlist.xml</code></a>:</p> 
+<pre>&lt;!--
+This XML defines an allowlist for packages that want to join a particular shared-uid.
+If a non-system package that is signed with platform signature, is trying to join a particular
+shared-uid, and not in this list, the installation will fail.
+
+- The "package" XML attribute refers to the app's package name.
+- The "shareduid" XML attribute refers to the shared uid name.
+  --&gt;
+
+&lt;config&gt;
+    &lt;allow-package-shareduid package="android.test.settings" shareduid="android.uid.system" /&gt;
+&lt;/config&gt;
+</pre> <h2 id="find-missing-allowlist">Find missing allowlist</h2> <p>To find a missing allowlist entry, try to install your platform-signed nonsystem app on a nondebuggable build and check if it can still be installed. If not, you can inspect device logs for the following format of warning messages:</p> 
+<pre>Non-preload app {PACKAGE_NAME} signed with platform signature and joining shared uid: {SHARED_UID_NAME}
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/permissions/platform-signed-shared-uid-allowlist" class="_attribution-link">https://source.android.com/docs/core/permissions/platform-signed-shared-uid-allowlist</a>
+  </p>
+</div>

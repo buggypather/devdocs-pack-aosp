@@ -1,0 +1,50 @@
+<h1>Convert from Make to Soong</h1>  <p>Before the Android 7.0 release, Android used <a href="https://www.gnu.org/software/make/">GNU Make</a> exclusively to describe and execute its build rules. The Make build system is widely supported and used, but at Android's scale became slow, error prone, unscalable, and difficult to test. The Soong build system provides the flexibility required for Android builds. We're making significant changes to the Android build system, deprecating the Make (<code translate="no" dir="ltr">Android.mk</code>) build system and replacing it with Soong (<code translate="no" dir="ltr">Android.bp</code>).</p>  <p>For this reason, platform developers are expected to switch from Make and adopt Soong as soon as possible. Send questions to the <a href="https://groups.google.com/g/android-building">Android Building</a> Google Group to receive support.</p> <h2 id="what_is_soong">What is Soong?</h2> <p>The Soong build system was introduced in Android 7.0 (Nougat) to replace Make. It leverages the <a href="https://github.com/google/kati/blob/master/README.md">Kati</a> GNU Make clone tool and <a href="https://ninja-build.org/">Ninja</a> build system component to speed up builds of Android.</p> <p>See the <a href="https://android.googlesource.com/platform/build/+/refs/heads/android17-release/README.md">Android Make Build System</a> description in the Android Open Source Project (AOSP) for general <a href="https://android.googlesource.com/platform/build/+/refs/heads/android17-release/Usage.txt">instructions</a> and <a href="https://android.googlesource.com/platform/build/+/refs/heads/android17-release/Changes.md">Build System Changes for Android.mk Writers</a> to learn about modifications needed to adapt from Make to Soong. See the <a href="../start/glossary#build">build-related entries</a> in the glossary for definitions of key terms and the <a href="https://ci.android.com/builds/latest/branches/aosp-build-tools/targets/linux/view/soong_build.html">Soong Modules Reference</a> for complete details.</p> <aside class="caution"><strong>Caution:</strong><span> Until Android fully converts from Make to Soong, the Make product configuration must specify the <code translate="no" dir="ltr">PRODUCT_SOONG_NAMESPACES</code> value. See <a href="https://source.android.com/docs/setup/reference/androidbp#namespace_modules">Namespace modules</a> for instructions.</span></aside> <h2 id="make_and_soong_comparison">Make and Soong comparison</h2> <p>Here is a comparison of Make configuration with Soong accomplishing the same in a Soong configuration (Blueprint or <code translate="no" dir="ltr">.bp</code>) file.</p> <h3 id="make_example">Make example</h3> 
+<pre>LOCAL_PATH := $(call my-dir)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := libxmlrpc++
+LOCAL_MODULE_HOST_OS := linux
+
+LOCAL_RTTI_FLAG := -frtti
+LOCAL_CPPFLAGS := -Wall -Werror -fexceptions
+LOCAL_EXPORT_C_INCLUDES := $(LOCAL_PATH)/src
+
+LOCAL_SRC_FILES := $(call \
+     all-cpp-files-under,src)
+include $(BUILD_SHARED_LIBRARY)
+</pre> <h3 id="soong_example">Soong example</h3> 
+<pre>cc_library_shared {
+     name: "libxmlrpc++",
+
+     rtti: true,
+     cppflags: [
+           "-Wall",
+           "-Werror",
+           "-fexceptions",
+     ],
+     export_include_dirs: ["src"],
+     srcs: ["src/**/*.cpp"],
+
+     target: {
+           darwin: {
+                enabled: false,
+           },
+     },
+}
+</pre> <p>For test-specific Soong configuration examples, see <a href="../../core/tests/development/blueprints">Simple build configuration</a>.</p> <h2 id="basic-conversion">Basic conversion procedure</h2> <p>The conversion of an <code translate="no" dir="ltr">Android.mk</code> file to an <code translate="no" dir="ltr">Android.bp</code> file typically follows this general workflow using the <code translate="no" dir="ltr">androidmk</code> helper tool. In general the following steps are followed in the conversion.</p> <ol> <li>
+<p>Set up the terminal environment and build <code translate="no" dir="ltr">androidmk</code> tool.</p> <p><code translate="no" dir="ltr">androidmk</code> is a command line tool that parses a <code translate="no" dir="ltr">Android.mk</code> file and tries to output an analogous <code translate="no" dir="ltr">Android.bp</code> file. It can convert most of the <code translate="no" dir="ltr">Android.mk</code> files to <code translate="no" dir="ltr">Android</code>.bp with few or no manual changes.</p> 
+<pre>cd &lt;root-of-the-tree&gt;
+source build/envsetup.sh
+lunch &lt;lunch-target&gt;
+m androidmk
+</pre>
+</li> <li><p>Build with the <code translate="no" dir="ltr">Android.mk</code>: <code translate="no" dir="ltr">sh
+m &lt;module-name&gt;</code></p></li> <li><p>Run the <code translate="no" dir="ltr">androidmk</code> conversion tool: <code translate="no" dir="ltr">sh
+androidmk &lt;path-to-Android.mk&gt;/Android.mk &gt; &lt;path-to-Android.bp&gt;/Android.bp</code></p></li> <li>
+<p>Manually edit the <code translate="no" dir="ltr">Android.bp</code> file:</p> <ul> <li>Address any warnings emitted by the <code translate="no" dir="ltr">androidmk</code> tool.</li> <li>Retain or add a copyright header. If adding a new one, use the current year.</li> </ul>
+</li> <li><p>Remove the <code translate="no" dir="ltr">Android.mk</code> file and build with the <code translate="no" dir="ltr">Android.bp</code> file.</p></li> <li><p>Validate the conversion by comparing the built artifacts or running unit and functional tests.</p></li> <li><p>Save the changes and upload for review.</p></li> </ol> <p>Refer to <a href="https://source.android.com/docs/setup/reference/androidbp">Android.bp file format</a> for more information.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/setup/build/make-to-soong" class="_attribution-link">https://source.android.com/docs/setup/build/make-to-soong</a>
+  </p>
+</div>

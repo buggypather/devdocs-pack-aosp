@@ -1,0 +1,58 @@
+<h1>Multi-camera support</h1>  <p>In Exterior View System (EVS) 1.1, the logical camera device that consists of multiple physical camera devices is supported. To use this virtual device, device implementations must support the <a href="https://source.android.com/devices/graphics/sync"> Synchronization Framework</a>.</p> <h2 id="enumerate,-open,-and-close-logical-camera-device">
+Enumerate, open, and close logical camera device</h2> <p>The app can use the same <code translate="no" dir="ltr">IEvsEnumerator</code> methods to use the available logical camera devices. The returned <code translate="no" dir="ltr">EvsCamera</code> object, which represents a logical camera device, must contain the following items in the metadata:</p> <ul> <li>
+<code translate="no" dir="ltr"><a href="https://developer.android.com/reference/android/hardware/camera2/CameraMetadata#REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA">ANDROID_REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA</a></code><br> If a returned EvsCamera object represents a logical camera, its camera metadata must contain this capability key in its <code translate="no" dir="ltr">ANDROID_REQUEST_AVAILABLE_CAPABILITIES</code> field.</li> <li>
+<code translate="no" dir="ltr">ANDROID_LOGICAL_MULTI_CAMERA_PHYSICAL_IDS</code> field lists physical camera device identifiers.</li> <li>
+<code translate="no" dir="ltr">ANDROID_LOGICAL_MULTI_CAMERA_SENSOR_SYNC_TYPE</code> field can have either of below enum values:<ul> <li>
+<code translate="no" dir="ltr">ANDROID_LOGICAL_MULTI_CAMERA_SENSOR_SYNC_TYPE_APPROXIMATE</code> is for sensors in master-master mode, no hardware shutter/exposure sync.</li> <li>
+<code translate="no" dir="ltr">ANDROID_LOGICAL_MULTI_CAMERA_SENSOR_SYNC_TYPE_CALIBRATED</code> is for sensors in master-slave mode, hardware shutter/exposure sync. Synchronized GMSL2 cameras must have this value.</li> </ul> </li> </ul> <p>The app can retrieve a descriptor of physical camera devices through <code translate="no" dir="ltr">IEvsCamera</code> in the new <code translate="no" dir="ltr">getPhysicalCameraInfo(stringcameraId)</code> method.</p> 
+<pre>/**
+ * Returns the description of the physical camera device that backs this
+ * logical camera.
+ *
+ * If a requested device does not either exist or back this logical device,
+ * this method returns a null camera descriptor. And, if this is called on
+ * a physical camera device, this method is the same as getCameraInfo_1_1()
+ * method if a given device ID is matched. Otherwise, this returns a
+ * null camera descriptor.
+ *
+ * @param  deviceId Physical camera device identifier string.
+ * @return info     The description of a member physical camera device.
+ *                  This must be the same value as reported by
+ *                  EvsEnumerator::getCameraList_1_1().
+ */
+getPhysicalCameraInfo(string deviceId) generates (CameraDesc info);</pre> <h2 id="configure-multi-camera-support">
+Configure multi-camera support</h2> <p>All logical cameras are required to be defined statically and must be enumerated through a configuration manager implementation. As EVS allows each device in the group to be configured differently, EVS provides a list of member devices and indicates whether or not the image capture is synchronized.</p> 
+<pre>&lt;!-- camera group 0 --&gt;
+&lt;group id='group0' synchronized='CALIBRATED'&gt;
+    &lt;caps&gt;
+        &lt;!-- list of supported controls supported by all physical devices --&gt;
+        &lt;supported_controls&gt;
+            &lt;control name='BRIGHTNESS' min='0' max='255'/&gt;
+            &lt;control name='CONTRAST' min='0' max='255'/&gt;
+        &lt;/supported_controls&gt;
+
+        &lt;!-- list of stream configuration supported by all physical devices --&gt;
+        &lt;stream id='0' width='640' height='480' format='RGBA_8888' framerate='30'/&gt;
+    &lt;/caps&gt;
+
+    &lt;!-- list of parameters --&gt;
+    &lt;characteristics&gt;
+        &lt;parameter
+            name='REQUEST_AVAILABLE_CAPABILITIES'
+            type='enum'
+            size='1'
+            value='LOGICAL_MULTI_CAMERA'
+        /&gt;
+        &lt;parameter
+            name='LOGICAL_MULTI_CAMERA_PHYSICAL_IDS'
+            type='byte[]'
+            size='2'
+            value='/dev/video3,/dev/video4'
+        /&gt;
+    &lt;/characteristics&gt;
+&lt;/group&gt;</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/camera/evs/multi_camera" class="_attribution-link">https://source.android.com/docs/automotive/camera/evs/multi_camera</a>
+  </p>
+</div>

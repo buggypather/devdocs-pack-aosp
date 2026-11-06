@@ -1,0 +1,44 @@
+<h1>Configure a panel</h1>  <p>A <em>panel</em> describes the properties of the area it occupies and acts as an app container. You use XML configurations to define panels, which provide a flexible and code-free approach for customizing UIs. To manage instances and states, the system tracks defined panels.</p> <h2 id="panel-list">Panel list</h2> <p>The System UI loads the definitions of its panels from an array resource named <code translate="no" dir="ltr">window_states</code>. This resource array points to the XML files, in which individual panel configurations are defined. This centralized approach means that panels managed by Scalable UI are loaded as intended and ready for use by the system.</p> 
+<pre>&lt;?xml version="1.0" encoding="utf-8"?&gt;
+&lt;resources&gt;
+   &lt;array name="window_states"&gt;
+       &lt;item&gt;@xml/app_panel&lt;/item&gt;
+       &lt;item&gt;@xml/back_panel&lt;/item&gt;
+       ...
+   &lt;/array&gt;
+&lt;/resources&gt;
+</pre> <h2 id="panel-definition">Panel definition</h2> <p>Each panel in the Scalable UI framework is defined with an XML tag named <code translate="no" dir="ltr">&lt;TaskPanel&gt;</code> or <code translate="no" dir="ltr">&lt;DecorPanel&gt;</code>. <code translate="no" dir="ltr">&lt;TaskPanel&gt;</code> describes the properties of an app container while <code translate="no" dir="ltr">&lt;DecorPanel&gt;</code> describes the properties of a view container. System UI loads these panel definitions and tracks the panels until another configuration is loaded. For example, by a configuration change due to rotation or an explicit system request. The <code translate="no" dir="ltr">&lt;TaskPanel&gt;</code> and <code translate="no" dir="ltr">&lt;DecorPanel&gt;</code> serve as foundational components for building a customized experience through configurable UI components.</p> <h3 id="xml-attributes">XML attributes</h3> <p>The <code translate="no" dir="ltr">&lt;TaskPanel&gt;</code> tag can contain these attributes you can use to define states and transitions.</p> <table> <thead> <th width="20%">Attribute</th> <th width="15%">Status</th> <th>Description</th> </thead> <tbody> <tr> <td><code translate="no" dir="ltr">id</code></td> <td>Mandatory</td> <td>Specifies a unique identifier for the panel. This attribute is used to retrieve the panel from the <code translate="no" dir="ltr">PanelPool</code> and to manage its state within the system.</td> </tr> <tr> <td><code translate="no" dir="ltr">role</code></td> <td>Mandatory</td> <td>Defines the purpose or function of the panel in the system. The value can refer to a string resource, a string array of component names, or a layout ID. For example, it can define persistent activities that should always be displayed on the panel, or a layout to be inflated.</td> </tr> <tr> <td><code translate="no" dir="ltr">defaultVariant</code></td> <td>Optional</td> <td>Specifies the ID of the variant that the panel should initially adopt when it is loaded. If not specified, the system can use the first defined variant as the default.</td> </tr> <tr> <td><code translate="no" dir="ltr">displayId</code></td> <td>Optional</td> <td>Specifies the ID of the display to which the panel is intended to appear.</td> </tr> <tr> <td><code translate="no" dir="ltr">defaultLayer</code></td> <td>Optional</td> <td>Can specify a default Z-order for the panel's variants if the variants don't explicitly define a layer.</td> </tr> <tr> <td><code translate="no" dir="ltr">controller</code></td> <td>Optional,<br>subject to change</td> <td> <p>References a resource (usually an XML ID) that defines a panel-specific controller, which allows for the storing and passing of configuration values to custom panel controllers.</p> <p>These controllers should implement the <code translate="no" dir="ltr">com.android.car.scalableui.panel.TaskPanelController</code> interface. A common use case of these controllers is to define flexible runtime task allocations on the panel.</p> </td> </tr> </tbody> </table> <h3 id="xml-child-elements">XML child elements</h3> <p>The <code translate="no" dir="ltr">&lt;TaskPanel&gt;</code> and <code translate="no" dir="ltr">&lt;DecorPanel&gt;</code> tags can include these child elements to define characteristics and default behaviors.</p> <table> <thead> <th width="20%">Attribute</th> <th>Description</th> </thead> <tbody> <tr> <td><code translate="no" dir="ltr">&lt;Variant&gt;</code></td> <td>
+<p>Nested tag describes a specific visual configuration for the panel at any given time. A panel can have multiple variants, each identified by a unique ID.</p> <p>Each variant defines properties like bounds, visibility, layer, alpha, corner radius, and insets for that particular configuration. Variants can also inherit properties from a <em>parent</em> variant.</p>
+</td> </tr> <tr> <td><code translate="no" dir="ltr">&lt;KeyFrameVariant&gt;</code></td> <td>Extension of <code translate="no" dir="ltr">&lt;Variant&gt;</code> allows for the interpolation of visual properties between different variants based on a continuous <em>fraction</em> value (0 to 1) and is used for smooth and dynamic transitions, such as during a drag operation, when the panel's state depends on a continuous input such as a <em>drag amount.</em>
+</td> </tr> <tr> <td><code translate="no" dir="ltr">&lt;Transitions&gt;</code></td> <td>
+<p>Nested tag contains a collection of <code translate="no" dir="ltr">&lt;Transition&gt;</code> definitions, which describe how the UI should animate between different variants.</p> <p>Each <code translate="no" dir="ltr">&lt;Transition&gt;</code> defines the <em>from</em> and <em>to</em> variants, the event that triggers it, and can optionally specify a custom Animator to use for the animation, as well as a duration and interpolator.</p> </td> </tr> </tbody> </table> <p>The <code translate="no" dir="ltr">&lt;TaskPanel&gt;</code> tag can also include these special child elements to define behaviors specific to tasks.</p> <table> <thead> <th width="20%">Attribute</th> <th>Description</th> </thead> <tbody> <tr> <td><code translate="no" dir="ltr">&lt;Restart&gt;</code></td> <td>Nested tag to describe a restart policy to be applied when a TaskPanel becomes empty. This tag supports the attributes <code translate="no" dir="ltr">policy</code>, which can be set to either <code translate="no" dir="ltr">DEFAULT</code> or <code translate="no" dir="ltr">LAST</code>, and <code translate="no" dir="ltr">maxRetry</code>, which specifies how many times the restart will be attempted before timing out.</td> </tr> <tr> <td><code translate="no" dir="ltr">&lt;TaskBehavior&gt;</code></td> <td>Nested tag to describe the behavior of task launches on this panel. This tag supports the attribute <code translate="no" dir="ltr">newTaskLaunchPolicy</code>, which configures the behavior of new task launches from this TaskPanel. Valid configuration values for this policy are <code translate="no" dir="ltr">DEFAULT</code>, <code translate="no" dir="ltr">REMAIN_IN_SOURCE</code>, or <code translate="no" dir="ltr">REPARENT_TO_SOURCE</code>.</td> </tr> </tbody> </table> <h2 id="sample-code">Sample code</h2> 
+<pre>&lt;TaskPanel id="@+id/panelId"
+           role="@array/roleValue"
+           defaultVariant="@id/closed"
+           displayId="0" &gt;
+
+ &lt;Variant id="@+id/base"&gt;
+        &lt;Bounds left="0" top="0" width="100%" height="100%"/&gt;
+ &lt;/Variant&gt;
+
+&lt;Variant id="@+id/opened" parent="@id/base"&gt;
+    &lt;Visibility isVisible="true"/&gt;
+&lt;/Variant&gt;
+&lt;Variant id="@+id/closed"  parent="@id/base"&gt;
+    &lt;Visibility isVisible="false"/&gt;
+&lt;/Variant&gt;
+
+&lt;Transitions&gt;
+    &lt;Transition fromVariant="@id/closed"
+                toVariant="@id/opened"
+                onEvent="open_event"/&gt;
+        &lt;Event id="_System_TaskOpenEvent" panelId="@id/panelId" /&gt;
+    &lt;/Transition&gt;
+&lt;/Transitions&gt;
+&lt;/TaskPanel&gt;
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/scalableui/panel-ref" class="_attribution-link">https://source.android.com/docs/automotive/scalableui/panel-ref</a>
+  </p>
+</div>

@@ -1,0 +1,84 @@
+<h1>Carrier Wi-Fi</h1>  <p>Carrier Wi-Fi is an autoconnection feature (using encrypted IMSI) available in Android 9 and higher that lets devices automatically connect to carrier-implemented Wi-Fi networks. In areas of high congestion or with minimal cell coverage such as a stadium or an underground train station, carrier Wi-Fi can improve users' connectivity experience and offload traffic.</p> <p>Devices with the carrier Wi-Fi feature automatically connect to configured carrier Wi-Fi networks (networks with a public key certificate). When a user manually disconnects from a carrier Wi-Fi network, the network is denylisted for 24 hours (no autoconnection). Users can manually connect to denylisted networks at any time.</p> <h2 id="implementation">Implementation</h2> <p>Device manufacturers and carriers must do the following to implement carrier Wi-Fi.</p> <h3 id="manufacturers">Manufacturers</h3> <p>For devices running Android 11 and higher, use the <a href="https://developer.android.com/guide/topics/connectivity/wifi-suggest">Wi-Fi suggestion API</a> to add Wi-Fi profiles for each carrier.</p> <p>For devices running Android 10 or lower, add Wi-Fi profiles by configuring the <code translate="no" dir="ltr">carrier_wifi_string_array</code> parameter for each carrier in the <a href="carrier">carrier config manager</a>.</p> <ul> <li>
+<p><code translate="no" dir="ltr">carrier_wifi_string_array</code>:</p> <p>A string array where each string entry is a Base64-encoded Wi-Fi SSID and an EAP type separated by a comma, where the EAP type is an integer (refer to <a href="https://www.iana.org/assignments/eap-numbers/eap-numbers.xhtml">Extensible Authentication Protocol (EAP) Registry</a>). For example, the following configuration is for <em>SOME_SSID_NAME</em> using <strong>EAP-AKA</strong> and <em>Some_Other_SSID</em> using <strong>EAP-SIM</strong>:</p> 
+<pre>config {
+  key: "carrier_wifi_string_array"
+  text_array {
+    item: "U09NRV9TU0lEX05BTUUK,23"
+    item: "U29tZV9PdGhlcl9TU0lECg==,18"
+  }
+}
+</pre>
+</li> </ul> <p>In the <a href="carrier">carrier config manager</a>, configure the following parameters for each carrier:</p> <ul> <li>
+<p><code translate="no" dir="ltr">imsi_key_availability_int</code>:</p> <p>Identifies whether the key used for IMSI encryption is available for WLAN (bit 1 is set), EPDG (bit 0 is set), or both (both bit 0 and bit 1 are set). For example, the following configuration indicates that IMSI encryption is available for WLAN but not for EPDG:</p> 
+<pre>config {
+  key: "imsi_key_availability_int"
+  int_value: 2
+}
+</pre>
+</li> <li>
+<p><code translate="no" dir="ltr">imsi_key_download_url_string</code>:</p> <p>URL from which the proto containing the public key of the carrier used for IMSI encryption is downloaded. For example, the following configuration provides a specific URL:</p> 
+<pre>config {
+  key: "imsi_key_download_url_string"
+  text_value: "https://www.some_company_name.com:5555/some_directory_name/some_filename.json"
+}
+</pre>
+</li> <li>
+<p><code translate="no" dir="ltr">allow_metered_network_for_cert_download_bool</code>: A flag indicating whether to allow the downloading of the public key of the carrier over a metered (cellular) network. If this flag isn't set, a new device with no Wi-Fi connectivity won't be able to connect to the Carrier Wi-Fi network because it won't be allowed to download the key.</p> 
+<pre>config {
+  key: "allow_metered_network_for_cert_download_bool"
+  bool_value: true
+}
+</pre>
+</li> </ul> <h3 id="carriers">Carriers</h3> <p>To implement carrier Wi-Fi, the carrier must enable IMSI privacy protection and provide a public key.</p> <h4 id="imsi">IMSI privacy protection</h4> <p>Android protects the confidentiality of a subscriber's permanent identity (IMSI) using public key cryptography. Android implements the Wireless Broadband Alliance (WBA) specification for <a href="https://wballiance.com/resource/imsi-privacy-protection-for-wi-fi/">IMSI Privacy Protection for Wi-Fi</a>. When IMSI privacy protection is enabled for a connection, the permanent subscriber identity isn't transmitted in the clear over the air.</p> <h5 id="identity-encryption">Permanent identity encryption</h5> <p>The format of the encrypted permanent identity is as follows:</p> <ul> <li>The permanent identity is in the format of <code translate="no" dir="ltr">&lt;EAP-Method&gt;&lt;IMSI&gt;@&lt;NAI realm&gt;</code>.</li> <li>The EAP-Method prefix is a single octet that defines the EAP method that's used for the authentication: <ul> <li>
+<code translate="no" dir="ltr">0</code>: EAP-AKA</li> <li>
+<code translate="no" dir="ltr">1</code>: EAP-SIM</li> <li>
+<code translate="no" dir="ltr">6</code>: EAP-AKA'</li> </ul>
+</li> <li>The NAI realm format is <code translate="no" dir="ltr">wlan.mnc&lt;var&gt;XXX&lt;/var&gt;.mcc&lt;var&gt;YYY&lt;/var&gt;.3gppnetwork.org</code> where <code translate="no" dir="ltr">XXX</code> is replaced with the SIM card's mobile network code (MNC) and <code translate="no" dir="ltr">YYY</code> is replaced with the mobile country code (MCC).</li> <li>The permanent identity is encrypted using an RSA public key provided by the carrier. The public key is included in an <a href="https://tools.ietf.org/html/rfc5280">X.509</a> certificate.</li> <li>The encryption scheme is <a href="https://tools.ietf.org/html/rfc8017#section-7.1">RSAES-OAEP</a> with SHA-256 as the cryptographic hash function. This encryption scheme guarantees a unique cipher text every time the scheme is used, thus avoiding yet another persistent identity that can be trackable.</li> <li>The RSA key length is 2048 bits.</li> <li>The encryption buffer is 256 bytes.</li> <li>The cipher text is encoded with <a href="https://tools.ietf.org/html/rfc4648">Base64</a>.</li> <li>The output encrypted permanent identity length is 344 bytes.</li> </ul> 
+<pre>Encrypted Permanent Identity = Base64(RSAES-OAEP-SHA-256(&lt;EAP-Method&gt;&lt;IMSI&gt;@&lt;NAI Realm&gt;))
+</pre> <h5 id="key-identifier">Key identifier</h5> <p>The key identifier is an optional attribute value pair that the carrier attaches to a certificate to allow the server to locate the proper private key during authentication. An example of a key identifier is <code translate="no" dir="ltr">CertificateSerialNumber=123456</code>. If the key identifier is provided, it's sent in the clear as part of the authentication process.</p> <h5 id="modify">Modifications to SIM-based EAP authentication methods</h5> <p>When IMSI privacy protection is enabled on a connection, the system doesn't send the permanent identity upon receipt of <code translate="no" dir="ltr">EAP-Request/Identity</code>, instead it responds with an anonymous login:</p> 
+<pre>SERVER: EAP-Request/Identity
+UE: EAP-Response/Identity AT_IDENTITY=&lt;prefix&gt;|anonymous@&lt;NAI Realm&gt;
+</pre> <p><code translate="no" dir="ltr">&lt;prefix&gt;</code> is optional. If the <code translate="no" dir="ltr">enable_eap_method_prefix_bool</code> carrier configuration is set to <code translate="no" dir="ltr">true</code>, the first character of the identity (before <code translate="no" dir="ltr">anonymous</code>) notifies the server about the type of EAP method used before the EAP exchange begins.</p> <ul> <li>
+<code translate="no" dir="ltr">0</code>: EAP-AKA</li> <li>
+<code translate="no" dir="ltr">1</code>: EAP-SIM</li> <li>
+<code translate="no" dir="ltr">6</code>: EAP-AKA'</li> </ul> <p>If the carrier configuration is set to <code translate="no" dir="ltr">false</code>, this prefix isn't included in the message.</p> <p>In response, the server sends an <code translate="no" dir="ltr">EAP-Request/AKA-Identity</code> message and the system responds in the following format:</p> 
+<pre>SERVER: EAP-Request/AKA-Identity AT_ANY_ID_REQ
+UE: EAP-Response/AKA-Identity AT_IDENTITY=&lt;prefix&gt;|&lt;Encrypted Permanent Identity&gt;|","|"&lt;attribute&gt;=&lt;value&gt;"
+</pre> <p>The first character of the identity notifies the server either that an encrypted identity is used, or the type of EAP method that is configured:</p> <ul> <li>
+<code translate="no" dir="ltr">\0</code>: Encrypted permanent identity</li> <li>
+<code translate="no" dir="ltr">0</code>: EAP-AKA</li> <li>
+<code translate="no" dir="ltr">1</code>: EAP-SIM</li> <li>
+<code translate="no" dir="ltr">6</code>: EAP-AKA'</li> </ul> <aside class="note"><strong>Note:</strong><span> The master key is generated using the canonical (non-encrypted) form of the permanent identity, not the value of <code translate="no" dir="ltr">AT_IDENTITY</code>.</span></aside> <p>The key identifier attribute value pair is optional and isn't appended to the end of the encrypted permanent identity if not in use.</p> <p>At this point, the server locates the private key from the key identifier (if provided), decrypts the encrypted identity using the carrier private key, and continues the normal EAP flow.</p> <p>Upon successful authentication, the server can provide a fast reauthentication identity or a temporary identity (pseudonym), which is used in subsequent connections. If no temporary identities are provided by the server, the system sends the encrypted identity in the subsequent connection.</p> <h5 id="carrier-cert">Carrier certificate retrieval, expiration, and revocation</h5> <p>If no certificate is installed in the system, the system uses the URL provided in the <code translate="no" dir="ltr">imsi_key_download_url_string</code> carrier configuration to download a certificate using the HTTP GET method. The system uses cellular data only if the <code translate="no" dir="ltr">allow_metered_network_for_cert_download_bool</code> carrier configuration is set to <code translate="no" dir="ltr">true</code>. Otherwise, the system downloads the certificate only when a Wi-Fi connection is available.</p> <aside class="note"><strong>Note:</strong><span> Android supports HTTP GET to download the certificate. HTTP POST is not supported.</span></aside> <p>Certificate expiration is enforced by the system. The system starts attempting to renew certificates 21 days prior to the certificate expiration date, and uses the same URL to download the new certificate.</p> <p>If the server can't decrypt the encrypted identity, the server sends an <code translate="no" dir="ltr">EAP-Request/AKA-Notification</code> message with the <code translate="no" dir="ltr">AT_NOTIFICATION</code> code <code translate="no" dir="ltr">General Failure</code> (16384) to terminate the EAP exchange.</p> <p>If the certificate is revoked or expired, the server sends an <code translate="no" dir="ltr">EAP-Request/AKA-Notification</code> message with the <code translate="no" dir="ltr">AT_NOTIFICATION</code> code <code translate="no" dir="ltr">Certificate Replacement Required</code> (16385) to terminate the EAP exchange. In response, the system applies internal heuristics to determine whether to remove the certificate and attempt to download a new certificate from the same URL.</p> <h4 id="public-key">Provide the public key</h4> <p>Provide a public URL to a server, preferably using HTTP over TLS, that hosts the certificate of the carrier where:</p> <ol> <li>The public key and expiration can be extracted from the certificate.</li> <li>
+<p>The information from the server is in JSON format as follows:</p> 
+<pre>Property: key-identifier
+Type: String
+Encoding: UTF-8
+Description: Specifies an identifier that the carrier would like to attach to the certificate.
+Optional: Yes
+
+Property: certificate
+Property alternative name: public-key
+Type: String
+Encoding: Base64
+Description: The content of the carrier's X.509 certificate.
+Optional: No
+
+Property: key-type
+Type: String
+Encoding: UTF-8
+Description: Specifies the module that will use the key. The value for type must be either WLAN or EPDG.
+Optional: Yes. If the key-type property isn't included, then its value defaults to WLAN.
+</pre> <p>The following is an example of a public key.</p> 
+<pre>{
+"carrier-keys" : [ {
+  "key-identifier" : "CertificateSerialNumber=5xxe06d4",
+  "public-key" : "-----BEGIN CERTIFICATE-----\r\nTIIDRTCCAi2gAwIBAgIEVR4G1DANBgkqhkiG9w0BAQsFADBTMQswCQYDVQQGEwJVUzELMAkGA1UE\r\nCBMCTkExCzAJBgNVBAcTAk5BMQswCQYDVQQKEwJOQTELMAkGA1UECxMCTkExEDAOBgNVBAMTB1Rl\r\nc3RiT6N1/w==\r\n-----END CERTIFICATE-----"
+} ]
+}
+</pre>
+</li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/connect/carrier-wifi" class="_attribution-link">https://source.android.com/docs/core/connect/carrier-wifi</a>
+  </p>
+</div>

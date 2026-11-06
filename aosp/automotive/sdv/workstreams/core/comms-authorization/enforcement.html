@@ -1,0 +1,125 @@
+<h1>Enforcement</h1>  <p>Authorization is a key required component of the software-defined vehicle (SDV) communications stack security model.</p> <p>When authorization is <em>enabled</em>, access is granted only if corresponding permissions allow access.</p> <p>When authorization is <em>disabled</em>, access is granted regardless of the corresponding permissions.</p> <p>SDV authorization enforcement is per VM and controls authorization decisions performed on a local VM. Given the distributed nature of SDV architecture, we recommend syncing the authorization enforcement configuration among all VMs in the mesh network.</p> <p>SDV authorization enforcement is applied to all SDV platforms: core, IVI, and legacy IVI.</p> <h2 id="user-build">User build</h2> <p>SDV authorization is enforced in the user build and can't be disabled.</p> <p>Properties that are used to control authorization enforcement are ignored.</p> <h2 id="non-user-build">Non-user builds</h2> <p>Enforcement is enabled by default.</p> <p>For development purpose, you might want to enable or disable enforcement on non-user builds.</p> <h3 id="system-property">System property</h3> <p><code translate="no" dir="ltr">sdv.authz.enable</code> is a system property that controls authorization enforcement on non-user builds.</p> <p>Change this property at run time to change authorization enforcement. Use <code translate="no" dir="ltr">disabled</code> or <code translate="no" dir="ltr">permissions_only</code>:</p> 
+<pre>(root) setprop sdv.authz.enable disabled
+(root) setprop sdv.authz.enable permissions_only
+</pre> <p>This system property isn't persistent, so authorization enforcement resets to the default value after VM reboot.</p> <aside class="note"><strong>Note:</strong><span> For backward compatibility and to ease the migration from access control lists (ACLs), additional values are supported: <code translate="no" dir="ltr">acls_only</code>, <code translate="no" dir="ltr">lenient</code>, and <code translate="no" dir="ltr">strict</code>.</span></aside><aside class="note"><strong>Note:</strong><span> For SDV legacy IVI (that is, Android 15) use the <code translate="no" dir="ltr">vendor.sdv.authz.enable</code> system property instead.</span></aside> <h3 id="boot-time-system-property">Boot time system property</h3> <p>Controlling the system property at run time can introduce race conditions into the system, so it's important to control authorization at boot time before starting any agents and third-party services.</p> <p><code translate="no" dir="ltr">ro.boot.sdv.authz.enable</code> is a boolean boot system property that is used to set the <code translate="no" dir="ltr">sdv.authz.enable</code> system property at the beginning of the SDV boot.</p> <p>After boot, you still can change the <code translate="no" dir="ltr">sdv.authz.enable</code> system property and thus change authorization enforcement.</p> <p>The system property isn't global across all VMs; it affects only a specific VM. However, permissions are global. Enabling the system property on some VMs while disabling it on others can result in split enforcement, where enforcement occurs on only some VMs. This can lead to unexpected behavior.</p> <p>You can set the <code translate="no" dir="ltr">ro.boot.sdv.authz.enable</code> system property using the bootconfig or the kernel cmdline <a href="../../../../../core/architecture/bootloader/implementing-bootconfig"><code translate="no" dir="ltr">ro-boot-property</code></a>.</p> <aside class="note"><strong>Note:</strong><span> For the SDV legacy IVI use the same boot system property.</span></aside> <h3 id="test-support">Test support</h3> <p>Use the <code translate="no" dir="ltr">atest</code> framework to run a command to prepare a VM for the test, and then run your test and clean up. You can take advance of the <code translate="no" dir="ltr">atest</code> framework to control authorization enforcement for your integration and e2e tests.</p> <p>Use <code translate="no" dir="ltr">AndroidTest.xml</code> to configure the setup, assigning proper system property value.</p> <p>Use <code translate="no" dir="ltr">authz_enforcement_flag_disabled_config_template.xml</code> for Rust targets:</p> 
+<pre>&lt;configuration description="Config to run {MODULE} device tests."&gt;
+
+    {EXTRA_CONFIGS}
+
+    &lt;!-- NOTE: To run tests using this template in a local dev env, use:
+
+         NOTIFY_AS_NATIVE=&lt;Test device serial #&gt; atest &lt;test target&gt;
+
+         For example,
+           NOTIFY_AS_NATIVE=0.0.0.0:6520 atest sdv_core_middleware_unit_comms_rs_sdk_test
+    --&gt;
+    &lt;target_preparer class="com.android.tradefed.targetprep.DeviceSetup"&gt;
+        &lt;!-- Needed to prevent DeviceSetup from trying to set device features,
+             unsupported on minimal SDV device. --&gt;
+        &lt;option name="force-skip-settings" value="true" /&gt;
+        &lt;!-- Ensure authz is set to "disabled" for this test --&gt;
+        &lt;option name="set-property" key="sdv.authz.enable" value="disabled" /&gt;
+        &lt;!-- Restore default authz setting on teardown --&gt;
+        &lt;option name="restore-properties" value="true" /&gt;
+        &lt;!-- Needed to prevent DeviceSetup from trying to list device features,
+             unsupported on minimal SDV device. --&gt;
+        &lt;option name="screen-always-on" value="IGNORE" /&gt;
+        &lt;!-- Add this line to disable the external storage space check --&gt;
+        &lt;option name="min-external-storage-kb" value="0" /&gt;
+    &lt;/target_preparer&gt;
+
+    &lt;target_preparer class="com.android.tradefed.targetprep.PushFilePreparer"&gt;
+        &lt;option name="cleanup" value="true" /&gt;
+        &lt;option name="push" value="{MODULE}-&gt;/data/local/tmp/{MODULE}" /&gt;
+    &lt;/target_preparer&gt;
+
+    &lt;test class="com.android.tradefed.testtype.rust.RustBinaryTest" &gt;
+        &lt;option name="test-device-path" value="/data/local/tmp" /&gt;
+        &lt;option name="module-name" value="{MODULE}" /&gt;
+    &lt;/test&gt;
+
+&lt;/configuration&gt;
+</pre> <p>Use <code translate="no" dir="ltr">authz_enforcement_flag_disabled_gtest_config_template.xml</code> for C++ targets:</p> 
+<pre>&lt;configuration description="Config to run {MODULE} device tests."&gt;
+
+    {EXTRA_CONFIGS}
+
+    &lt;!-- NOTE: To run tests using this template in a local dev env, use:
+        NOTIFY_AS_NATIVE=&lt;Test device serial #&gt; atest &lt;test target&gt;
+    --&gt;
+    &lt;target_preparer class="com.android.tradefed.targetprep.DeviceSetup"&gt;
+        &lt;!-- Needed to prevent DeviceSetup from trying to set device features,
+             unsupported on minimal SDV device. --&gt;
+        &lt;option name="force-skip-settings" value="true" /&gt;
+        &lt;!-- Ensure authz is set to "disabled" for this test --&gt;
+        &lt;option name="set-property" key="sdv.authz.enable" value="disabled" /&gt;
+        &lt;!-- Restore default authz setting on teardown --&gt;
+        &lt;option name="restore-properties" value="true" /&gt;
+        &lt;!-- Needed to prevent DeviceSetup from trying to list device features,
+             unsupported on minimal SDV device. --&gt;
+        &lt;option name="screen-always-on" value="IGNORE" /&gt;
+        &lt;!-- Add this line to disable the external storage space check --&gt;
+        &lt;option name="min-external-storage-kb" value="0" /&gt;
+    &lt;/target_preparer&gt;
+
+    &lt;target_preparer class="com.android.tradefed.targetprep.PushFilePreparer"&gt;
+        &lt;option name="cleanup" value="true" /&gt;
+        &lt;option name="push" value="{MODULE}-&gt;/data/local/tmp/{MODULE}" /&gt;
+    &lt;/target_preparer&gt;
+
+    &lt;test class="com.android.tradefed.testtype.GTest" &gt;
+        &lt;option name="native-test-device-path" value="/data/local/tmp" /&gt;
+        &lt;option name="module-name" value="{MODULE}" /&gt;
+    &lt;/test&gt;
+
+&lt;/configuration&gt;
+</pre> <p>Use <code translate="no" dir="ltr">Android.bp</code> to declare Rust targets, C++ targets, and file groups.</p> 
+<pre>filegroup {
+    name: "sdv_authz_enforcement_flag_disabled_config_template",
+    srcs: ["test_configs/authz_enforcement_flag_disabled_config_template.xml"],
+}
+
+rust_test {
+    name: "sdv_authz_enforcement_flag_disabled_test",
+    srcs: ["tests/authz_enforcement_flag_disabled_test.rs"],
+    defaults: ["sdv_authz_enforcement_flag@rust_defaults"],
+    test_suites: [
+        "automotive-sdv-tests",
+        "general-tests",
+    ],
+    test_options: {
+        unit_test: false,
+    },
+    require_root: true,
+    auto_gen_config: true,
+    test_config_template: ":sdv_authz_enforcement_flag_disabled_config_template",
+    compile_multilib: "first",
+    rustlibs: [
+        "libsdv_authz_enforcement_flag",
+    ],
+}
+
+filegroup {
+    name: "sdv_authz_enforcement_flag_disabled_gtest_config_template",
+    srcs: ["authz_enforcement_flag_disabled_gtest_config_template.xml"],
+}
+
+cc_test {
+    name: "sdv_comms_cpp_sdk_tests",
+    srcs: ["cpp/**/*_test.cpp"],
+    defaults: ["sdv_comms_cpp_sdk_test_defaults"],
+    test_options: {
+        unit_test: true,
+    },
+    test_config_template: ":sdv_authz_enforcement_flag_disabled_gtest_config_template",
+    test_suites: [
+        "automotive-sdv-tests",
+        "general-tests",
+    ],
+}
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/core/comms-authorization/enforcement" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/core/comms-authorization/enforcement</a>
+  </p>
+</div>

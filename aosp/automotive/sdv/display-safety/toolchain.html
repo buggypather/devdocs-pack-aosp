@@ -1,0 +1,103 @@
+<h1>Safety design toolchain</h1>  <p>Use the safety design toolchain to deliver a safety monitor solution generated from a Figma design document. Use this series of tools in sequence.</p> <p>The safety design compiler produces safety artifacts to drive subsequent code generation for building the safety monitor. The separation between design compilation and code generation allows the code generator to achieve an ISO-26262 rating of TCL-3.</p> <p width="800" class="android-image-dark-theme-background"><img src="https://source.android.com/static/docs/automotive/sdv/images/display-safety-02.png" alt="Safety design toolchain"> </p> <p><strong>Figure 1.</strong> Safety design toolchain.</p> <p>After the compiler generates artifacts, the toolchain creates a report that an OEM safety engineer can inspect to validate the artifacts generated from the Figma design.</p> <p class="android-image-dark-theme-background"><img src="https://source.android.com/static/docs/automotive/sdv/images/toolchain-02.png" alt="Safety design toolchain workflow"> </p> <p><strong>Figure 2.</strong> Safety design toolchain workflow.</p> <h2 id="design-compiler-inputs">Design compiler inputs</h2> <p>The serialized design document represents a UI design imported from a design tool and processed with a toolkit schema. The file contains this information parsed from the design:</p> <ul> <li>Complete node tree of a design</li> <li>Images and components</li> <li>Metadata such as name, version, and last modification date</li> </ul> <p>The root nodes of the design must be defined in the nodes list and must be the root nodes for the safety-relevant elements identified in the design.</p> <p>This file integrates with Android Automotive OS to render the instrument cluster and displays the non-safety-relevant elements with a high availability renderer (HAR) running on SDV Media as an overlay to display the safety-relevant elements to the user.</p> <p>The design compiler uses DesignCompose customizations to generate output to toggle the visibility of safety-critical elements in the design. The design is rendered headless with Impeller. Between customization changes, the system issues screenshot commands to the rendering backend to generate image artifacts.</p> <p class="android-image-dark-theme-background"><img src="https://source.android.com/static/docs/automotive/sdv/images/toolchain-03.png" alt="Sample Figma design file to build the safety monitor"> </p> <p><strong>Figure 3.</strong> Sample Figma design file to build safety monitor.</p> <h2 id="output-directory">Output directory</h2> <p>This is the location on the local file system where the compiler stores the generated artifacts.</p> <h2 id="json-config">JSON configuration file</h2> <p>Most often, an OEM safety engineer authors the JSON configuration file, which contains metadata that captures the vehicle safety-relevant information not captured in a UI design. This file contains this data:</p> <ul> <li><p><strong>Design element designated as root of the safety-relevant display.</strong> This design element is sized to the vehicle display. Size must have the same resolution as the display. All safety-relevant elements must be descendants of this element. They needn't be direct descendants, but nested in intermediate nodes. This root is the root node object, and its name must match a node in the design document.</p></li> <li><p><strong>Target display for the design.</strong> To support UIs with elements across multiple displays, the config file can specify more than one design, each design targeted to be displayed on a separate screen.</p></li> <li>
+<p><strong>Dictionary of vehicle bus signal names to associated UI elements.</strong> Keys and values of this dictionary are:</p> <ul> <li><p><strong>Keys:</strong> Vehicle bus signal name to contain meaning so that when this signal is active, the associated UI element is shown. When the signal is inactive, the associated UI element isn't shown.</p></li> <li><p><strong>Values:</strong> Figma node ID for the safety-relevant element governed by the vehicle bus signal.</p></li> </ul>
+</li> </ul> <p>See this sample JSON configuration file:</p> 
+<pre>{
+  "documents" : [
+    {
+    "rootnode" : "#Stage",
+    "display_id" : 1,
+    "document_id": "GLJJrR1JI4HVEjL1qB40zq",
+    "states" : {
+      "abs": "#cluster/telltale/abs",
+      "airbag": "#cluster/telltale/airbag",
+      "low_tire_pressure": "#cluster/telltale/low-tire-pressure",
+      "brake": "#cluster/telltale/brake",
+      "traction": "#cluster/telltale/traction",
+      "lowbeam": "#cluster/telltale/lowbeam",
+      "hibeam": "#cluster/telltale/hibeam",
+      "park_lights": "#cluster/telltale/park-lights",
+      "fog_lights": "#cluster/telltale/fog-lights",
+      "seatbelts" : "#cluster/telltale/no-seatbelt"
+    }
+    }
+  ]
+  ,
+  "displays": [
+    {
+      "id": 1,
+      "width": 1920,
+      "height": 720
+    }
+  ]
+ }
+</pre> <h2 id="run-design-compiler">Run the design compiler</h2> <p>To run the design compiler:</p> 
+<pre>/path/to/safety-design-compiler -c path/to/&lt;input-file&gt;.json
+-o path/to/output_directory
+</pre> <p>Design compiler inputs are described in this table:</p> <table> <th>Input</th> <th>Short</th> <th>Type</th> <th>Description</th> <tr> <td>Config</td> <td><code translate="no" dir="ltr">-c</code></td> <td>string</td> <td>Path at which to save safety config JSON file.</td> </tr> <tr> <td>Output</td> <td><code translate="no" dir="ltr">-o</code></td> <td>string</td> <td>Path at which to save generated artifacts.</td> </tr> </table> <h2 id="design-compiler-output">Design compiler output</h2> <p>The design compiler generates and saves output to the output directory specified when you invoke the compiler tool. This output generates the header files used to define the runtime pixel tests in the safety monitor, and to generate the human-readable report. Design compiler output is provided in a Zip that contains:</p> <ul> <li><p><code translate="no" dir="ltr">data.json</code> file metadata file at the root of the exported assets to describe the structure of the exported design. All paths in the file are relative to this file.</p></li> <li><p>Series of isolated UI element images to show safety-relevant UI elements in the active state that are used during subsequent code generation. The alpha channel in these images carries pixel information that doesn't impact safety.</p></li> <li><p>Series of full UI images to show safety-relevant UI elements in active and inactive states for use while testing the generated code.</p></li> <li><p>Updated version of the serialized Figma document consumed by the compiler as input. The HAR marks and updates the telltale nodes specified in <code translate="no" dir="ltr">Config.json</code> for further processing by setting the <code translate="no" dir="ltr">RenderOptions::PixelPerfect</code> flag in the toolkit schema.</p></li> </ul> <p>This figure displays a Figma design file.</p> <p class="android-image-dark-theme-background"><img src="https://source.android.com/static/docs/automotive/sdv/images/toolchain-04.png" alt="Zip file contents"> </p> <p><strong>Figure 4.</strong> Zip file contents.</p> <h2 id="create-input">Create the input file</h2> <p>Create a <code translate="no" dir="ltr">data.json</code> input file for the safety monitor generator. Output is structured as an array to contain dimensional data and an image link for each safety-relevant display element. The structure of this output file is described in this table:</p> <table> <thead> <tr> <th width="25%">Element</th> <th width="15%">Type</th> <th width="15%">Units</th> <th>Description</th> </tr> </thead> <tbody> <tr> <td><code translate="no" dir="ltr">static_ui_elements</code></td> <td>Dictionary</td> <td>N/A</td> <td>Structure containing metadata for all safety-relevant UI elements extracted from Figma doc.</td> </tr> <tr> <td><code translate="no" dir="ltr">x</code></td> <td>int</td> <td>pixels</td> <td>Horizontal coordinate of safety-relevant element.</td> </tr> <tr> <td><code translate="no" dir="ltr">y</code></td> <td>int</td> <td>pixels</td> <td>Vertical coordinate of safety-relevant element.</td> </tr> <tr> <td><code translate="no" dir="ltr">width</code></td> <td>int</td> <td>pixels</td> <td>The width of safety-relevant element</td> </tr> <tr> <td><code translate="no" dir="ltr">height</code></td> <td>int</td> <td>pixels</td> <td>Height of safety-relevant element.</td> </tr> <tr> <td><code translate="no" dir="ltr">name</code></td> <td>string</td> <td>N/A</td> <td>Name of safety-relevant UI element as extracted from the Figma doc. Represents relative path to images generated with this element.</td> </tr> <tr> <td><code translate="no" dir="ltr">screen</code></td> <td></td> <td></td> <td>Dictionary to describe the screen targeted by the UI.</td> </tr> <tr> <td><code translate="no" dir="ltr">width</code></td> <td>int</td> <td>pixels</td> <td>Width of Figma doc UI.</td> </tr> <tr> <td><code translate="no" dir="ltr">height</code></td> <td>int</td> <td>pixels</td> <td>Height of Figma doc UI.</td> </tr> <tr> <td><code translate="no" dir="ltr">build</code></td> <td></td> <td></td> <td>Dictionary containing build information for this invocation of the design compiler.</td> </tr> <tr> <td><code translate="no" dir="ltr">figma_document_id</code></td> <td>string</td> <td>N/A</td> <td>ID of Figma doc used to generate set of artifacts.</td> </tr> <tr> <td><code translate="no" dir="ltr">design_compiler_version</code></td> <td>string</td> <td>N/A</td> <td>Version of Design Compiler used to generate set of artifacts.</td> </tr> </tbody> </table> <p>This section provides a sample of a generated <code translate="no" dir="ltr">data.json</code> file:</p> 
+<pre>{
+ "static_ui_elements": [
+   {
+     "x": 71,
+     "y": 663,
+     "width": 38,
+     "height": 47,
+     "name": "cluster/telltale/no-seatbelt"
+   },
+   {
+     "x": 149,
+     "y": 667,
+     "width": 40,
+     "height": 39,
+     "name": "cluster/telltale/low-tire-pressure"
+   },
+      {
+     "x": 1727,
+     "y": 676,
+     "width": 43,
+     "height": 27,
+     "name": "cluster/telltale/hibeam"
+   },
+   {
+     "x": 1810,
+     "y": 675,
+     "width": 43,
+     "height": 30,
+     "name": "cluster/telltale/lowbeam"
+   },
+  ...
+  ...
+ ],
+ "screen": {
+   "width": 1920,
+   "height": 720
+ },
+ "build": {
+   "figma_document_id": "taQnsdPS96wZY8dB1TbzOH",
+   "design_compiler_version": "0.1.0"
+ }
+}
+</pre> <h2 id="exported-design-images">Exported design images</h2> <p>The system renders and saves images of the safety-relevant nodes in a nested directory structure based on their naming in the serialized design document.</p> <p class="android-image-dark-theme-background"><img src="https://source.android.com/static/docs/automotive/sdv/images/toolchain-05.png" alt="Directory structure of generated verification images"> </p> <p><strong>Figure 5.</strong> Verification images.</p> <p>The system generates safety-relevant element information images for each specified telltale. These images contain the expected pixels of the safety-critical element when it's visible on-screen. The safety monitor might ignore the transparent pixels in these images for the purposes of run-time pixel tests.</p> <p>The system also generates UI testing and verification images. It renders screenshots of the full UI with each individual telltale and provides them to generate a human-readable report so that safety engineers can review and approve the safety configuration.</p> <p>You can also use these images for subsequent testing of the safety monitor. The system generates verification images for all telltales in the On and Off states.</p> <p>These images illustrate the design with all safety-relevant elements, active and inactive.</p> <p><img src="https://source.android.com/static/docs/automotive/sdv/images/toolchain-06.png" alt="Active and inactive safety-relevant elements" class="attempt-left android-image-dark-theme-background"> <img src="https://source.android.com/static/docs/automotive/sdv/images/toolchain-07.png" alt="Active and inactive safety-relevant elements" class="attempt-right android-image-dark-theme-background"> </p> <p><strong>Figure 6</strong> and <strong>Figure 7.</strong> Active and inactive safety-relevant elements.</p> <p>Figure 8 shows the safety-relevant information image for the no-seatbelt telltale:</p> <p><img src="https://source.android.com/static/docs/automotive/sdv/images/toolchain-08.png" alt="Safety-relevant information for the no-seatbelt telltale" width="100" class="android-image-dark-theme-background"> </p> <p><strong>Figure 8.</strong> No-seatbelt telltale.</p> <p>Figure 9 shows the UI testing and verification image for the telltale.</p> <p class="android-image-dark-theme-background"><img src="https://source.android.com/static/docs/automotive/sdv/images/toolchain-09.png" alt="UI testing and verification for the telltale"> </p> <p><strong>Figure 9.</strong> UI testing and verification for the telltale.</p> <p>The system generates verification images for every element in the compiled artifact folder. The system processes these images in the code generation step and adds them to a header file to be used for runtime pixel tests in the safety monitor.</p> <h2 id="human-readable-report-generator">Human-readable report generator</h2> <p>After you generate the artifacts from a Figma document, you can generate a human-readable report. The report generator is located in <code translate="no" dir="ltr">utils/human-readable-report-generator</code>.</p> <p>The system summarizes artifacts of the safety-relevant nodes generated by the Design Compiler in an HTML file, including a screenshot of the UI with the node active. You can review the compiled artifacts before building the safety monitor.</p> <p>Run the report generator from the command line:</p> 
+<pre>cargo run --bin human-readable-report-generator -- -d /path/to/data.json
+-o /path/to/output_folder
+</pre> <p>This table describes human-readable report generator inputs.</p> <table> <th>Input</th> <th>Short</th> <th>Type</th> <th>Description</th> <tr> <td><code translate="no" dir="ltr">data_folder</code></td> <td><code translate="no" dir="ltr">-d</code></td> <td>string</td> <td>Location of <code translate="no" dir="ltr">data.json</code> generated by safety compiler.</td> </tr> <tr> <td><code translate="no" dir="ltr">output_path</code></td> <td><code translate="no" dir="ltr">-o</code></td> <td>string</td> <td>Path to save generated report.</td> </tr> </table> <h2 id="safety-approval-tool">Safety approval tool</h2> <p>To generate an approval token, after reviewing the human-readable report a safety engineer can run the safety approval script against the <code translate="no" dir="ltr">output.json</code>. This tool is also located in <code translate="no" dir="ltr">utils/human-readable-report-generator</code>. For example:</p> 
+<pre>cargo run --bin approve-hrr -- -f /path/to/compiler_inspection_output.html -n
+"Your Name" -e youremail@domain.com -o output/path
+</pre> <p class="android-image-dark-theme-background"><img src="https://source.android.com/static/docs/automotive/sdv/images/toolchain-10.png" alt="Sample HTML report for review"> </p> <p><strong>Figure 10.</strong> Sample HTML report.</p> <p>This section describes safety approval tool inputs.</p> <table> <th>Input</th> <th>Short</th> <th>Type</th> <th>Description</th> <tr> <td><code translate="no" dir="ltr">file_path</code></td> <td><code translate="no" dir="ltr">-f</code></td> <td>string</td> <td>File path to human readable report.</td> </tr> <tr> <td><code translate="no" dir="ltr">approver_name</code></td> <td><code translate="no" dir="ltr">-n</code></td> <td>string</td> <td>Name of approving engineer.</td> </tr> <tr> <td><code translate="no" dir="ltr">approver_email</code></td> <td><code translate="no" dir="ltr">-e</code></td> <td>string</td> <td>Email address of approving engineer.</td> </tr> <tr> <td><code translate="no" dir="ltr">output_path</code></td> <td><code translate="no" dir="ltr">-o</code></td> <td>string</td> <td>Destination for generated output.</td> </tr> </table> <p>This section shows a sample of <code translate="no" dir="ltr">approval_file.json</code>.</p> 
+<pre>{
+    "approver_name": //Name of the approver
+    "approver_email": //Email of the approver
+    "file_hash": //SHA-256 hash generated against the human readable report.
+}
+</pre> <h2 id="reference-safety-monitor">Reference safety monitor</h2> <p>The reference safety monitor is a Rust-based service located in <code translate="no" dir="ltr">reference/safety-monitor</code>. The monitor uses the artifacts generated by the Design Compiler to monitor the state of the system to ensure display safety compliance.</p> <p>The monitor runs as a standalone binary (<code translate="no" dir="ltr">har_safety_monitor</code>) and takes the path to the <code translate="no" dir="ltr">data.json</code> file and the base path for artifacts as arguments.</p> 
+<pre>/path/to/har_safety_monitor --data-json-path /path/to/data.json
+--artifact-base-path /path/to/artifacts
+</pre> <p>The monitor performs the following tasks:</p> <ul> <li>
+<strong>Artifact loading:</strong> Loads <code translate="no" dir="ltr">data.json</code> to identify safety-relevant UI elements and their expected positions and dimensions.</li> <li>
+<strong>Golden image comparison:</strong> Compares the current screen contents with golden images of safety-critical elements generated by the compiler.</li> <li>
+<strong>Vehicle data integration:</strong> Connects to vehicle data sources to determine the expected state of each telltale.</li> <li>
+<strong>Mismatch detection:</strong> Logs an error if there is a mismatch between what is expected based on vehicle data and what is visible on screen.</li> </ul> <p>The safety monitor is designed to be built and deployed as part of the system image, typically within a dedicated APEX.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/display-safety/toolchain" class="_attribution-link">https://source.android.com/docs/automotive/sdv/display-safety/toolchain</a>
+  </p>
+</div>

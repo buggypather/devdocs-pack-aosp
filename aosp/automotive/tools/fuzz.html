@@ -1,0 +1,65 @@
+<h1>Enable fuzzers on AAOS devices</h1>  <p>A fuzz test is widely adopted by C++ developers to find security-related bugs. This page describes the categories of AAOS (Android Automotive OS) fuzzers and how to run them on AAOS-specific target devices.</p> <h2 id="existing-fuzz">Existing AAOS fuzzers</h2> <p>Create fuzzers on AAOS targets the same way that you would on an Android Platform. See fuzzing setup and build instructions on the <a href="../../security/test/libfuzzer">Fuzzing with <code translate="no" dir="ltr">libFuzzer</code></a> page.</p> <p>However, the execution path of the fuzz target on AAOS is different from that on Android phone devices. Hence, it is necessary to run specific fuzzers on AAOS devices to ensure that there are no security issues.</p> <p>AAOS specific fuzzers are divided into the following categories:</p> <ul> <li><p>External View System (EVS) fuzzers: to fuzz the external camera management system. See <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/services/Car/cpp/evs/manager/1.1/test/fuzzer/">sample code for EVS fuzzers</a> for more details.</p></li> <li><p>Computepipe fuzzers: to fuzz machine learning computepipe systems. See <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/services/Car/cpp/computepipe/tests/fuzz/">sample code for Computepipe fuzzers </a> for more details.</p></li> <li><p>Other fuzzers: to fuzz AAOS libraries. See <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/Bluetooth/system/embdrv/sbc/decoder/sbcdecoder_fuzzer.c">sample code for the sbcdecoder fuzzer</a> for more details.</p></li> </ul> <p>See the following table for a list of AAOS specific fuzzers:</p> <table> <tr> <th>EVS fuzzers</th> <th>Computepipe fuzzers</th> <th>Other fuzzers</th> </tr> <tr> <td><code translate="no" dir="ltr">evs_halcamera_fuzzer</code></td> <td><code translate="no" dir="ltr">computepipe _semantic_manager_fuzzer</code></td> <td><code translate="no" dir="ltr">sbcdecoder_fuzzer</code></td> </tr> <tr> <td><code translate="no" dir="ltr">evs_virtual_camera_fuzzer</code></td> <td><code translate="no" dir="ltr">computepipe _pixel_mem_handle_fuzzer</code></td> <td></td> </tr> <tr> <td><code translate="no" dir="ltr">evs_haldisplay_fuzzer</code></td> <td><code translate="no" dir="ltr">computepipe _pixel_stream_manager_fuzzer</code></td> <td></td> </tr> <tr> <td><code translate="no" dir="ltr">evs_enumerator_fuzzer</code></td> <td><code translate="no" dir="ltr">grpc_graph_fuzzer</code></td> <td></td> </tr> <tr> <td></td> <td><code translate="no" dir="ltr">local _prebuild_graph_fuzzer</code></td> <td></td> </tr> </table> <h2 id="compile-fuzz">Compile an AAOS fuzzer</h2> <p>We recommend using a <a href="../../security/test/hwasan">HWASAN</a> device for running fuzzers. However, when not using a HWASAN device, follow these steps to compile and flash a HWASAN image locally:</p> <ol> <li>
+<p>Run the following commands to compile the <code translate="no" dir="ltr">hwasan</code> build and flash the build to the car system.</p> 
+<pre>source build/envsetup.sh
+lunch &lt;car target&gt;
+SANITIZE_TARGET=hwaddress m
+fastboot flashall # this will automatically flash the local built image to device
+</pre>
+</li> <li>
+<p>Compile the fuzzer for EVS manager:</p> 
+<pre>mmma packages/services/Car/cpp/evs/manager/1.1/test/fuzzer/
+</pre>
+</li> </ol> <h2 id="run-fuzz">Run an AAOS fuzzer</h2> <p>Once configured, follow these steps to run a fuzzer:</p> <ol> <li>
+<p>Run the following commands to prepare syncing fuzzers to the AAOS system:</p> 
+<pre>adb root;
+adb remount;
+adb reboot;
+adb root;
+adb remount
+</pre>
+</li> <li><p>If you don't have a folder named /data/fuzzer on your device, create one.</p></li> <li>
+<p>Go to where you downloaded and unzipped the build, and from there, run the following command to push the fuzzer on the device.</p> 
+<pre>adb sync data
+</pre>
+</li> <li>
+<p>To push the testcase on the device, run the following:</p> 
+<pre>adb push testcase /data/fuzzer/testcase
+</pre>
+</li> <li>
+<p>Run the fuzzer with the following command:</p> 
+<pre>adb shell /data/fuzzer/evs_fuzzer /data/fuzzer/testcase
+</pre>
+</li> <li>
+<p>Verify the output.</p> <p>A successful run generates output similar to the following example:</p> 
+<pre>INFO: Seed: 1902496153
+INFO: Loaded 4 modules (31463 inline 8-bit counters): 15646 [0x7afd3ddb80, 0x7afd3e189e), 15784 [0x7afd7fbbf0, 0x7afd7ff998), 27 [0x7afd618328, 0x7afd618343), 6 [0x63e95aece8, 0x63e95aecee),
+INFO: Loaded 4 PC tables (31463 PCs): 15646 [0x7afd3e18a0,0x7afd41ea80), 15784 [0x7afd7ff998,0x7afd83d418), 27 [0x7afd618348,0x7afd6184f8), 6 [0x63e95aecf0,0x63e95aed50),
+INFO: 0 files found in /data/fuzz/bot/inputs/fuzzer-testcases-disk/temp-671/new
+INFO: 54 files found in /data/fuzz/bot/inputs/data-bundles/android_auto_libcrypto_utils_fuzzer
+INFO: -max_len is not provided; libFuzzer will not generate inputs larger than 1048576 bytes
+INFO: seed corpus: files: 54 min: 1b max: 4194301b total: 6336542b rss: 28Mb
+#55 INITED cov: 71 ft: 94 corp: 6/1032Kb exec/s: 0 rss: 33Mb
+#79 REDUCE cov: 71 ft: 94 corp: 6/1019Kb lim: 1048576 exec/s: 0 rss: 33Mb L: 1036131/1036131 MS: 4 CMP-ChangeASCIIInt-CopyPart-EraseBytes- DE: "\x00\x00\x00\x00"-
+#83 REDUCE cov: 71 ft: 94 corp: 6/686Kb lim: 1048576 exec/s: 0 rss: 33Mb L: 694616/694616 MS: 4 ChangeASCIIInt-ChangeASCIIInt-ChangeBinInt-CrossOver-
+#104 REDUCE cov: 71 ft: 94 corp: 6/591Kb lim: 1048576 exec/s: 0 rss: 33Mb L: 597426/597426 MS: 1 EraseBytes-
+#192 REDUCE cov: 71 ft: 94 corp: 6/499Kb lim: 1048576 exec/s: 0 rss: 33Mb L: 503742/503742 MS: 3 PersAutoDict-ChangeByte-EraseBytes- DE: "\x00\x00\x00\x00"-
+#219 REDUCE cov: 71 ft: 94 corp: 6/292Kb lim: 1048576 exec/s: 0 rss: 33Mb L: 290962/290962 MS: 2 CopyPart-EraseBytes-
+#241 REDUCE cov: 71 ft: 94 corp: 6/226Kb lim: 1048576 exec/s: 0 rss: 33Mb L: 223787/223787 MS: 2 CopyPart-EraseBytes-
+#269 REDUCE cov: 71 ft: 94 corp: 6/152Kb lim: 1048576 exec/s: 0 rss: 33Mb L: 148467/148467 MS: 3 InsertRepeatedBytes-PersAutoDict-EraseBytes- DE: "\x00\x00\x00\x00"-
+#300 REDUCE cov: 71 ft: 94 corp: 6/83Kb lim: 1048576 exec/s: 0 rss: 33Mb L: 77320/77320 MS: 1 EraseBytes-
+#393 REDUCE cov: 71 ft: 94 cor`p: 6/80Kb lim: 1048576 exec/s: 0 rss: 33Mb L: 73802/73802 MS: 3 InsertRepeatedBytes-P
+</pre> <p>A crash or a failed run generates an output similar to the following example:</p> 
+<pre>HWAddressSanitizer: tag-mismatch on address 0x0075e8a643d0 at pc
+0x0075e8a5d988 WRITE of size 8 at 0x0075e8a643d0 tags: 5c/00 (ptr/mem) in
+thread T0 #0 0x75e8a5d984 (/system/lib64/libnetd_client.so+0x3984) #1
+0x75da484788 (/data/fuzzer/lib/libc.so+0x49788) #2 0x75da52dae8
+……
+00000075e8a5d988 SUMMARY: HWAddressSanitizer: tag-mismatch
+(/system/lib64/libnetd_client.so+0x3984)
+</pre>
+</li> </ol> <p>See the <a href="https://cve.mitre.org/">CVE</a> site for information on detected security vulnerabilities.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/tools/fuzz" class="_attribution-link">https://source.android.com/docs/automotive/tools/fuzz</a>
+  </p>
+</div>

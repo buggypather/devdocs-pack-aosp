@@ -1,0 +1,46 @@
+<h1>Integrate unbundled apps</h1>  <p>Apps that include Dialer, Media, Car UI Library, and SMS are considered <em>unbundled apps</em> (that is, they are unbundled from the Android platform). Such apps include the logic for receiving data from the phone companion app and UX on the car side, including settings for association and feature enrollment. APKs built from unbundled code work with several versions of the platform.</p> <h2 id="check-out">Check out the code</h2> <p>To check out the unbundled code, run the following:</p> 
+<pre>repo init -u https://android.googlesource.com/platform/manifest -b ub-automotive-master
+repo sync -cq -j4</pre> <p>To learn more about working with AOSP source code, see <a href="../../setup/download#initialize_the_repo_client">Initialize the Repo client</a>.</p> <h2 id="build">Build the code</h2> <p>You can build the code using Android Studio or from the command line.</p> <h3 id="studio">Android Studio</h3> <p>To build the code in Android Studio:</p> <ol> <li>
+<p>In Android Studio, import the following build file:</p> 
+<pre>packages/apps/Car/libs/aaos-apps-gradle-project/build.gradle
+</pre>
+</li> <li>
+<p>Ensure the Gradle JDK is set to Version 11 or higher:</p> <p><img src="https://source.android.com/static/docs/automotive/images/apps_01.png" alt="Version 11" class="screenshot android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> Set Gradle JDK to Version 11 in Android Studio.</p>
+</li> </ol> <h3 id="cli">Command line</h3> <p>To build the code from the command line:</p> <ol> <li>
+<p>Set the Android SDK location using one of the following methods:</p> <ul> <li>
+<p>Create <code translate="no" dir="ltr">packages/apps/Car/libs/aaos-apps-gradle-project/local.properties</code> and then set the <code translate="no" dir="ltr">sdk.dir</code> property it contains. Android Studio can do this automatically when opening a project. For example, use <code translate="no" dir="ltr">sdk.dir=/Users/MY-USERNAME/Library/Android/sdk</code>.</p> <p><em>or</em></p>
+</li> <li><p>Set the <code translate="no" dir="ltr">ANDROID_SDK_ROOT</code> environment variable with the path to the Android SDK.</p></li> </ul>
+</li> <li><p>Open a command prompt or a shell window.</p></li> <li><p>Go to <code translate="no" dir="ltr">packages/apps/Car/libs/aaos-apps-gradle-project</code>.</p></li> <li>
+<p>Run the following command:</p> 
+<pre>./gradlew assemble</pre>
+</li> </ol> <h2 id="minimin-apis">Minimum required API levels</h2> <p>Each unbundled app works on Android platforms with a version equal to or greater than its <a href="https://developer.android.com/studio/publish/versioning"><code translate="no" dir="ltr">minSdkVersion</code></a>. The following table lists the minimum API version supported by each app:</p> <table> <thead> <tr> <th width="25%">App</th> <th style="text-align:center">Minimum API level</th> </tr> </thead> <tbody>  <tr> <td>Calendar</td> <td style="text-align:center">29</td> </tr> <tr> <td>Car UI library</td> <td style="text-align:center">29</td> </tr> <tr> <td>CompanionDevice</td> <td style="text-align:center">29</td> </tr> <tr> <td>Dialer</td> <td style="text-align:center">31</td> </tr> <tr> <td>Media</td> <td style="text-align:center">30</td> </tr> <tr> <td>Messenger (SMS)</td> <td style="text-align:center">30</td> </tr> <tr> <td><a href="../hmi/aosp_host">AOSP Host</a></td> <td style="text-align:center">29</td> </tr> <tr> <td>App Lock</td> <td style="text-align:center">34</td> </tr> </tbody> </table> <h2 id="integrate-prebuild">Integrate a prebuilt into a system image</h2> <p>If the Android platform version is supported by the app (see the table in the previous section), you can add the APK to the system image. However, the integration steps differ between Android platform versions.</p> <aside class="note"><strong>Note:</strong><span> Download prebuilt apps from <a href="https://ci.android.com/builds/branches/aosp-ub-automotive-master/grid">ci.android.com</a>.</span></aside> <h3 id="android_13_and_higher">Android 13 and higher</h3> <p>Android 13 and higher doesn't include source code for unbundled apps, but you can include a prebuilt APK in the platform build for use cases such as CDD compliance testing or provisioning privileged apps. To specify the APK, use the <a href="https://ci.android.com/builds/latest/branches/aosp-build-tools/targets/linux/view/soong_build.html"><code translate="no" dir="ltr">android_app_import</code></a> Soong rule, as shown in the following example:</p> 
+<pre>android_app_import {
+    name: "CarMediaApp",
+    apk: "CarMediaApp.apk",
+    privileged: true,
+    certificate: "platform", // Media must be signed by the platform
+    required: ["allowed_privapp_com.android.car.media"],
+}
+</pre> <h3 id="android_12_and_lower">Android 12 and lower</h3> <p>Android 12 and lower includes source code for unbundled apps, but you can still specify a prebuilt APK to include. Because the Soong default is to give precedence to the source code over a prebuilt, it's necessary to set the <code translate="no" dir="ltr">prefer</code> flag to <code translate="no" dir="ltr">true</code> inside the <code translate="no" dir="ltr">android_app_import</code> rule, as shown in the following example:</p> 
+<pre>android_app_import {
+    name: "CarDialerApp",
+    apk: "CarDialerApp.apk",
+    privileged: true,
+    presigned: true, // Dialer can have its own signature
+    required: ["allowed_privapp_com.android.car.dialer"],
+    overrides: ["Dialer"],
+    prefer: true, // The prebuilt replaces a source target with the same name
+}
+</pre> <h2 id="types">Unbundled app details</h2> <table> <thead> <tr> <th width="25%">App</th> <th style="text-align:center">Privileged unbundled<br><em>system signed</em>
+</th> <th style="text-align:center">Privileged unbundled<br><em>non-system signed</em>
+</th> <th style="text-align:center">Unbundled<br><em>don't need to be on system partition</em>
+</th> </tr> </thead> <tbody> <tr style="background-color:#f2f2f2"> <td><small><strong>Update distribution</strong></small></td> <td style="text-align:center"><small><strong>OTA</strong></small></td> <td style="text-align:center"><small><strong>OTA or Google Play</strong></small></td> <td style="text-align:center"><small><strong>OTA or Google Play</strong></small></td> </tr> <tr> <td> <a href="https://android.googlesource.com/platform/packages/apps/Car/Templates/+/refs/heads/main">AOSP Host</a>
+</td> <td></td> <td style="text-align:center">X</td> <td></td> </tr> <tr> <td> <a href="https://android.googlesource.com/platform/packages/apps/Car/Calendar/+/refs/heads/mirror-car-apps-aosp-release">Calendar</a> </td> <td></td> <td></td> <td style="text-align:center">X</td> </tr> <tr> <td> <a href="https://android.googlesource.com/platform/packages/apps/Car/CompanionDeviceSupport/+log/refs/heads/main">CompanionDeviceSupport</a> </td> <td></td> <td style="text-align:center">X</td> <td></td> </tr> <tr> <td> <a href="https://android.googlesource.com/platform/packages/apps/Car/MultiDisplay/+/refs/heads/mirror-car-apps-aosp-release">Control center (Multi-display)</a> </td> <td style="text-align:center">X</td> <td></td> <td></td> </tr> <tr> <td> <a href="https://android.googlesource.com/platform/packages/apps/Car/Dialer/+/refs/heads/mirror-car-apps-aosp-release">Dialer</a> </td> <td></td> <td style="text-align:center">X</td> <td></td> </tr> <tr> <td> <a href="https://android.googlesource.com/platform/packages/apps/Car/Media/+/refs/heads/mirror-car-apps-aosp-release">Media</a>
+</td> <td style="text-align:center">X</td> <td></td> <td></td> </tr> <tr> <td> <a href="https://android.googlesource.com/platform/packages/apps/Car/Messenger/+/refs/heads/mirror-car-apps-aosp-release">Messenger (SMS)</a>
+</td> <td></td> <td style="text-align:center">X</td> <td></td> </tr> <tr> <td> <a href="https://android.googlesource.com/platform/packages/apps/Car/SensitiveAppLock/+/refs/heads/mirror-car-apps-aosp-release">Sensitive app lock</a>
+</td> <td style="text-align:center">X</td> <td></td> <td></td> </tr> </tbody> </table><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/unbundled_apps/integration" class="_attribution-link">https://source.android.com/docs/automotive/unbundled_apps/integration</a>
+  </p>
+</div>

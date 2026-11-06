@@ -1,0 +1,66 @@
+<h1>Use Cuttlefish with 16 KB page size on ARM64</h1>  <p>This setup requires an <code translate="no" dir="ltr">ARM64</code> Linux host. This page shows how to build and start Cuttlefish with 16 KB page size support on <code translate="no" dir="ltr">ARM64</code>. The instructions on this page assume that Cuttlefish packages are installed in your machine. For instructions to install them, see Step 1 of <a href="../../../devices/cuttlefish/get-started#launch">Install Cuttlefish</a>.</p> <p>You can launch Cuttlefish by either <a href="#download-build-artifacts">downloading the prebuilt artifacts</a> directly from the Android Continuous Integration site or <a href="#sync-build">build them from AOSP</a> if you need to modify the source code.</p> <h2 id="download-build-artifacts">Launch Cuttlefish by downloading the artifacts</h2> <p>Navigate to <a href="https://ci.android.com">Android Continuous Integration site</a> and enter <code translate="no" dir="ltr">aosp-main-throttled</code> as the branch name. Click the latest build for the <code translate="no" dir="ltr">aosp_cf_arm64_phone_pgagnostic</code> target. Now, follow the instructions from Step 5 of <a href="../../../devices/cuttlefish/get-started#launch">Install Cuttlefish</a>.</p> <h2 id="sync-build">Launch Cuttlefish by building from AOSP</h2> <p>Build and launch Cuttlefish with a page-agnostic target:</p> 
+<pre>$ mkdir android-latest-branch &amp;&amp; cd android-latest-branch
+$ repo init -u https://android.googlesource.com/platform/manifest -b android-latest-release
+$ repo sync -c -j32
+
+# Build cf agnostic target.
+$ source build/envsetup.sh
+$ lunch aosp_cf_arm64_phone_pgagnostic-aosp_current-userdebug
+$ m
+
+# Launch cf with a kernel with 16 KB page size support.
+$ launch_cvd
+...
+...
+VIRTUAL_DEVICE_DISPLAY_POWER_MODE_CHANGED
+virtio_input_hid_handle_status: unknown type 20
+virtio_input_hid_handle_status: unknown type 20
+virtio_input_hid_handle_status: unknown type 20
+virtio_input_hid_handle_status: unknown type 20
+Generating new secret with slot ID: 4
+VIRTUAL_DEVICE_BOOT_STARTED
+VIRTUAL_DEVICE_NETWORK_MOBILE_CONNECTED
+</pre> <h2 id="verify-page-size">Verify page size and boot</h2> <p>To verify page size and boot status:</p> <ol> <li>
+<p>Access the shell as root:</p> 
+<pre>$ adb root
+adbd is already running as root
+$ adb shell
+vsoc_arm64_pgagnostic:/ #
+</pre>
+</li> <li>
+<p>Verify page size and boot status:</p> 
+<pre>vsoc_arm64_pgagnostic:/ # getconf PAGE_SIZE
+16384
+vsoc_arm64_pgagnostic:/ # getprop | grep sys.boot.completed
+sys.boot_completed: 1
+</pre>
+</li> </ol> <h2 id="custom-kernel">Use Cuttlefish with custom 16 KB page size kernel</h2> <p>To use a custom kernel, instead of a prebuilt kernel:</p> <ol> <li>
+<p>Create a repo directory for an android common kernel and sync the directory:</p> 
+<pre>$ mkdir common-android14-6.1 &amp;&amp; cd common-android14-6.1
+$ repo init -u https://android.googlesource.com/kernel/manifest -b common-android14-6.1
+$ repo sync -c -j$(nproc)
+</pre>
+</li> <li>
+<p>Build 16 KB page size kernel:</p> 
+<pre>$ tools/bazel run --lto=none //common:kernel_aarch64_16k_dist
+$ tools/bazel run --lto=none //common-modules/virtual-device:virtual_device_aarch64_16k_dist -- \
+    --dist_dir=out/android14-6.1/dist
+</pre>
+</li> <li>
+<p>Verify that the build executed successfully:</p> 
+<pre># Generated files
+$ ls out/android14-6.1/dist/Image
+$ ls out/android14-6.1/dist/initramfs.img
+</pre>
+</li> </ol> <h3 id="custom-kernel-start">Start Cuttlefish with the custom 16 KB page size kernel</h3> <p>To use your newly built kernel in Cuttlefish:</p> 
+<pre>$ launch_cvd -kernel_path ~/common-android14-6.1/out/android14-6.1/dist/Image \
+      -initramfs_path ~/common-android14-6.1/out/android14-6.1/dist/initramfs.img \
+      --resume=false --userdata_format=ext4 \
+      --data_policy=always_create --blank_data_image_mb=8000
+      -userdata_format=ext4
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/16kb-page-size/getting-started-cf-arm64-pgagnostic" class="_attribution-link">https://source.android.com/docs/core/architecture/16kb-page-size/getting-started-cf-arm64-pgagnostic</a>
+  </p>
+</div>

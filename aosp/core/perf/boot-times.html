@@ -1,0 +1,152 @@
+<h1>Optimize boot times</h1>  <p> This document provides partner guidance for improving boot times for specific Android devices. Boot time is an important component of system performance as users must wait for boot to complete before they can use the device. For devices such as cars where cold boot-up happens more frequently, having a quick boot time is critical (no one likes waiting for dozens of seconds just to input a navigation destination). </p> <p> Android 8.0 allows for reduced boot times by supporting several improvements across a range of components. The following table summarizes these performance improvements (as measured on a Google Pixel and Pixel XL devices). </p> <table> <tr> <th>Component</th> <th>Improvement</th> </tr> <tr> <td>Bootloader </td> <td> <ul> <li>Saved 1.6s by removing UART log </li>
+<li>Saved 0.4s by changing to LZ4 from GZIP</li> </ul> </td> </tr> <tr> <td>Device kernel </td> <td> <ul> <li>Saved 0.3s by removing unused kernel configs and reducing driver size </li>
+<li>Saved 0.3s with dm-verity prefetch optimization </li>
+<li>Saved 0.15s to remove unnecessary wait/test in driver </li>
+<li>Saved 0.12s to remove CONFIG_CC_OPTIMIZE_FOR_SIZE</li> </ul> </td> </tr> <tr> <td>I/O tuning </td> <td> <ul> <li>Saved 2s on normal boot </li>
+<li>Saved 25s on first boot</li> </ul> </td> </tr> <tr> <td>init.*.rc </td> <td> <ul> <li>Saved 1.5s by paralleling init commands </li>
+<li>Saved 0.25s by starting zygote early </li>
+<li>Saved 0.22s by cpuset tune</li> </ul> </td> </tr> <tr> <td>Boot animation </td> <td> <ul> <li>Started 2s earlier on boot without fsck triggered, much bigger on boot with fsck triggered boot </li>
+<li>Saved 5s on Pixel XL with immediate shutdown of boot animation</li> </ul> </td> </tr> <tr> <td>SELinux policy </td> <td>Saved 0.2s on by genfscon </td> </tr> </table> <h2 id="optimizing-bootloader">Optimize bootloader</h2> <p> To optimize bootloader for improved boot times: </p> <ul> <li>For logging: <ul> <li>Disable log writing to UART as it can take a long time with lots of logging. (On the Google Pixel devices, we found it slows the bootloader 1.5s).</li> <li>Log only error situations and consider storing other information to memory with a separate mechanism to retrieve.</li> </ul> </li> <li>For kernel decompression, considering using LZ4 for contemporary hardware instead of GZIP (example <a href="https://patchwork.kernel.org/patch/6810841/">patch</a>). Keep in mind that different kernel compression options can have different loading and decompression times, and some options may work better than others for your specific hardware.</li> <li>Check unnecessary wait times for debouncing/special mode entry and minimize them.</li> <li>Pass boot time spent in bootloader to kernel as cmdline.</li> <li>Check CPU clock and consider parallelization (requires multi-core support) for kernel loading and initializing I/O.</li> </ul> <h2 id="optimizing-i-o-efficiency">Optimize I/O efficiency</h2> <p> Improving I/O efficiency is critical to making boot time faster, and reading anything not necessary should be deferred until after boot (on a Google Pixel, about 1.2GB of data is read on boot). </p> <h3 id="tuning-the-filesystem">Tune the filesystem</h3> <p> The Linux kernel read ahead kicks in when a file is read from beginning or when blocks are read sequentially, making it necessary to tune I/O scheduler parameters specifically for booting (which has a different workload characterization than normal apps). </p> <p> Devices that support seamless (A/B) updates benefit greatly from filesystem tuning on first time boot (e.g. 20s on Google Pixel). An an example, we tuned the following parameters for the Google Pixel: </p> 
+<pre>on late-fs
+  # boot time fs tune
+    # boot time fs tune
+    write /sys/block/sda/queue/iostats 0
+    write /sys/block/sda/queue/scheduler cfq
+    write /sys/block/sda/queue/iosched/slice_idle 0
+    write /sys/block/sda/queue/read_ahead_kb 2048
+    write /sys/block/sda/queue/nr_requests 256
+    write /sys/block/dm-0/queue/read_ahead_kb 2048
+    write /sys/block/dm-1/queue/read_ahead_kb 2048
+
+on property:sys.boot_completed=1
+    # end boot time fs tune
+    write /sys/block/sda/queue/read_ahead_kb 512
+    ...</pre> <h3 id="miscellaneous">Miscellaneous</h3> <ul> <li>Turn on the dm-verity hash prefetch size using kernel config DM_VERITY_HASH_PREFETCH_MIN_SIZE (default size is 128). </li>
+<li>For better file system stability and a dropped forced check that occurs on every boot, use the new ext4 generation tool by setting TARGET_USES_MKE2FS in BoardConfig.mk.</li> </ul> <h3 id="analyzing-i-o">Analyze I/O</h3> <p> To understand I/O activities during boot, use kernel ftrace data (also used by systrace): </p> 
+<pre>trace_event=block,ext4 in BOARD_KERNEL_CMDLINE</pre> <p> To breakdown file access for each file, make the following changes to the kernel (development kernel only; don't use in production kernels): </p> 
+<pre>diff --git a/fs/open.c b/fs/open.c
+index 1651f35..a808093 100644
+--- a/fs/open.c
++++ b/fs/open.c
+@@ -981,6 +981,25 @@
+ }
+ EXPORT_SYMBOL(file_open_root);
+ 
++static void _trace_do_sys_open(struct file *filp, const struct open_how *how, long fd)
++{
++       char *buf;
++       char *fname;
++
++       buf = kzalloc(PAGE_SIZE, GFP_KERNEL);
++       if (!buf)
++               return;
++       fname = d_path(&amp;filp-&gt;f_path, buf, PAGE_SIZE);
++
++       if (IS_ERR(fname))
++               goto out;
++
++       trace_printk("%s: open(\"%s\", %d, %d) fd = %ld, inode = %ld\n",
++                     current-&gt;comm, fname, how-&gt;flags, how-&gt;mode, fd, filp-&gt;f_inode-&gt;i_ino);
++out:
++       kfree(buf);
++}
++
+long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
+ {
+ 	struct open_flags op;
+@@ -1003,6 +1022,7 @@
+ 		} else {
+ 			fsnotify_open(f);
+ 			fd_install(fd, f);
++			_trace_do_sys_open(f, flags, mode, fd);</pre> <p> Use the following scripts to help with analyzing boot performance. </p> <ul> <li>
+<code translate="no" dir="ltr">system/extras/boottime_tools/bootanalyze/bootanalyze.py</code> Measures boot time with a breakdown of important steps in the boot process. </li>
+<li>
+<code translate="no" dir="ltr">system/extras/boottime_tools/io_analysis/check_file_read.py
+boot_trace</code> Provides access information per each file. </li>
+<li>
+<code translate="no" dir="ltr">system/extras/boottime_tools/io_analysis/check_io_trace_all.py
+boot_trace</code> Gives system-level breakdown.</li> </ul> <h2 id="optimizing-init-*-rc">Optimize init.*.rc</h2> <p> Init is the bridge from the kernel till the framework is established, and devices usually spend a few seconds in different init stages. </p> <h3 id="running-tasks-in-parallel">Run tasks in parallel</h3> <p> While the current Android init is more or less a single threaded process, you can still perform some tasks in parallel. </p> <ul> <li>Execute slow commands in a shell script service and join that later by waiting for specific property. Android 8.0 supports this use case with a new <code translate="no" dir="ltr">wait_for_property</code> command. </li>
+<li>Identify slow operations in init. The system logs the init command exec/wait_for_prop or any action taking a long time (in Android 8.0, any command taking more than 50 ms). For example: 
+<pre>init: Command 'wait_for_coldboot_done' action=wait_for_coldboot_done returned 0 took 585.012ms</pre> <p> Reviewing this log may indicate opportunities for improvements. </p> </li>
+<li>Start services and enable peripheral devices in critical path early. For example, some SOCs require starting security-related services before starting SurfaceFlinger. Review the system log when ServiceManager returns "wait for service" — this is usually a sign that a dependent service must be started first. </li>
+<li>Remove any unused services and commands in init.*.rc. Anything not used in early stage init should be deferred to boot completed.</li>
+</ul> <p class="note"> <strong>Note:</strong> Property service is part of init process, so calling <code translate="no" dir="ltr">setproperty</code> during boot can lead a long delay if init is busy in builtin commands. </p> <h3 id="using-scheduler-tuning">Use scheduler tuning</h3> <p> Use scheduler tuning for early boot. Example from a Google Pixel: </p> 
+<pre>on init
+    # boottime stune
+    write /dev/stune/schedtune.prefer_idle 1
+    write /dev/stune/schedtune.boost 100
+    on property:sys.boot_completed=1
+    # reset stune
+    write /dev/stune/schedtune.prefer_idle 0
+    write /dev/stune/schedtune.boost 0
+
+    # or just disable EAS during boot
+    on init
+    write /sys/kernel/debug/sched_features NO_ENERGY_AWARE
+    on property:sys.boot_completed=1
+    write /sys/kernel/debug/sched_features ENERGY_AWARE</pre> <p> Some services may need a priority boost during boot. Example: </p> 
+<pre>init.zygote64.rc:
+service zygote /system/bin/app_process64 -Xzygote /system/bin --zygote --start-system-server
+    class main
+    priority -20
+    user root
+...</pre> <h3 id="starting-zygote-early">Start zygote early</h3> <p> Devices with file-based encryption can start zygote earlier at the zygote-start trigger (by default, zygote is launched at class main, which is much later than zygote-start). When doing this, make sure to allow zygote to run in all CPUs (as the wrong cpuset setting may force zygote to run in specific CPUs). </p> <h3 id="disable-power-saving">Disable power saving</h3> <p> During device booting, power saving setting for components like UFS and/or CPU governor can be disabled. </p> <p class="aside"><strong>Caution:</strong> Power saving should be enabled in charger mode for efficiency.</p> 
+<pre>on init
+    # Disable UFS powersaving
+    write /sys/devices/soc/${ro.boot.bootdevice}/clkscale_enable 0
+    write /sys/devices/soc/${ro.boot.bootdevice}/clkgate_enable 0
+    write /sys/devices/soc/${ro.boot.bootdevice}/hibern8_on_idle_enable 0
+    write /sys/module/lpm_levels/parameters/sleep_disabled Y
+on property:sys.boot_completed=1
+    # Enable UFS powersaving
+    write /sys/devices/soc/${ro.boot.bootdevice}/clkscale_enable 1
+    write /sys/devices/soc/${ro.boot.bootdevice}/clkgate_enable 1
+    write /sys/devices/soc/${ro.boot.bootdevice}/hibern8_on_idle_enable 1
+    write /sys/module/lpm_levels/parameters/sleep_disabled N
+on charger
+    # Enable UFS powersaving
+    write /sys/devices/soc/${ro.boot.bootdevice}/clkscale_enable 1
+    write /sys/devices/soc/${ro.boot.bootdevice}/clkgate_enable 1
+    write /sys/devices/soc/${ro.boot.bootdevice}/hibern8_on_idle_enable 1
+    write /sys/class/typec/port0/port_type sink
+    write /sys/module/lpm_levels/parameters/sleep_disabled N</pre> <h3 id="defer-non-critical-initialization">Defer noncritical initialization</h3> <p> Noncritical initialization such as ZRAM can be deferred to <code translate="no" dir="ltr">boot_complete</code>. </p> 
+<pre>on property:sys.boot_completed=1
+   # Enable ZRAM on boot_complete
+   swapon_all /vendor/etc/fstab.${ro.hardware}</pre> <h2 id="optimizing-boot-animation">Optimize boot animation</h2> <p> Use the following tips to optimize the boot animation. </p> <h3 id="configuring-early-start">Configure early start</h3> <p> Android 8.0 enables starting boot animation early, before mounting userdata partition. However, even when using the new ext4 tool chain in Android 8.0, fsck is still triggered periodically due to safety reasons, causing a delay in starting the bootanimation service. </p> <p> To make bootanimation start early, split the fstab mount into two phases: </p> <ul> <li>In the early phase, mount only the partitions (such as <code translate="no" dir="ltr">system/</code> and <code translate="no" dir="ltr">vendor/</code>) that don't require run checks, then start boot animation services and its dependencies (such as servicemanager and surfaceflinger). </li>
+<li>In the second phase, mount partitions (such as <code translate="no" dir="ltr">data/</code>) that do require run checks.</li> </ul> <p> Boot animation will be started much faster (and in constant time) regardless of fsck. </p> <h3 id="finishing-clean">Finish clean</h3> <p> After receiving the exit signal, bootanimation plays the last part, the length of which can slow boot time. A system that boots quickly has no need for lengthy animations which could effectively hide any improvements made. We recommend making both the repeating loop and finale short. </p> <h2 id="optimizing-selinux">Optimize SELinux</h2> <p> Use the following tips to optimize SELinux for improved boot times. </p> <ul> <li>
+<strong>Use clean regular expressions (regex)</strong>. Poorly-formed regex can lead to a lot of overhead when matching SELinux policy for <code translate="no" dir="ltr">sys/devices</code> in <code translate="no" dir="ltr">file_contexts</code>. For example, the regex <code translate="no" dir="ltr">/sys/devices/.*abc.*(/.*)?</code> mistakenly forces a scan of all <code translate="no" dir="ltr">/sys/devices</code> subdirectories that contain "abc", enabling matches for both <code translate="no" dir="ltr">/sys/devices/abc</code> and <code translate="no" dir="ltr">/sys/devices/xyz/abc</code>. Improving this regex to <code translate="no" dir="ltr">/sys/devices/[^/]*abc[^/]*(/.*)?</code> will enable a match only for <code translate="no" dir="ltr">/sys/devices/abc</code>. </li>
+<li>
+<strong>Move labels to </strong><a href="https://selinuxproject.org/page/FileStatements#genfscon">genfscon</a>. This existing SELinux feature passes file-matching prefixes into the kernel in the SELinux binary, where the kernel applies them to kernel-generated filesystems. This also helps fix mislabeled kernel-created files, preventing race conditions that can occur between userspace processes attempting to access these files before relabeling occurs.</li> </ul> <h2 id="tool-and-methods">Tools and methods</h2> <p> Use the following tools to help you collect data for optimization targets. </p> <h3 id="bootchart">Bootchart</h3> <p> Bootchart provides CPU and I/O load breakdown of all processes for the whole system. It doesn't require rebuilding system image and can be used as a quick sanity check before diving into systrace. </p> <p> To enable bootchart: </p> 
+<pre>adb shell 'touch /data/bootchart/enabled'
+adb reboot</pre> <p> After boot up, fetch boot chart: </p> 
+<pre>$ANDROID_BUILD_TOP/system/core/init/grab-bootchart.sh</pre> <p> When finished, delete <code translate="no" dir="ltr">/data/bootchart/enabled</code> to prevent collecting the data every time. </p> If bootchart doesn't work and you get an error saying that <code translate="no" dir="ltr">bootchart.png</code> doesn't exist, do the following: <ol> <li> Run the following commands: 
+<pre>      sudo apt install python-is-python3
+      cd ~/Documents
+      git clone https://github.com/xrmx/bootchart.git
+      cd bootchart/pybootchartgui
+      mv main.py.in main.py
+    </pre> </li>
+<li> Update <code translate="no" dir="ltr">$ANDROID_BUILD_TOP/system/core/init/grab-bootchart.sh</code> to point to the local copy of <code translate="no" dir="ltr">pybootchartgui</code> (located at <code translate="no" dir="ltr">~/Documents/bootchart/pybootchartgui.py</code>) </li>
+</ol> <h3 id="systrace">Systrace</h3> <p> Systrace allows collecting both kernel and Android traces during boot up. Visualization of systrace can help in analyzing specific problem during the boot-up. (However, to check the average number or accumulated number during the entire boot, it is easier to look into kernel trace directly). </p> <p> To enable systrace during boot-up: </p> <ul> <li> In <code translate="no" dir="ltr">frameworks/native/cmds/atrace/atrace.rc</code>, change: 
+<pre>  write /sys/kernel/debug/tracing/tracing_on 0
+  write /sys/kernel/tracing/tracing_on 0</pre> <p>To:</p> 
+<pre>  #    write /sys/kernel/debug/tracing/tracing_on 0
+  #    write /sys/kernel/tracing/tracing_on 0</pre> </li> <p>This enables tracing (which is disabled by default).</p> <li>In the <code translate="no" dir="ltr">device.mk</code> file, add the following line: 
+<pre>PRODUCT_PROPERTY_OVERRIDES +=    debug.atrace.tags.enableflags=802922
+PRODUCT_PROPERTY_OVERRIDES +=    persist.traced.enable=0</pre> </li> <li>In the device <code translate="no" dir="ltr">BoardConfig.mk</code> file, add the following: 
+<pre>BOARD_KERNEL_CMDLINE := ... trace_buf_size=64M trace_event=sched_wakeup,sched_switch,sched_blocked_reason,sched_cpu_hotplug</pre> </li> <p> For detailed I/O analysis, also add block and ext4 and f2fs. </p> <li>In the device-specific <code translate="no" dir="ltr">init.rc</code> file, add the following: 
+<pre>on property:sys.boot_completed=1          // This stops tracing on boot complete
+write /d/tracing/tracing_on 0
+write /d/tracing/events/ext4/enable 0
+write /d/tracing/events/f2fs/enable 0
+write /d/tracing/events/block/enable 0</pre> </li> <li> <p>After boot up, fetch trace:</p> 
+<pre>
+adb root &amp;&amp; adb shell atrace --async_stop -z -c -o /data/local/tmp/boot_trace
+adb pull /data/local/tmp/boot_trace
+$ANDROID_BUILD_TOP/external/chromium-trace/systrace.py --from-file=boot_trace
+</pre> </li> </ul> <aside class="note"> <strong>Note:</strong> Chrome can't handle files that are too large. Consider cutting the <code translate="no" dir="ltr">boot_trace</code> file using <code translate="no" dir="ltr">tail</code>, <code translate="no" dir="ltr">head</code>, or <code translate="no" dir="ltr">grep</code> for necessary portions. I/O analysis often requires analyzing the captured <code translate="no" dir="ltr">boot_trace</code> directly, as there are too many events. </aside><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/perf/boot-times" class="_attribution-link">https://source.android.com/docs/core/perf/boot-times</a>
+  </p>
+</div>

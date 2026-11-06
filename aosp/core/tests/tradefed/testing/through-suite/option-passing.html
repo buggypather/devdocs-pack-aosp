@@ -1,0 +1,24 @@
+<h1>Pass options and filters to suite and modules</h1>  <p>First, ensure you understand <a href="../../fundamentals/options">Option Handling</a> in Tradefed.</p> <p><a href="setup">Suite setup</a> describes the two layers that exist in the suite structure:</p> <ul> <li>The top-level suite</li> <li>The modules</li> </ul> <p>In a non-suite Tradefed context, there is no need to think about it; every option goes to the full invocation. In a suite context, modules are kept isolated from the suite; so not all options are available at their level.</p> <h2 id="pass_options_to_the_top-level_suite">Pass options to the top-level suite</h2> <p>The top-level suite behaves like standard Tradefed configuration: the full configuration including the suite runner receives all the options like a non-suite Tradefed configuration.</p> <h2 id="pass_options_to_the_modules">Pass options to the modules</h2> <p>Modules by default <em>do not receive any</em> of the options passed to the command. They need to be explicitly targeted to receive the options through the <code translate="no" dir="ltr">module-arg</code> option. This isolation of the modules options makes debugging easier.</p> <p>Example:</p> 
+<pre>cts-tradefed run cts --module-arg &lt;module-name&gt;:&lt;option-name&gt;:&lt;option-value&gt;
+
+cts-tradefed run cts --module-arg CtsGestureTestCases:collect-tests-only:true
+</pre> <p>The syntax ensures that the targeted module will receive the given option.</p> <p>There are additional ways to pass options to modules such as <code translate="no" dir="ltr">test-arg</code>, which allows you to pass options to the test runner of each module based on the runner type or class.</p> <p>Example:</p> 
+<pre>cts-tradefed run cts --test-arg &lt;test-class&gt;:&lt;option-name&gt;:&lt;option-value&gt;
+
+cts-tradefed run cts --test-arg com.android.tradefed.testtype.JarHosttest:collect-tests-only:true
+</pre> <p>The syntax does not target a particular module but rather all the test runners of the given class. <code translate="no" dir="ltr">test-arg</code> considers only implementations of IRemoteTest (<a href="https://source.android.com/reference/tradefed/com/android/tradefed/testtype/IRemoteTest">documentation</a>, <a href="https://cs.android.com/android/platform/superproject/main/+/main:tools/tradefederation/core/invocation_interfaces/com/android/tradefed/testtype/IRemoteTest.java">source code</a>) or ITargetPreparer (<a href="https://source.android.com/reference/tradefed/com/android/tradefed/targetprep/ITargetPreparer">documentation</a>, <a href="https://cs.android.com/android/platform/superproject/main/+/main:tools/tradefederation/core/src/com/android/tradefed/targetprep/ITargetPreparer.java">source code</a>) as potential receivers of the options.</p> <h3 id="pass_options_to_a_java_test_class_in_a_java_test_host">Pass options to a Java test class in a java_test_host</h3> <p>If you are adding an <code translate="no" dir="ltr">@Option</code> to your java test class as part of a java_test_host build target you will need to use the following to inject that option:</p> 
+<pre>cts-tradefed run cts --module-arg &lt;module-name&gt;:set-option:&lt;option-name&gt;:&lt;option-value&gt;
+</pre> <p><a href="https://android.googlesource.com/platform/tools/tradefederation/+/refs/heads/android17-release/test_framework/com/android/tradefed/testtype/HostTest.java#130">set-option</a> in this context is the option of the HostTest runner from the test harness that wraps your java classes to execute them.</p> <p>if your jar file target for the options contains multiple test classes, by default, they are all expected to have the @option specified or use the following syntax to target a single class:</p> 
+<pre>cts-tradefed run cts --module-arg &lt;module-name&gt;:set-option:&lt;class-name&gt;:&lt;option-name&gt;:&lt;option-value&gt;
+</pre> <h2 id="pass_filters_to_the_suite">Pass filters to the suite</h2> <p>To filter some tests from a suite, we use <code translate="no" dir="ltr">--include-filter</code> and <code translate="no" dir="ltr">--exclude-filter</code> to respectively force include or exclude a particular test or module. Exclusion has priority.</p> <p>They use this format: <code translate="no" dir="ltr">[abi] &lt;module-name&gt; [test name]</code></p> <p>Examples:</p> 
+<pre>--include-filter CtsGestureTestCases
+
+--include-filter armeabi-v7a CtsGestureTestCases
+
+--include-filter armeabi-v7a CtsGestureTestCases android.gesture.cts.GestureTest#testGetStrokes
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/tradefed/testing/through-suite/option-passing" class="_attribution-link">https://source.android.com/docs/core/tests/tradefed/testing/through-suite/option-passing</a>
+  </p>
+</div>

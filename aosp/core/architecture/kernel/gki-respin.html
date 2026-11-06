@@ -1,0 +1,65 @@
+<h1>Request a respin</h1> <p>A <em>respin</em> is the process of remerging, rebuilding, retesting, and recertifying a binary after a public release of the <a href="gki-release-builds">GKI kernel</a>.</p> <p>Before requesting a respin, note the following guidelines.</p> <h2 id="eligibility">Eligibility and lifecycle</h2> <ul> <li>
+<strong>Timing:</strong> You can request respins only on release branches after an initial public release of a quarterly build has been launched. Request respin requests for vendor-hooks or other features only for a given release branch for a maximum of six months after the initial public release.</li> <li>
+<strong>Security and LTS:</strong> After six months, branches are eligible for respin <em>only</em> for security patches cited in an Android Security Bulletin (ASB) or critical bug fixes.</li> <li>
+<strong>Deprecation:</strong> When the LTS requirements, defined by the Android Security Bulletin (ASB), cause the branch to be noncompliant, the branch is deprecated. Respin requests for deprecated branches aren't accepted. <ul> <li>The deprecation date for a given GKI release branch is included in the quarterly GKI release build notes under Releases. For example, the <a href="gki-android16-6_12-release-builds#september-2025-releases">September 2025 release</a> is supported for respins until March 2027. This date reflects the LTS 2.0 kernel version lifetime of 18 months for releases starting in September 2025 (releases prior to September 2025 had a 12-month lifetime).</li> </ul>
+</li> <li>
+<strong>Scope:</strong> Request respins only for urgent bug fixes, symbol list updates, or to apply a patch to fix an existing feature.</li> <li>
+<strong>16 KB GKI releases:</strong> On-demand respins for supported <a href="gki-releases#16kb-gki-releases">16 KB GKI branches</a> (<code translate="no" dir="ltr">android15-6.6</code>, <code translate="no" dir="ltr">android16-6.12</code>, and <code translate="no" dir="ltr">android17-6.18</code>) follow the same respin request form, patch submission standards, and qualification process as 4 KB builds. You don't need to update 4 KB and 16 KB kernels together, though we recommend doing so.</li> </ul> <h2 id="patch-submission">Patch submission standards</h2> <p>To meet the Expected Standard Resolution Time (ESRT) for respin request processing, all patches submitted to a release branch must adhere to the following technical rules.</p> <h3 id="source-of-truth">Source of truth and cherry-picks</h3> <ul> <li>
+<strong>Development branch first:</strong> All patches going into the quarterly release branch must already be merged into the main GKI development branch. For example, if a patch is required for a respin of <code translate="no" dir="ltr">android15-6.6-2025-08</code>, it must already be merged into <code translate="no" dir="ltr">android15-6.6</code>.</li> <li>
+<strong>Clean cherry-pick:</strong> You must cherry-pick patches directly from the development branch. Don't cherry-pick from other release branches (for example, don't pick from <code translate="no" dir="ltr">2025-08</code> to <code translate="no" dir="ltr">2025-09</code>), as this can result in author or commit information that is inconsistent with the version in the development branch. Patches with inconsistent information won't be accepted.</li> <li>
+<strong>Preserve metadata:</strong> Preserve the original commit metadata (for example, author, original timestamp). Use <code translate="no" dir="ltr">git cherry-pick -x</code> to preserve the metadata.</li> </ul> <h3 id="commit_chain">Commit chain</h3> <ul> <li>
+<strong>Sequential chain:</strong> If the respin request involves multiple patches, upload them as a <strong>single, sequential chain</strong> of commits.</li> <li>
+<strong>ABI and KMI placement:</strong> If a multiple-patch respin includes kernel module interface (KMI) and application binary interface (ABI) updates (for example, symbol list changes or XML/STG file updates), place these commits at the very end of the commit chain.</li> <li>
+<strong>Rebasing:</strong> If you edit a parent commit in the chain, you must rebase all child patches on top of the latest revision of its parent patch to avoid build failures.</li> <li>
+<strong>Conflict resolution:</strong> Verify that no conflict markers are present in any patch.</li> <li>
+<strong>Build verification:</strong> The entire commit chain must build successfully.</li> </ul> <h3 id="required-tags">Required tags</h3> <p>Progress on the respin request is blocked without the following tags in the commit message:</p> <ul> <li>
+<code translate="no" dir="ltr">Change-Id</code>: Must be identical to the <code translate="no" dir="ltr">Change-Id</code> of the development branch change. <ul> <li>Exception: If the patch was merged into the development branch as part of an LTS update, it should be a cherry-pick of the LTS version and formatted as an <code translate="no" dir="ltr">UPSTREAM</code> patch. See <a href="https://android.googlesource.com/kernel/common/+/refs/heads/android-mainline/README.md#how-do-i-submit-patches-to-android-common-kernels">How do I submit patches to Android Common Kernels</a>.</li> </ul>
+</li> <li>
+<code translate="no" dir="ltr">Bug</code> (existing): Existing <code translate="no" dir="ltr">Bug: XYZ</code> tags from the original development branch commit must not be removed.</li> <li>
+<code translate="no" dir="ltr">Bug</code> (respin): You must add a new <code translate="no" dir="ltr">Bug: XYZ</code> tag, where XYZ corresponds to the Bug ID associated with the current respin request.</li> <li>Update the <code translate="no" dir="ltr">UPSTREAM</code> commit tag if necessary: When cherry-picking a CL from the development branch to the release branch, and the CL is tagged as <code translate="no" dir="ltr">UPSTREAM</code>, consider the following scenarios: <ul> <li>If the CL applies cleanly to the release branch, you don't need to take any additional action.</li> <li>If the CL doesn't apply cleanly, fix the conflicts, update the tag to <code translate="no" dir="ltr">BACKPORT</code>, and document what was done as part of the conflict resolution, see <a href="https://android.googlesource.com/kernel/common/+/refs/heads/android-mainline/README.md#requirements-for-backports-from-mainline-linux">Requirements for backports from mainline Linux</a>.</li> </ul>
+</li> </ul> <h2 id="priority-esrt">Priority and ESRT</h2> <p>Assign a priority (urgency) to the respin request to help the GKI team prioritize. This priority helps the GKI team to better assist partners in a timely manner.</p> <ul> <li>For critical or time-sensitive requests, mark priority as <strong>P0</strong>.</li> <li>For <strong>P0</strong> and <strong>P1</strong> requests, you must also justify the urgency.</li> </ul> <p>The following table provides a mapping of bug priority and time to resolution (ESRT):</p> <table> <tr>
+<th>Priority</th>
+<th>ESRT</th>
+</tr> <tr>
+<td>P0</td>
+<td>2 business days</td>
+</tr> <tr>
+<td>P1</td>
+<td>5 business days</td>
+</tr> <tr>
+<td>P2</td>
+<td>10 business days</td>
+</tr> <tr>
+<td>P3</td>
+<td>15 business days</td>
+</tr> </table> <aside class="note"> <strong>Notes:</strong> ESRT is defined as the time it takes to deliver the certified GKI binary and close the request bug. The timer starts at the latter of the following events: <ul>
+<li>A valid respin request is submitted and associated patches are properly formatted with a <code translate="no" dir="ltr">Bug: XYZ</code> tag citing the respin request.</li>
+<li>The patch is merged into the development branch.</li>
+</ul> </aside> <h3 id="sla-policies">SLA policies</h3> <ul> <li>Submit a separate respin request for each release branch.</li> <li>If you have changes to a respin request that is marked as fixed, submit a new respin request. Don't reopen the request to add additional changelists (CLs).</li> <li>If a respin request requires your response, and you don't respond within three business days, the priority is downgraded by one level, for example, <strong>P0</strong> is downgraded to <strong>P1</strong>.</li> <li>If you don't respond for two weeks, the bug is marked as <strong>Won't Fix (Obsolete)</strong>.</li> </ul> <h2 id="respin">Submit a respin request</h2> <p>The following diagram shows the respin process. The process begins when the OEM partner (you) submits the respin request.</p> <p><img src="https://source.android.com/static/docs/core/architecture/images/gki-respin-process-2.png" alt="Emergency respin process" class="android-image-dark-theme-background"> <strong>Figure 1.</strong>Emergency respin process.</p> <h3 id="to_submit_a_respin_request">To submit a respin request:</h3> <ol> <li>
+<p><a href="https://docs.google.com/forms/d/1-qbtELQ9JW0g-kx0tpe34jRgZ-tdym5yJ8RMsvYafcA">Fill out the GKI respin request form</a> and reach out to your Google point of contact immediately.</p> <ul> <li>This form creates a GKI respin request bug.</li> </ul> <aside class="note"><strong>Note:</strong><span> Respin request bugs are visible to you (the requester), the GKI team, and specific individuals that you add to the bug's CC list.</span></aside>
+</li> <li>
+<p><strong>Prepare your patches:</strong></p> <ul> <li>Verify the patch is merged into the GKI development branch.</li> <li>Apply the patch to the appropriate GKI release branch.</li> <li>Amend the cherry-picked patch to include a <code translate="no" dir="ltr">Bug: XYZ</code> tag citing the respin request ID.</li> </ul> <p><strong>Example:</strong> To cherry-pick a CL from <code translate="no" dir="ltr">android16-6.12</code> to <code translate="no" dir="ltr">android16-6.12-2025-12</code>:</p> 
+<pre># 1. Checkout the target release branch
+git checkout android16-6.12-2025-12
+
+# 2. Fetch the upstream development branch (Source of Truth)
+git fetch aosp android16-6.12
+
+# 3. Cherry-pick the commit (Preserving metadata)
+git cherry-pick -x &lt;commit_hash&gt;
+
+# 4. Update the commit message to include the Respin Bug ID
+# (Do not remove existing Bug IDs or change the Change-Id)
+</pre>
+</li> <li>
+<p>Submit the bug. The following occurs after you submit the request:</p> <ul> <li>
+<p><strong>Review Process after a submission occurs:</strong></p> <ul> <li>The Google GKI team reviews the request and approves it or assigns it back to you if more information is needed.</li> <li>After a fix is agreed upon, the Google GKI team code reviews the change. The ESRT timer is active during this review. However, if the patch is rejected or requires rework, the ESRT timer resets.</li> <li>The GKI team merges, builds, tests for regression, and certifies the change.</li> </ul>
+</li> <li>
+<p><strong>Release:</strong></p> <ul> <li>The binary is released to <a href="https://ci.android.com">ci.android.com</a>.</li> <li>The ESRT timeframe ends and the Google GKI team marks the request as fixed and references the respin build.</li> <li>The respin build is also posted on the <a href="gki-release-builds">Generic Kernel Image (GKI) release builds page</a>.</li> </ul>
+</li> </ul>
+</li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/kernel/gki-respin" class="_attribution-link">https://source.android.com/docs/core/architecture/kernel/gki-respin</a>
+  </p>
+</div>

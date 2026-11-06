@@ -1,0 +1,49 @@
+<h1>Supplemental security patches</h1>  <p>With Android's shift toward continuous release and quarterly bulletins as part of <a href="https://docs.partner.android.com/security/advisories/2025/advisory-2025-03">risk-based security updates</a>, OEMs may want to fix vulnerabilities between releases rather than waiting an entire quarter. The supplemental security patch XML feature lets OEMs report CVEs patched beyond the declared security patch level (SPL) by providing a standardized XML file, so OEMs receive credit for continuous patching.</p> <aside class="note"><strong>Note:</strong><span> Using these XML files is optional. You need them only if you want to report a patched state for a CVE beyond the declared SPL.</span></aside> <h2 id="high-level-flow">High level flow</h2> <p><img src="https://source.android.com/static/docs/security/images/supplemental-security-patches.png" alt="Diagram showing supplemental security patches XML data flow from OEM system, vendor, and product partitions to AOSP Framework API" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> Supplemental security patches architecture and data flow.</p> <p>OEMs can place the XML file across multiple device partitions (<code translate="no" dir="ltr">/system</code>, <code translate="no" dir="ltr">/vendor</code>, or <code translate="no" dir="ltr">/product</code>), ensuring that security patches from both the framework and hardware-specific components are accounted for. The XML file should be installed in <code translate="no" dir="ltr">/etc/security/supplemental_security_patches.xml</code> for the respective partition.</p> <p>The platform aggregates CVE data across these device partitions and exposes them in platform APIs and Jetpack libraries. For details, see <a href="supplemental-security-patches#platform-api">Platform API Android 17 and higher</a> and <a href="supplemental-security-patches#backport">Backport to lower Android versions</a>.</p> <p>The following example shows a sample supplemental security patch XML file installed on an Android-powered device:</p> 
+<pre>&lt;?xml version="1.0" encoding="utf-8"?&gt;
+&lt;security-patches xmlns="http://schemas.android.com/security/patches/1.0"&gt;
+    &lt;patch&gt;&lt;id&gt;CVE-2026-12345&lt;/id&gt;&lt;/patch&gt;
+&lt;/security-patches&gt;
+</pre> <h2 id="platform-api">Platform API (Android 17 and higher)</h2> <p>For Android 17 (API level 37) and higher, the platform's <a href="https://developer.android.com/reference/android/os/SecurityStateManager"><code translate="no" dir="ltr">SecurityStateManager</code></a> handles parsing the supplemental patches from all supported partition locations and exposes them in the returned Bundle from <code translate="no" dir="ltr">getGlobalSecurityState</code> using the keys <code translate="no" dir="ltr">KEY_SYSTEM_SUPPLEMENTAL_PATCHES</code> and <code translate="no" dir="ltr">KEY_VENDOR_SUPPLEMENTAL_PATCHES</code>.</p> <p>The system service <code translate="no" dir="ltr">SecurityStateManagerService</code> aggregates partition XML files into these two umbrella reporting buckets:</p> <ul> <li>
+<code translate="no" dir="ltr">KEY_SYSTEM_SUPPLEMENTAL_PATCHES</code>: Aggregates patches from <code translate="no" dir="ltr">/system</code>, <code translate="no" dir="ltr">/system_ext</code>, and <code translate="no" dir="ltr">/product</code> partition paths.</li> <li>
+<code translate="no" dir="ltr">KEY_VENDOR_SUPPLEMENTAL_PATCHES</code>: Aggregates patches from <code translate="no" dir="ltr">/vendor</code> and <code translate="no" dir="ltr">/odm</code> partition paths.</li> </ul> <h2 id="backport">Backport to lower Android versions</h2> <p>For Android 16 and lower, there is no platform API support. Instead, the Jetpack <code translate="no" dir="ltr">androidx.security:security-state</code> library (<a href="https://developer.android.com/reference/androidx/security/state/SecurityStateManagerCompat"><code translate="no" dir="ltr">SecurityStateManagerCompat</code></a>) manually reads the XML files using <a href="https://developer.android.com/reference/kotlin/org/xmlpull/v1/XmlPullParser"><code translate="no" dir="ltr">XmlPullParser</code></a>. To allow the <code translate="no" dir="ltr">untrusted_app</code> domain to read the files on Android 16 and lower, OEMs must implement the following SELinux changes across all partition paths where the XML file is installed:</p> <p><strong><code translate="no" dir="ltr">file_contexts</code>:</strong></p> 
+<pre>/(system|vendor|product|system_ext|odm)/etc/security/supplemental_security_patches\.xml u:object_r:supplemental_security_patches:s0
+</pre> <p><strong><code translate="no" dir="ltr">supplemental_security_patches.te</code>:</strong></p> 
+<pre>allow untrusted_app supplemental_security_patches:file { getattr open read };
+</pre> <h2 id="build-rules">Build rules and schema validation</h2> <p>To install the supplemental patch XML file to <code translate="no" dir="ltr">/vendor/etc/security/</code>, <code translate="no" dir="ltr">/system/etc/security/</code>, or <code translate="no" dir="ltr">/product/etc/security/</code>, add a <code translate="no" dir="ltr">prebuilt_etc</code> rule in <a href="https://source.android.com/docs/setup/reference/androidbp"><code translate="no" dir="ltr">Android.bp</code></a>. Because <code translate="no" dir="ltr">SecurityStateManagerService</code> expects the file on the device to be named exactly <code translate="no" dir="ltr">supplemental_security_patches.xml</code>, use the <code translate="no" dir="ltr">filename</code> property when using partition-specific module names:</p> 
+<pre>// For vendor partition (/vendor/etc/security/supplemental_security_patches.xml)
+prebuilt_etc {
+    name: "vendor_supplemental_security_patches.xml",
+    src: "supplemental_security_patches.xml",
+    filename: "supplemental_security_patches.xml",
+    sub_dir: "security",
+    vendor: true,
+}
+// For system partition (/system/etc/security/supplemental_security_patches.xml)
+prebuilt_etc {
+    name: "system_supplemental_security_patches.xml",
+    src: "supplemental_security_patches.xml",
+    filename: "supplemental_security_patches.xml",
+    sub_dir: "security",
+}
+// For product partition (/product/etc/security/supplemental_security_patches.xml)
+prebuilt_etc {
+    name: "product_supplemental_security_patches.xml",
+    src: "supplemental_security_patches.xml",
+    filename: "supplemental_security_patches.xml",
+    sub_dir: "security",
+    product_specific: true,
+}
+</pre> <p>The Android Open Source Project (AOSP) includes the XSD schema in <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/services/core/xsd/supplemental_security_patches/supplemental_security_patches.xsd"><code translate="no" dir="ltr">supplemental_security_patches.xsd</code></a> and validates the XML file format during the build process using the <a href="../../core/architecture/configuration/config-file-schema-api"><code translate="no" dir="ltr">xsdc</code></a> build rule in <a href="https://source.android.com/docs/setup/reference/androidbp"><code translate="no" dir="ltr">Android.bp</code></a>:</p> 
+<pre>xsdc {
+    name: "supplemental_security_patches_xsd",
+    srcs: ["supplemental_security_patches/supplemental_security_patches.xsd"],
+    package_name: "android.security.patches", // Java package name for generated code
+}
+</pre> <p>You can also validate your XML file locally against the XSD schema using <code translate="no" dir="ltr">xmllint</code>:</p> 
+<pre>xmllint --schema frameworks/base/services/core/xsd/supplemental_security_patches/supplemental_security_patches.xsd --noout supplemental_security_patches.xml
+</pre> <h2 id="testing">Test and suite integration</h2> <p>The <a href="https://docs.partner.android.com/security/test-suite">Security Test Suite (STS)</a> and <a href="https://docs.partner.android.com/gms/testing/overview/bts">Firmware Analysis (BTS)</a> use the data from the <code translate="no" dir="ltr">supplemental_security_patches.xml</code> file to extend patch analysis for vulnerabilities present in the XML file. So apart from reflecting the device's security state, integrating this file correctly lets OEMs perform proactive patch analysis on vulnerabilities patched above the device's SPL instead of waiting for the quarterly SPL to be officially declared.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/security/overview/supplemental-security-patches" class="_attribution-link">https://source.android.com/docs/security/overview/supplemental-security-patches</a>
+  </p>
+</div>

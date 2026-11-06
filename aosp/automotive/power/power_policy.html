@@ -1,0 +1,114 @@
+<h1>Power policy</h1>  <p> To ensure that hardware and software components (such as display, audio, and voice interaction) are selectively turned on and off as needed, AAOS provides a power policy, which consists of a set of expected power on and off states for hardware and software components. VHAL, or system-privileged vendor services, can apply a new power policy when the Android power state transitions or when conditions they're waiting for are met. </p> <p> Applying a power policy is allowed in the states of Wait for VHAL, On, and Pre Shutdown Prepare (sometimes with some restrictions). Unlike Wait for VHAL and On, a default power policy can't be configured for Pre Shutdown Prepare in a power policy group. In the core Shutdown Prepare phase, Garage Mode is running and shouldn't be disturbed by a power state change. Though a regular power policy can't be applied, a special power policy, which is the system power policy named <strong>no user interaction</strong>, is applied in the core Shutdown Prepare phase. </p> <h2 id="aaos-power-state">AAOS power state</h2> <p> AAOS devices follow this power state diagram: </p> <p><img src="https://source.android.com/static/docs/automotive/images/automotive_power_states.svg" alt="AAOS power state diagram" class="android-image-dark-theme-background"></p> <p><strong>Figure 1.</strong> AAOS power state diagram.</p> <p> Each power state is described below: </p> <table class="alternating-even-rows green"> <thead> <tr> <th width="25%">Value</th> <th>Description</th> </tr> </thead> <tbody> <tr> <td>Off</td> <td>
+<ul> <li>No power is physically provided to the application processor (AP), memory, and peripherals.</li> </ul> </td> </tr> <tr> <td>Wait for VHAL</td> <td>
+<ul> <li>When the driver interacts with the vehicle (for example, by opening a door), the VMCU applies power to the AP, memory. and peripherals.</li> </ul> <ul> <li>AAOS transitions from one of three states (Off, Suspend-to-RAM (STR, Wait for VHAL to finish)) and then enters Wait for VHAL, where it awaits coordination with the VHAL.</li> </ul> </td> </tr> <tr> <td>On</td> <td> <ul> <li>The VHAL instructs the AAOS to enter the On state. In this state, AAOS is fully running and interacting with the driver.</li> </ul> <ul> <li>Display is controlled by the power policy and not by Android display On/Off calls for other form factors.</li> </ul> </td> </tr> <tr> <td>Shutdown prepare</td> <td> <ul> <li> When the driver has stopped driving, the VHAL instructs AAOS to enter Shutdown Prepare, which starts with the Pre Shutdown Prepare phase, followed by the core Shutdown Prepare phase. In the core phase, the display and audio are off and the AAOS isn't interacting with the driver. The Android system is still running and can update apps and the Android system. When any updates are completed, the Android system enters Wait for VHAL Finish. </li> </ul> </td> </tr> <tr> <td>Wait for VHAL to finish</td> <td>
+<ul> <li>AAOS informs the VHAL that it can be shut down. The Vehicle Microcontroller Unit (VMCU) is expected to place the System-on-Chip (SoC) into Deep Sleep and to remove power from the AP. AAOS is then in the STR state, although no code is being executed.</li> </ul> <ul> <li>If VHAL does not finish and the driver returns, the head unit (HU) should transition directly to Wait for VHAL.</li> </ul> </td> </tr> <tr> <td>Suspend-to-RAM (STR)</td> <td> <ul> <li>The vehicle and the AP are off, no code is being executed, and power is maintained to the AP RAM.</li> </ul> </td> </tr> <tr> <td>Suspend-to-disk (STD)</td> <td> <ul> <li>The vehicle and the AP are off, no code is being executed, an no power is maintained to the processing unit and AP RAM.</li> </ul> </td> </tr> </tbody> </table> <h2 id="power-defined">How is power policy defined?</h2> <p> Implementers define power policies in <code translate="no" dir="ltr">/vendor/etc/automotive/power_policy.xml</code>, which: </p> <ul> <li>Defines the power policy.</li> <li>Defines power policy groups, which include the default power policy and are automatically applied when power state transitions occur.</li> <li>Overrides the system power policy.</li> </ul> <h3 id="power-policy">Power policy</h3> <p> The power policy consists of a set of expected power states of hardware and software components. AAOS supports these components in the power policy: </p> <table class="columns"> <tr> <td width="20%"> AUDIO<br> MEDIA<br> DISPLAY<br> BLUETOOTH </td> <td width="20%"> WIFI<br> CELLULAR<br> ETHERNET<br> PROJECTION </td> <td width="25%"> NFC<br> INPUT<br> VOICE_INTERACTION<br> VISUAL_INTERACTION </td> <td> TRUSTED_DEVICE_DETECTION<br> LOCATION<br> MICROPHONE<br> CPU </td> </tr> </table> <p>Vendors can also define their own custom power components for use with power policies. Define custom power components in the same XML file as power policies, as in this example: </p> 
+<pre>
+&lt;customComponents&gt;
+  CUSTOM_COMPONENT_1000
+  CUSTOM_COMPONENT_SPECIAL_SENSOR
+  CUSTOM_COMPONENT_AUX_INPUT
+&lt;/customComponents&gt;
+</pre> <h3 id="power-policy-group">Power policy group</h3> <p> The power policy group specifies the default power policy to automatically apply at power state transitions. Vendors can define the default power policy for Wait for VHAL and On. </p> <p> The default power policy for Wait for VHAL or On is applied on each transition into that state, including when a shutdown is canceled and Android returns to Wait for VHAL. If no default power policy is defined for a given state in the current power policy group, the car power policy daemon applies a built-in power policy. An exception is when the system is in <a href="../remote_access#silent_mode">silent mode</a>: the car power policy daemon saves the current or requested regular power policy as pending, locks regular power policy changes, and applies the <strong>no user interaction</strong> system power policy. Applying a power policy changes only the components that the policy covers, leaving untouched components in their current state. </p> <h3 id="system-power-policies">System power policies</h3> <p> AAOS supports two system power policies, which are <strong>no user interaction</strong> and <strong>suspend prep.</strong> The system power policy is applied when the device goes into Silent Mode, Garage Mode, Suspend-to-RAM, or Suspend-to-disk.</p> <p> The following tables list the behavior of each component in the system power policy. Implementers can override Bluetooth, NFC, and Trusted device detection in the <strong>no user interaction</strong> system power policy. Overrides are applied in <code translate="no" dir="ltr">/vendor/etc/automotive/power_policy.xml</code>. </p> <h4 id="no-user-interaction">no user interaction</h4> <p> The behavior of the <strong>no user interaction</strong> system power policy is defined in this table: </p> <table class="alternating-even-rows green"> <th width="50%">Components</th> <th width="25%">Power state</th> <th>Configurable</th> <tbody> <tr> <td>Audio</td> <td>Off</td> <td>No</td> </tr> <tr> <td>Media</td> <td>Off</td> <td>No</td> </tr> <tr> <td>Display</td> <td>Off</td> <td>No</td> </tr> <tr> <td>Bluetooth</td> <td>Off</td> <td>Yes</td> </tr> <tr> <td>Wifi</td> <td>On</td> <td>No</td> </tr> <tr> <td>Cellular</td> <td>On</td> <td>No</td> </tr> <tr> <td>Ethernet</td> <td>On</td> <td>No</td> </tr> <tr> <td>Projection</td> <td>Off</td> <td>No</td> </tr> <tr> <td>NFC</td> <td>Off</td> <td>Yes</td> </tr> <tr> <td>Input</td> <td>Off</td> <td>No</td> </tr> <tr> <td>Assistant</td> <td>Off</td> <td>No</td> </tr> <tr> <td>User interaction</td> <td>Off</td> <td>No</td> </tr> <tr> <td>Trusted-device detection for user login</td> <td>On</td> <td>Yes</td> </tr> <tr> <td>Location</td> <td>Off</td> <td>No</td> </tr> <tr> <td>Microphone</td> <td>Off</td> <td>No</td> </tr> <tr> <td>CPU</td> <td>On</td> <td>No</td> </tr> </tbody> </table> <h4 id="suspend-prep">suspend prep</h4> <p> The behavior of the <strong>suspend prep</strong> system power policy is defined in this table: </p> <table class="alternating-even-rows green"> <thead> <tr> <th width="50%"><strong>Components</strong></th> <th width="25%"><strong>Power state</strong></th> <th>OEM-configurable</th> </tr> </thead> <tbody> <tr> <td>Audio</td> <td>Off</td> <td>No</td> </tr> <tr> <td>Media</td> <td>N/A</td> <td>No</td> </tr> <tr> <td>Display</td> <td>N/A</td> <td>No</td> </tr> <tr> <td>Bluetooth</td> <td>Off</td> <td>No</td> </tr> <tr> <td>Wifi</td> <td>Off</td> <td>No</td> </tr> <tr> <td>Cellular</td> <td>N/A</td> <td>No</td> </tr> <tr> <td>Ethernet</td> <td>N/A</td> <td>No</td> </tr> <tr> <td>Projection</td> <td>N/A</td> <td>No</td> </tr> <tr> <td>NFC</td> <td>N/A</td> <td>No</td> </tr> <tr> <td>Input</td> <td>N/A</td> <td>No</td> </tr> <tr> <td>Assistant</td> <td>N/A</td> <td>No</td> </tr> <tr> <td>User interaction</td> <td>N/A</td> <td>No</td> </tr> <tr> <td>Trusted-device detection for user login</td> <td>N/A</td> <td>No</td> </tr> <tr> <td>Location</td> <td>Off</td> <td>No</td> </tr> <tr> <td>Microphone</td> <td>Off</td> <td>No</td> </tr> <tr> <td>CPU</td> <td>Off</td> <td>No</td> </tr> </tbody> </table> <h2 id="interaction-vhal">Interaction with the VHAL</h2> <p> The car power policy daemon running in the system layer subscribes two properties to listen to requests from the VHAL: </p> <ul> <li>
+<code translate="no" dir="ltr">POWER_POLICY_REQ</code> the VHAL writes power policy ID to this property.</li> <li>
+<code translate="no" dir="ltr">POWER_POLICY_GROUP_REQ</code> the VHAL writes the power policy group ID to this property.</li> </ul> <p> The current power policy in the system can be changed by modules other than VHAL. In that case, the car power policy daemon updates the <code translate="no" dir="ltr">CURRENT_POWER_POLICY</code> property to notify the change to the VHAL. </p> <h2 id="interaction-native">Interaction with native processes</h2> <p> The CarPowerManagementService (CPMS) delegates power policy management to the car power policy daemon. The daemon is the single source of truth for power policies in the system. The car power policy daemon manages the power policy state and notifies the CPMS, the VHAL, and other native clients of changes. </p> <p> The car power policy daemon exports AIDL interfaces for use by HALs and other native processes. They can be notified when a new power policy is changed. In other words, when each must change its power state. </p> <h3 id="icarpowerpolicyserver.aidl">ICarPowerPolicyServer.aidl</h3> 
+<pre>
+  package android.frameworks.automotive.powerpolicy;
+
+  import android.frameworks.automotive.powerpolicy.CarPowerPolicy;
+  import android.frameworks.automotive.powerpolicy.CarPowerPolicyFilter;
+  import android.frameworks.automotive.powerpolicy.ICarPowerPolicyChangeCallback;
+  import android.frameworks.automotive.powerpolicy.PowerComponent;
+
+  /**
+   * ICarPowerPolicyServer is an interface implemented by the power policy daemon.
+   * VHAL changes the power policy and the power policy daemon notifies the change to
+   * registered subscribers. When subscribing to policy changes, a filter can be specified so
+   * that the registered callbacks can listen only to a specific power component's change.
+   */
+
+  @VintfStability
+  interface ICarPowerPolicyServer {
+    /**
+     * Gets the current power policy.
+     * @throws IllegalStateException if the current policy is not set.
+     */
+    CarPowerPolicy getCurrentPowerPolicy();
+
+    /**
+     * Gets whether the power component is turned on or off.
+     *
+     * @param componentId Power component ID defined in PowerComponent.aidl to check power
+     * state.
+     * @return True if the component's power state is on.
+     * @throws IllegalArgumentException if the componentId is invalid.
+     */
+    boolean getPowerComponentState(in PowerComponent componentId);
+
+    /**
+     * Subscribes to power policy change.
+     * Notification is sent to the registered callback when the power policy changes and the
+     * power state of the components which the callback is interested in changes.
+     *
+     * @param callback Callback that is invoked when the power policy changes.
+     * @param filter The list of components which the callback is interested in.
+     * @throws IllegalArgumentException if the callback is already registered.
+     * @throws IllegalStateException if the callback is dead.
+     */
+    void registerPowerPolicyChangeCallback(in ICarPowerPolicyChangeCallback callback,
+        in CarPowerPolicyFilter filter);
+
+    /**
+     * Unsubscribes from power policy change.
+     *
+     * @param callback Callback that doesn't want to receive power policy change.
+     * @throws IllegalArgumentException if the callback is not registered.
+     */
+    void unregisterPowerPolicyChangeCallback(in ICarPowerPolicyChangeCallback callback);
+
+    /**
+     * Applies the power policy.
+     *
+     * {@code policyId} should be one of power policy IDs defined in
+     * {@code /vendor/etc/automotive/power_policy.xml} or predefined system power policies.
+     *
+     * @param policyId ID of power policy.
+     * @throws IllegalArgumentException if {@code policyId} is invalid.
+     */
+    void applyPowerPolicy(in @utf8InCpp String policyId);
+
+    /**
+     * Sets the current power policy group.
+     *
+     * {@code policyGroupId} should be one of power policy group IDs defined in
+     * {@code /vendor/etc/automotive/power_policy.xml}.
+     *
+     * @param policyGroupId ID of power policy group.
+     * @throws IllegalArgumentException if {@code policyGroupId} is invalid.
+     */
+    void setPowerPolicyGroup(in @utf8InCpp String policyGroupId);
+  }
+</pre> <h3 id="icarpowerpolicychangecallback.aidl">ICarPowerPolicyChangeCallback.aidl</h3> 
+<pre>
+  package android.frameworks.automotive.powerpolicy;
+
+  import android.frameworks.automotive.powerpolicy.CarPowerPolicy;
+
+  /**
+   * ICarPowerPolicyChangeCallback is notified when a power policy changes.
+   */
+
+  @VintfStability
+  oneway interface ICarPowerPolicyChangeCallback {
+    /**
+     * Called when a power policy is fully changed.
+     *
+     * @param policy The current policy.
+     */
+    void onPolicyChanged(in CarPowerPolicy policy);
+  }
+</pre> <h2 id="interaction-java">Interaction with Java modules</h2> <p> <code translate="no" dir="ltr">CarPowerManager</code> provides methods to enable power policy management: </p> <ul> <li>Get the current power policy</li> <li>Apply a new power policy</li> <li>Set a new power policy group</li> </ul> <p> Only system-privileged modules can use the methods. Modules that want to be informed when a power policy is applied can register a power policy change listener to <code translate="no" dir="ltr">CarPowerManager</code> </p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/power/power_policy" class="_attribution-link">https://source.android.com/docs/automotive/power/power_policy</a>
+  </p>
+</div>

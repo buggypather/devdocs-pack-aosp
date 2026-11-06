@@ -1,0 +1,8 @@
+<h1>View and troubleshoot CTS tests</h1>  <p>This page explains how to troubleshoot and fix issues related to CTS testing.</p> <h2 id="fix-out-of-memory-error">Fix out of memory error</h2> <p>If you encounter an out of memory error during CTS testing, such as <code translate="no" dir="ltr">java.lang.OutOfMemoryError: Java heap space</code>, increase the maximum memory available during test run:</p> <ol> <li><p>Edit the <code translate="no" dir="ltr">cts-tradefed</code> script in <code translate="no" dir="ltr"><var translate="no">WORKING_DIRECTORY</var>/cts/tools/cts-tradefed/etc/</code>.</p></li> <li><p>Increase the number of Java virtual machine (JVM) threads by increasing the value for the <code translate="no" dir="ltr">-Xmx</code> flag. The following example increases the value to 16 GB:</p></li> </ol> 
+<pre>${JAVA_BINARY} $RDBG_FLAG -Xmx16g -XX:+HeapDumpOnOutOfMemoryError -cp ${JAR_PATH} -DCTS_ROOT=${CTS_ROOT} com.android.compatibility.common.tradefed.command.CompatibilityConsole "$@"
+</pre> <h2 id="streaming">Fix issues with streaming tests</h2> <p>If you can't stream files from a remote server due to firewall restrictions, you must install video files on a local file server and run media tests locally. For more information, refer to <a href="run-locally">Run media tests locally</a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/compatibility/cts/troubleshooting" class="_attribution-link">https://source.android.com/docs/compatibility/cts/troubleshooting</a>
+  </p>
+</div>

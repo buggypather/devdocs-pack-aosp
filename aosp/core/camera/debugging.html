@@ -1,0 +1,47 @@
+<h1>Camera debugging</h1>  <p>This page describes the debugging tools in the camera service for viewing changes in capture request and result values that are sent to and from the camera HAL. The camera service includes the <code translate="no" dir="ltr">watch</code> and the <code translate="no" dir="ltr">dumpsys</code> commands. Available on devices running Android 13 or higher, the <code translate="no" dir="ltr">watch</code> command allows control over when tags are monitored and accessed, live previewing of tag monitoring dumps from open clients, and viewing of cached dumps from closed clients. The <code translate="no" dir="ltr">dumpsys</code> command allows for accessing debugging information but doesn't provide tag monitoring dumps from closed clients.</p> <h2 id="watch-command">watch command</h2> <p>This section describes how to use the <code translate="no" dir="ltr">watch</code> command and provides examples.</p> <h3 id="start">Start monitoring tags</h3> <p>To start monitoring tags, use:</p> 
+<pre>adb shell cmd media.camera watch start -m &lt;tags&gt; [-c &lt;clients&gt;]</pre> <p>Example:</p> 
+<pre>adb shell cmd media.camera watch start \
+-m android.control.effectMode,android.control.aeMode \
+-c com.google.android.GoogleCamera,com.android.chrome</pre> <p>Arguments:</p> <ul> <li>
+<code translate="no" dir="ltr">tags</code>: Comma-separated list of tags to be monitored. Also accepts the shorthand <code translate="no" dir="ltr">3a</code>, where <code translate="no" dir="ltr">3a</code> refers to the set of all <code translate="no" dir="ltr">android.control.*</code> tags related to AF, AE, and AWB (for the full list of tags, see <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/av/services/camera/libcameraservice/utils/TagMonitor.cpp"><code translate="no" dir="ltr">TagMonitor.cpp</code></a>).</li> <li>
+<code translate="no" dir="ltr">clients</code>: Optional argument. Comma-separated list of client package names for which tags are monitored. Watches all clients if no client argument is passed, or if <code translate="no" dir="ltr">all</code> is present in the list of clients.</li> </ul> <p>This command starts tag monitoring in open clients and in any clients that are subsequently opened (until <code translate="no" dir="ltr">stop</code> is called). After <code translate="no" dir="ltr">start</code> is called, The camera service caches tag monitoring dumps from clients when the clients close.</p> <p>Unless <code translate="no" dir="ltr">start</code> is called, the camera service doesn't monitor tags for any clients, and doesn't cache tag monitoring dumps. If <code translate="no" dir="ltr">all</code> is passed in the <code translate="no" dir="ltr">clients</code> parameter, the camera service monitors tags and caches monitoring dumps from all clients.</p> <h3 id="dump">Dump tag monitoring information</h3> <p>To dump tag monitoring information, use:</p> 
+<pre>adb shell cmd media.camera watch dump</pre> <p>This command dumps the tag monitoring information to standard output and then exits. It prints the cached tag monitoring dumps from clients that have closed since <code translate="no" dir="ltr">start</code> (or last <code translate="no" dir="ltr">clear</code>) and the latest tag monitoring dump from open clients.</p> <p>Sample output:</p> 
+<pre>$ adb shell cmd media.camera watch dump
+Client: com.android.chrome (active)
+1:com.android.chrome  f0:532642803202286ns:             REQ:android.control.aeMode: [ON] output stream ids:  0
+1:com.android.chrome  f0:532642803202286ns:             REQ:android.control.afMode: [CONTINUOUS_PICTURE] output stream ids:  0
+..
+Client: com.google.android.GoogleCamera (cached)
+0:com.google.android.GoogleCamera  f0:532601698728552ns:             REQ:android.control.aeMode: [ON] output stream ids:  0  3  1  2
+0:com.google.android.GoogleCamera  f0:532601698728552ns:             REQ:android.control.afMode: [CONTINUOUS_PICTURE] output stream ids:  2  1  3  0
+0:com.google.android.GoogleCamera  f0:532601698728552ns:             REQ:android.control.awbMode: [AUTO] output stream ids:  0  3  1  2
+...
+</pre> <h3 id="preview-real-time">Preview tag monitoring information in real time</h3> <p>To preview tag monitoring information in real time, use:</p> 
+<pre>adb shell cmd media.camera watch live [-n refresh_interval_ms]</pre> <p>Example:</p> 
+<pre>adb shell cmd media.camera watch live -n 250</pre> <p>Arguments:</p> <ul> <li>
+<code translate="no" dir="ltr">refresh_interval_ms</code>: Optional argument. Interval in milliseconds to refresh the information at. Defaults to 1000 if no value is passed.</li> </ul> <p>This command prints tag monitoring information in real time. To exit, press <em>return</em>/<em>enter</em>.</p> <p>Sample output:</p> 
+<pre>$ adb shell cmd media.camera watch live
+Press return to exit...
+
+0:com.google.android.GoogleCamera  f0:533016991302201ns:             REQ:android.control.aeMode: [ON] output stream ids:  1  3  0  2
+0:com.google.android.GoogleCamera  f0:533016991302201ns:             REQ:android.control.afMode: [CONTINUOUS_PICTURE] output stream ids:  2  0  3  1
+...
+0:com.google.android.GoogleCamera  f0:533017066793915ns:                            RES:android.control.aeState: [SEARCHING]
+0:com.google.android.GoogleCamera  f0:533017066793915ns: 3                          RES:android.control.aeState: [SEARCHING]
+0:com.google.android.GoogleCamera  f0:533017066793915ns: 2                          RES:android.control.aeState: [SEARCHING]
+0:com.google.android.GoogleCamera  f0:533017066793915ns:                            RES:android.control.afState: [PASSIVE_SCAN]
+</pre> <h3 id="clear-cached-dumps">Clear cached dumps</h3> <p>To clear all cached tag monitoring dumps, use:</p> 
+<pre>adb shell cmd media.camera watch clear</pre> <p>This command doesn't stop tag monitoring.</p> <h3 id="stop-monitoring-tags">Stop monitoring tags</h3> <p>To stop monitoring tags in all clients and clear all buffers held for caching tag monitoring dumps, use:</p> 
+<pre>adb shell cmd media.camera watch stop</pre> <h2 id="dumpsys-command">dumpsys command</h2> <p>The <code translate="no" dir="ltr">dumpsys</code> command provides a host of debugging information from the camera service. The following command captures the entire debugging dump from the camera service:</p> 
+<pre>adb shell dumpsys media.camera</pre> <p>The <code translate="no" dir="ltr">dumpsys</code> command also allows capturing tag monitoring dumps from open clients. However, <code translate="no" dir="ltr">dumpsys</code> doesn't provide tag monitoring dumps from closed clients. The following are examples of using <code translate="no" dir="ltr">dumpsys</code> for tag monitoring:</p> <ul> <li>
+<p>Capture tag monitoring dumps from all open clients:</p> 
+<pre>adb shell dumpsys media.camera -m 3a | grep -A50 Monitored</pre>
+</li> <li>
+<p>Get live preview of tag monitoring information using the Linux <code translate="no" dir="ltr">watch</code> command:</p> 
+<pre>watch -n 1 -c 'adb shell dumpsys media.camera -m 3a | grep -A50 Monitored'</pre>
+</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/camera/debugging" class="_attribution-link">https://source.android.com/docs/core/camera/debugging</a>
+  </p>
+</div>

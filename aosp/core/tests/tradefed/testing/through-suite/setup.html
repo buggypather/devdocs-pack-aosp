@@ -1,0 +1,53 @@
+<h1>Set up suites</h1>  <p>A <em>suite</em> in Tradefed refers to a setup where several tests are running under a common test runner that drives the overall execution.</p> <p>In Tradefed, suites are driven through the <a href="https://android.googlesource.com/platform/tools/tradefederation/+/refs/heads/android17-release/src/com/android/tradefed/testtype/suite/ITestSuite.java"><code translate="no" dir="ltr">ITestSuite</code></a> class, which lets tests be added and removed independently of how they are run.</p> <h2 id="definitions">Definitions</h2> <ul> <li>Suite: Set of <em>test modules</em> configured to run under a similar <em>top-level setup</em> to report their results under a single invocation.</li> <li>Top-level setup: Setup applied to the devices before running any of the test modules.</li> <li>Main configuration: The suite-level Tradefed XML configuration that describes which modules should run and which <em>top-level setup</em> should be used.</li> <li>Module-level setup: Setup applied to the devices right before running the module. These are also known as <em>module-specific setups</em>.</li> <li>Module configuration: Refers to the <code translate="no" dir="ltr">AndroidTest.xml</code> Tradefed XML configuration that describes the modules and which <em>module-level setup</em> should be done.</li> <li>Module: Test unit composed of a setup step (<em>module-level setup</em>), a test execution step and a tear down step.</li> <li>Intra-module retry: Automatic retry done by the harness inside the module.</li> <li>Suite retry: Full rerun of the suite's previously failed tests.</li> </ul> <h2 id="itestsuite_structure">ITestSuite structure</h2> <p><a href="https://android.googlesource.com/platform/tools/tradefederation/+/refs/heads/android17-release/src/com/android/tradefed/testtype/suite/ITestSuite.java"><code translate="no" dir="ltr">ITestSuite</code></a> in Tradefed refers to the common base class driving a suite execution. It's shared by all major test suites, specifically the <a href="../../../../../compatibility/cts">Android Compatibility Test Suite (CTS)</a> and <a href="../../../../../compatibility/vts">Android Vendor Test Suite (VTS)</a>, and ensures a consistent execution experience across all suites.</p> <p>We sometimes refer to <em>ITestSuite</em> as the <em>suite runner</em>.</p> <p>The suite runner follows these steps when executing:</p> <ol> <li>Load the module's configuration and determine which set should run.</li> <li>
+<p>Run each module: </p> <ol> <li>Run module-level setup.</li> <li>Run module tests.</li> <li>Run module-level tear down.</li> </ol>
+</li> <li><p>Report the results.</p></li> </ol> <h2 id="top-level_setup">Top-level setup</h2> <p>From a Tradefed point of view, <code translate="no" dir="ltr">ITestSuite</code> is just another test. It's a complex one but is still just a test like any other <code translate="no" dir="ltr">IRemoteTest</code>. So when specifying the suite runner in a Tradefed configuration, Tradefed follows the usual pattern of the configuration: running <code translate="no" dir="ltr">build_provider</code>, <code translate="no" dir="ltr">target_preparer</code>, test (our suite in this case), and <code translate="no" dir="ltr">target_cleaner</code>.</p> <p>This sequence in the Tradefed configuration containing the <code translate="no" dir="ltr">ITestSuite</code> is the top-level setup.</p> <p>Example:</p> 
+<pre>&lt;configuration description="Common config for Compatibility suites"&gt;
+
+    &lt;build_provider class="com.android.compatibility.common.tradefed.build.CompatibilityBuildProvider" /&gt;
+    &lt;!-- Setup applied before the suite: so everything running in the suite will
+    have this setup beforehand --&gt;
+    &lt;target_preparer class="com.android.tradefed.targetprep.RunCommandTargetPreparer"&gt;
+        &lt;option name="run-command" value="settings put global package_verifier_enable 0" /&gt;
+        &lt;option name="teardown-command" value="settings put global package_verifier_enable 1"/&gt;
+    &lt;/target_preparer&gt;
+
+    &lt;!-- Our ITestSuite implementation --&gt;
+    &lt;test class="com.android.compatibility.common.tradefed.testtype.suite.CompatibilityTestSuite" /&gt;
+
+    &lt;result_reporter class="com.android.compatibility.common.tradefed.result.ConsoleReporter" /&gt;
+&lt;/configuration&gt;
+</pre> <h2 id="module_metadata">Module metadata</h2> <p>We call <em>module metadata</em> extra information specified in the test module <code translate="no" dir="ltr">AndroidTest.xml</code>. This metadata lets you specify additional information about the module, and modules can be filtered using the metadata.</p> <p>Example metadata:</p> 
+<pre>&lt;option name="config-descriptor:metadata" key="component" value="framework" /&gt;
+&lt;option name="config-descriptor:metadata" key="parameter" value="instant_app" /&gt;
+</pre> <p>Example filter on metadata:</p> 
+<pre>--module-metadata-include-filter component=framework
+</pre> <p>The above would run all the modules with a <em>framework</em> as <em>component</em> metadata.</p> <p>Full <code translate="no" dir="ltr">AndroidTest.xml</code> example:</p> 
+<pre>&lt;configuration description="Config for CTS Gesture test cases"&gt;
+    &lt;option name="test-suite-tag" value="cts" /&gt;
+    &lt;!-- Metadata --&gt;
+    &lt;option name="config-descriptor:metadata" key="component" value="framework" /&gt;
+    &lt;option name="config-descriptor:metadata" key="parameter" value="instant_app" /&gt;
+    &lt;!-- End: metadata --&gt;
+    &lt;target_preparer class="com.android.tradefed.targetprep.suite.SuiteApkInstaller"&gt;
+        &lt;option name="cleanup-apks" value="true" /&gt;
+        &lt;option name="test-file-name" value="CtsGestureTestCases.apk" /&gt;
+    &lt;/target_preparer&gt;
+    &lt;test class="com.android.tradefed.testtype.AndroidJUnitTest" &gt;
+        &lt;option name="package" value="android.gesture.cts" /&gt;
+        &lt;option name="runtime-hint" value="10m50s" /&gt;
+    &lt;/test&gt;
+&lt;/configuration&gt;
+</pre> <h2 id="parameterized_module">Parameterized module</h2> <p>A special metadata type is <code translate="no" dir="ltr">parameter</code>.</p> 
+<pre>&lt;option name="config-descriptor:metadata" key="parameter" value="instant_app" /&gt;
+</pre> <p>This metadata specifies that the module needs to be executed in a different <em>mode</em>, for example as an instant app, instead of a standard app mode.</p> <p>All the possible modes or parameters are described by <a href="https://android.googlesource.com/platform/tools/tradefederation/+/refs/heads/android17-release/src/com/android/tradefed/testtype/suite/params/ModuleParameters.java"><code translate="no" dir="ltr">ModuleParameters</code></a> and have an associated handler in <a href="https://android.googlesource.com/platform/tools/tradefederation/+/refs/heads/android17-release/src/com/android/tradefed/testtype/suite/params/ModuleParametersHelper.java"><code translate="no" dir="ltr">ModuleParametersHelper</code></a> that lets you change the module setup to execute in the particular mode.</p> <p>For example, the instant app mode forces the APK installation as instant mode.</p> <p>In order for the parameterization to occur, the command line needs to enable it with:</p> 
+<pre>--enable-parameterized-modules
+</pre> <p>It's also possible to run a single given mode with:</p> 
+<pre>--enable-parameterized-modules --module-parameter &lt;Mode&gt;
+
+--enable-parameterized-modules --module-parameter INSTANT_APP
+</pre> <p>When a parameterized version of a module runs, it reports its results under a parameterized module name, for example <code translate="no" dir="ltr">CtsGestureTestCases[instant]</code> versus base <code translate="no" dir="ltr">CtsGestureTestCases</code>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/tradefed/testing/through-suite/setup" class="_attribution-link">https://source.android.com/docs/core/tests/tradefed/testing/through-suite/setup</a>
+  </p>
+</div>

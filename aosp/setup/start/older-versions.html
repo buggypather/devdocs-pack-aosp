@@ -1,0 +1,76 @@
+<h1>Set up for AOSP development (2.3 - 8.0)</h1>  <p>This page discusses how to set up for development with Android 8.0 or lower versions. To learn how to build Android 9.0 and higher, see <a href="requirements">Set up for AOSP development</a>.</p> <aside class="warning"><strong>Warning:</strong><span> The information on this page is provided as is and might not yield success when building Android.</span></aside><aside class="note"><strong>Note:</strong><span> As of June 22, 2021, building new versions of AOSP on Mac OS X isn't supported. However, you can set up and build Android 2.3 to Android 8.0 on Mac OS X.</span></aside> <h2 id="building-recent-old-releases">Set up for AOSP development (5.0 - 8.0)</h2> <p>For Android 5.0 through 8.0, consider using the included <a href="https://android.googlesource.com/platform/build/+/android17-release/tools/docker">Dockerfile</a> to ease the installation of all required packages.</p> <h3 id="operating-systems-two">Operating systems</h3> <p>Android is typically built with a GNU Linux. It's also possible to build Android in a virtual machine on unsupported systems such as Mac OS X.</p> <p>Google recommends building on GNU Linux. The Android build system normally runs ART on the build machine to precompile system DEX files. ART can run only on Linux, so the build system skips this precompilation step on non-Linux operating systems, resulting in an Android build with reduced performance.</p> <h4 id="linux-two">GNU Linux</h4> <ul> <li>Android 6.0 - Android 8.0: Ubuntu 14.04 (Trusty)</li> <li>Android 5.x: Ubuntu 12.0</li> </ul> <h4 id="mac_os_x_intelx86">Mac OS X (Intel/x86)</h4> <ul> <li>Android 6.0 - AOSP 8.0: Mac OS X v10.10 (Yosemite) or later with Xcode 4.5.2 and Command Line Tools</li> <li>Android 5.x: Mac OS X v10.8 (Mountain Lion) with Xcode 4.5.2 and Command Line Tools</li> </ul> <h3 id="jdk-two">JDK</h3> <ul> <li>
+<p>Android 7.0 - Android 8.0:</p> <ul> <li>Ubuntu: <a href="http://openjdk.java.net/install/">OpenJDK 8</a>
+</li> <li>Mac OS X: <a href="http://www.oracle.com/technetwork/java/javase/downloads/java-archive-javase8-2177648.html#jdk-8u45-oth-JPR">JDK 8u45 or higher</a>
+</li> </ul>
+</li> <li>
+<p>Android 5.x (Lollipop) - Android 6.0 (Marshmallow):</p> <ul> <li>Ubuntu: <a href="http://openjdk.java.net/install/">OpenJDK 7</a>
+</li> <li>Mac OS X: <a href="https://www.oracle.com/technetwork/java/javase/downloads/java-archive-downloads-javase7-521261.html#jdk-7u71-oth-JPR">jdk-7u71-macosx-x64.dmg</a>
+</li> </ul>
+</li> </ul> <h2 id="building-really-old-releases">Set up for AOSP development (2.3 - 4.4)</h2> <p>This section provides some guidance for how to set up Android 2.3 through Android 4.4.</p> <h3 id="operating-systems">Operating systems</h3> <p>Android is typically built with a GNU Linux. It's also possible to build Android in a virtual machine on unsupported systems such as Windows.</p> <p>Google recommends building on GNU Linux. The Android build system normally runs ART on the build machine to precompile system DEX files. ART can run only on Linux, so the build system skips this precompilation step on non-Linux operating systems, resulting in an Android build with reduced performance.</p> <h4 id="linux">GNU Linux</h4> <ul> <li>Android 2.3.x - Android 4.4: Ubuntu 12.04 (Precise)</li> </ul> <h4 id="mac_os_x_intelx86_2">Mac OS X (Intel/x86)</h4> <ul> <li>Android 4.1.x - Android 4.4.x: Mac OS X v10.6 (Snow Leopard) or Mac OS X v10.7 (Lion) and Xcode 4.2 (Apple Developer Tools)</li> <li>Android 2.3 - Android 4.0.x: Mac OS X v10.5 (Leopard) or Mac OS X v10.6 (Snow Leopard) and the Mac OS X v10.5 SDK</li> </ul> <h3 id="make">GNU make</h3> <p>For Android 4.1.x to 4.4 use <a href="http://ftp.gnu.org/gnu/make/">GNU make (gmake) 3.82</a>. For Android 2.3 to 4.0.x, <a href="#reverting-from-make-382">revert from gmake 3.82</a> to avoid build errors.</p> <h4 id="mxcode-other-packages">Xcode and other packages</h4> <p>For Mac OS X v10.8 or lower, install Xcode from the <a href="http://developer.apple.com/">Apple developer site</a>. If you are not already registered as an Apple developer, you must create an Apple ID to download.</p> <p>If using Mac OS X v10.4, also install Bison:</p> 
+<pre>POSIXLY_CORRECT=1 sudo port install bison
+</pre> <p>For MacPorts, issue:</p> 
+<pre>POSIXLY_CORRECT=1 sudo port install gmake libsdl git gnupg
+</pre> <p>For Homebrew, issue:</p> 
+<pre>brew install gmake libsdl git gnupg2
+</pre> <h4 id="reverting-from-make-382">Revert from gmake 3.82</h4> <p>In Android 4.0.x and lower, gmake 3.82 has a bug that prevents Android from building. You can install version 3.81 using MacPorts with these steps:</p> <ol> <li><p>Edit <code translate="no" dir="ltr">/opt/local/etc/macports/sources.conf</code> and add <code translate="no" dir="ltr">file:///Users/Shared/dports</code> above the <code translate="no" dir="ltr">rsync</code> line.</p></li> <li>
+<p>Create the <code translate="no" dir="ltr">dports</code> directory:</p> 
+<pre>mkdir /Users/Shared/dports
+</pre>
+</li> <li>
+<p>In the new <code translate="no" dir="ltr">dports</code> directory, run:</p> 
+<pre>svn co --revision 50980 http://svn.macports.org/repository/macports/trunk/dports/devel/gmake/ devel/gmake/
+</pre>
+</li> <li>
+<p>Create a port index for your new local repository:</p> 
+<pre>portindex /Users/Shared/dports
+</pre>
+</li> <li>
+<p>Install the lower version of gmake:</p> 
+<pre>sudo port install gmake @3.81
+</pre>
+</li> </ol> <h3 id="jdk">JDK</h3> <ul> <li>Android 2.3.x - Android 4.4.x: <ul> <li>Ubuntu: <a href="http://www.oracle.com/technetwork/java/javase/archive-139210.html">Java JDK 6</a>
+</li> <li>Mac OS X: <a href="http://support.apple.com/kb/dl1572">Java JDK 6</a>
+</li> </ul>
+</li> </ul> <h4 id="jdk-linux">JDK for Linux</h4> <p>The <a href="https://android.googlesource.com/">Android Open Source Project (AOSP)</a> comes with prebuilt versions of OpenJDK within <code translate="no" dir="ltr">prebuilts/jdk/</code> so no additional installation is required.</p> <p>Earlier versions of Android require a separate installation of the JDK. On Ubuntu, use <a href="http://openjdk.java.net/install/">OpenJDK</a></p> <h4 id="for-ubuntu-15-04">For Ubuntu 15.04 and higher</h4> <p>Run the following:</p> 
+<pre>sudo apt-get update
+sudo apt-get install openjdk-8-jdk
+</pre> <h4 id="for-ubuntu-14-04">For Ubuntu LTS 14.04</h4> <p>There are no available supported OpenJDK 8 packages for Ubuntu 14.04. The Ubuntu 15.04 OpenJDK 8 packages have been used successfully with Ubuntu 14.04. <em>Higher package versions (for example, those for 15.10, 16.04) don't work on 14.04 using the following instructions.</em></p> <ol> <li>
+<p>Download the <code translate="no" dir="ltr">.deb</code> packages for 64-bit architecture from <a href="http://old-releases.ubuntu.com/ubuntu/pool/universe/o/openjdk-8/">old-releases.ubuntu.com</a></p> <ul> <li>
+<code translate="no" dir="ltr">openjdk-8-jre-headless_8u45-b14-1_amd64.deb</code> with SHA256 <code translate="no" dir="ltr">0f5aba8db39088283b51e00054813063173a4d8809f70033976f83e214ab56c0</code>
+</li> <li>
+<code translate="no" dir="ltr">openjdk-8-jre_8u45-b14-1_amd64.deb</code> with SHA256 <code translate="no" dir="ltr">9ef76c4562d39432b69baf6c18f199707c5c56a5b4566847df908b7d74e15849</code>
+</li> <li>
+<code translate="no" dir="ltr">openjdk-8-jdk_8u45-b14-1_amd64.deb</code> with SHA256 <code translate="no" dir="ltr">6e47215cf6205aa829e6a0a64985075bd29d1f428a4006a80c9db371c2fc3c4c</code>
+</li> </ul>
+</li> <li>
+<p>Optionally, confirm the checksums of the downloaded files against the SHA256 string listed with each package from step 1. For example, with the <code translate="no" dir="ltr">sha256sum</code> tool:</p> 
+<pre>sha256sum {downloaded.deb file}
+</pre>
+</li> <li>
+<p>Install the packages:</p> 
+<pre>sudo apt-get update
+</pre>
+</li> <li>
+<p>Run <code translate="no" dir="ltr">dpkg</code> for each of the <code translate="no" dir="ltr">.deb</code> files you downloaded. It may produce errors due to missing dependencies:</p> 
+<pre>sudo dpkg -i {downloaded.deb file}
+</pre>
+</li> <li>
+<p>To fix missing dependencies:</p> 
+<pre>sudo apt-get -f install
+</pre>
+</li> </ol> <h4 id="default-java-version">(Optional) Update the default Java version</h4> <p>Optionally, for the previously mentioned Ubuntu versions, update the default Java version by running:</p> 
+<pre>sudo update-alternatives --config java
+sudo update-alternatives --config javac
+</pre>
+<aside class="note"><strong>Note:</strong><span> During a build, if you encounter version errors for Java, see <a href="../build/building#wrong-java-version">Wrong Java version</a> for likely causes and solutions.</span></aside> <h2 id="ubuntu14">Install required packages for Ubuntu 14.04</h2> <p>Run the following commands to install required packages for Ubuntu 14.04:</p> 
+<pre>$ sudo apt-get install git-core gnupg flex bison gperf build-essential zip curl zlib1g-dev libc6-dev-i386 libncurses5 lib32ncurses5-dev x11proto-core-dev libx11-dev lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc unzip$
+</pre> <h2 id="ubuntu12">Install required packages for Ubuntu 12.04</h2> <p>Run the following commands to install required packages for Ubuntu 12.04:</p> 
+<pre>$ sudo apt-get install git gnupg flex bison gperf build-essential zip curl libc6-dev libncurses5-dev:i386 x11proto-core-dev libx11-dev:i386 libreadline6-dev:i386 libgl1-mesa-glx:i386 libgl1-mesa-dev mingw32 tofrodos python-markdown libxml2-utils xsltproc zlib1g-dev:i386
+
+sudo ln -s /usr/lib/i386-linux-gnu/mesa/libGL.so.1 /usr/lib/i386-linux-gnu/libGL.so
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/setup/start/older-versions" class="_attribution-link">https://source.android.com/docs/setup/start/older-versions</a>
+  </p>
+</div>

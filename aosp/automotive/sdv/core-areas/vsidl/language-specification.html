@@ -1,0 +1,268 @@
+<h1>Language specification</h1>  <p>This page specifies the Vehicle Service Interface Definition Language (VSIDL) using ISO/IEC 14977 Extended Backus-Naur Form (EBNF) and protobuf. This page focuses on the context-free grammar of the language and the meaning of the language elements.</p> <h2 id="language-hierarchy">Language hierarchy</h2> <p>According to the <a href="https://www.omg.org/spec/MOF">Meta Object Facility (MOF)</a>, VSIDL compiler (VSIDLC) uses the languages shown in Figure 1:</p> <p><img src="https://source.android.com/static/docs/automotive/sdv/images/vsidlc-language-hierarchy.png" alt="VSIDLC languages" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> VSIDLC languages.</p> <p>VSIDLC is mainly based on the <a href="https://protobuf.dev/programming-guides/editions/">protocol buffer (protobuf) language</a>. Protobuf specifies the data types exchanged using publish-subscribe and remote procedure calls (RPCs). Technically, VSIDL models are TextProto files, and the VSIDL syntax is defined in a protobuf file (<code translate="no" dir="ltr">syntax.proto</code>).</p> <p>Both the protobuf files for specifying data types and the VSIDL models are used to generate Rust code. The generated code contains structs for the exchanged message data structures and Rust functions for creating service units, without calling those service units automatically. Custom Rust code then uses the generated code to instantiate service units and implement the application logic.</p> <h2 id="abstract-syntax">Abstract syntax</h2> <p>Figure 2 shows the core message types in VSIDL:</p> <p><img src="https://source.android.com/static/docs/automotive/sdv/images/vsidlc-abstract-syntax.png" alt="Core message types in VSIDL" class="android-image-dark-theme-background"> </p> <p><strong>Figure 2.</strong> Core message types in VSIDL.</p> <h2 id="vsidl-entry">VSIDL entry</h2> <p>This section explains the VSIDL entry message type.</p> <h3 id="ebnf-grammar-vsidl-entry">EBNF grammar</h3> 
+<pre>start VsidlEntry =
+  "package" , ":" , String , ";" ,
+  { "service_bundle" , ServiceBundle } ,
+  { "extension" , ":" , Any } ,
+  { "some_ip_mapping" , ":" , SomeIpMapping } ,
+  { "vhal_mapping" , ":" , VhalMapping }
+;
+</pre> <h3 id="proto-definition-vsidl-entry">Proto definition</h3> 
+<pre>// The root message for VSIDL files
+message VsidlEntry {
+  // Required. Package name for entities mentioned in the file.
+  string package = 1;
+  // Enables custom extensions beyond the standard VSIDL model.
+  repeated google.protobuf.Any extension = 3;
+
+  // SOMEIP mapping rules
+  repeated sdv.someip.v1.SomeIpMapping some_ip_mapping = 4;
+  // VHAL mapping rules
+  repeated VhalMapping vhal_mapping = 5;
+  // List of SDV service bundles defined in the file.
+  repeated ServiceBundle service_bundle = 6;
+}
+</pre> <h3 id="usage-example-vsidl-entry">Usage example</h3> 
+<pre>package: "com.android.sdv.sample.vsidl"
+
+service_bundle {
+  name: "Manager"
+
+  publisher {
+    message: "TirePressure"
+    topic: "front-left"
+    topic: "front-right"
+    capacity: 10
+  }
+}
+</pre> <h3 id="explanation-vsidl-entry">Explanation</h3> <p>The <code translate="no" dir="ltr">VsidlEntry</code> message serves as the root container for VSIDL file (with the extension <code translate="no" dir="ltr">.vsidl</code>). This message encapsulates all definitions and configurations in a single VSIDL file. The <code translate="no" dir="ltr">VsidlEntry</code> is the top-level element that binds everything else.</p> <p><strong>Purpose:</strong></p> <ul> <li>Defines the overall structure of a VSIDL file.</li> <li>Specifies the package namespace for all entities within the file.</li> <li>Contains a collection of service bundle definitions.</li> <li>Allows custom extensions to the VSIDL model.</li> <li>Includes mapping rules for SOME/IP and VHAL.</li> </ul> <h3 id="constraints-vsidl-entry">Constraints</h3> <ul> <li>
+<strong>Package name (E211):</strong> The package name must not exceed 127 characters.</li> <li>
+<strong>Dangling files (E10B):</strong> All files in a catalog must be referenced in an <code translate="no" dir="ltr">Android.bp</code> filegroup.</li> </ul> <h2 id="service-bundle">Service bundle</h2> <p>This section explains the service bundle message type.</p> <h3 id="ebnf-grammar-service-bundle">EBNF grammar</h3> 
+<pre>ServiceBundle = "{" , { ServiceBundleElement } , "}" ;
+
+ServiceBundleElement =
+  "name" , ":" , String |
+  "publisher" , Publisher |
+  "subscriber" , Subscriber |
+  "server" , Server |
+  "client" , Client |
+  "extension" , ":" , Any |
+  "diagnostics_declaration" , DiagnosticsDeclaration |
+  "build_cfg" , BuildConfiguration |
+  "register_reflection_metadata" , Boolean
+;
+</pre> <h3 id="proto-definition-service-bundle">Proto definition</h3> 
+<pre>// Defines an SDV service
+message ServiceBundle {
+  // Required. Name of the service bundle (without the package name).
+  string name = 1;
+  // List of publications the service bundle provides.
+  repeated Publisher publisher = 2;
+  // List of publications a service bundle subscribes to.
+  repeated Subscriber subscriber = 3;
+  // RPC services offered by a service bundle.
+  repeated Server server = 4;
+  // RPC services consumed by a service bundle.
+  repeated Client client = 5;
+  // Enables custom extensions beyond the standard VSIDL model.
+  repeated google.protobuf.Any extension = 7;
+
+  // Diagnostics declarations
+  sdv.diagnostics.v1.DiagnosticsDeclaration diagnostics_declaration = 8;
+
+  // Build Configuration
+  optional BuildConfiguration build_cfg = 9;
+
+  // Register metadata for service units provided by this service bundle.
+  // Setting this to true will increase the memory footprint
+  // and network load significantly.
+  bool register_reflection_metadata = 10;
+}
+</pre> <h3 id="usage-example-service-bundle">Usage example</h3> 
+<pre>service_bundle {
+    name: "SeatController"
+
+    publisher {
+      message: "SeatHeating"
+      topic: "driver-seat"
+      capacity: 10
+    }
+}
+</pre> <h3 id="explanation-service-bundle">Explanation</h3> <p>A service bundle defines a logical grouping of related services, publishers, subscribers, RPC servers, and RPC clients. A service bundle acts as a container for a specific set of functionalities and their interactions.</p> <h3 id="constraints-service-bundle">Constraints</h3> <ul> <li>
+<strong>Bundle name requirements (E209, E20A, E20B, E20C):</strong> <ul> <li>A service bundle must have a populated name.</li> <li>The name must start with a valid Unicode identifier start character (typically a letter).</li> <li>Subsequent characters in the name must be valid Unicode identifier continuation characters (typically letters or numbers).</li> <li>The name must not be a reserved keyword in Rust, Java, or C++.</li> </ul>
+</li> <li>
+<strong>Global bundle uniqueness (E309):</strong> Every service bundle must have a unique fully qualified name (based on its package and name).</li> <li>
+<strong>Internal uniqueness (E100, E300, E302, E303, E308):</strong> <ul> <li>Within a single service bundle, each RPC service can be served by at most one server definition.</li> <li>Within a single service bundle, each <code translate="no" dir="ltr">MULTI_PUB</code> publication type can be published by at most one publisher definition.</li> <li>Within a single service bundle, all user-defined service unit names (for publishers or servers) must be unique.</li> <li>Within a single service bundle, all service unit names (whether user-defined or automatically generated) must be unique.</li> </ul>
+</li> <li>
+<strong>Build target naming conventions (E205, E206, E207, E208):</strong> If a custom build target name (<code translate="no" dir="ltr">build_cfg.target_name</code>) is provided, it must adhere to snake case format (lowercase letters, numbers, and single underscores, not starting or ending with an underscore).</li> <li>
+<strong>Build target name uniqueness (E301):</strong> A user-defined build target name must not clash with any automatically generated target names for other service bundles.</li> </ul> <h2 id="publisher">Publisher</h2> <p>This section explains the Publisher message type.</p> <h3 id="ebnf-grammar-publisher">EBNF grammar</h3> 
+<pre>Publisher = "{" , { PublisherElement } , "}" ;
+
+PublisherElement =
+  "message" , ":" , String |
+  "topic" , ":" , String |
+  "capacity" , ":" , Integer |
+  "service_unit_name" , ":" , String
+;
+</pre> <h3 id="proto-definition-publisher">Proto definition</h3> 
+<pre>// Represents a publisher within a service bundle.
+message Publisher {
+  // Name of the service unit. Name may only use characters from [a-z0-9\-]+,
+  // must start with [a-z], may not end with a hyphen,
+  // and may not contain consecutive hyphens.
+  string service_unit_name = 3;
+  // Required. The type of data being published.
+  string message = 4;
+  // Required. The number of messages a publication queue can hold.
+  // Must be an even number &gt;= 2.
+  int64 capacity = 6;
+  // Required. Unique identifier for the publication topic.
+  // Must be in lowercase dash-case.
+  repeated string topic = 7;
+}
+</pre> <h3 id="usage-example-publisher">Usage example</h3> 
+<pre>publisher {
+  message: "SeatHeating"
+  topic: "driver-heating"
+  capacity: 10
+}
+</pre> <h3 id="explanation-publisher">Explanation</h3> <p>The <code translate="no" dir="ltr">Publisher</code> message type defines a data source that <code translate="no" dir="ltr">ServiceBundle</code> provides. This message type specifies the type of data being published and the specific topics and capacity of that data.</p> <h4 id="topics">Topics</h4> <p>Every <code translate="no" dir="ltr">Publisher</code> instance has a <code translate="no" dir="ltr">message</code> field that refers to the proto message being published. It must specify a topic (represented by <code translate="no" dir="ltr">topic</code>) and a capacity (represented by <code translate="no" dir="ltr">capacity</code>).</p> <ul> <li>
+<strong>Topic:</strong> A unique identifier for the publication topic. It must follow lowercase dash-case (for example, <code translate="no" dir="ltr">my-topic</code>).</li> <li>
+<strong>Capacity:</strong> Specifies the size of the queue, that is, how many messages the queue can hold before unread messages are discarded. It must be an even number greater than or equal to 2.</li> </ul> <h4 id="user-defined_names">User-defined names</h4> <p>Publishers can have user-defined service unit names that override the automatically chosen service unit names. This affordance enables choosing shorter names. If a publisher uses a user-defined service unit name, it might use only a single instance, so that the service unit name is uniquely assigned to one instance.</p> 
+<pre># VALID: A publisher assigns a user-defined name to a single instance
+publisher {
+  message: "SeatHeating"
+  topic: "seat-heating-status"
+  service_unit_name: "heating-is-off"
+}
+
+# ERROR: user-defined names are only allowed if there's only a single instance
+publisher {
+  message: "SeatHeating"
+  topic: "seat-heating-status"
+  service_unit_name: "heating-status"
+}
+</pre> <h3 id="constraints-publisher">Constraints</h3> <ul> <li>
+<strong>Publisher placement (E300):</strong> Publishers for the same <code translate="no" dir="ltr">MULTI_PUB</code> type must be defined in separate service bundles.</li> <li>
+<strong>Local name uniqueness (E302):</strong> Within any single service bundle, all publishers must have unique user-defined service unit names.</li> <li>
+<strong>Global name uniqueness (E304):</strong> Publishers of the same publication type must have globally unique user-defined service unit names across all service bundles.</li> <li>
+<strong>Naming single channels (E306):</strong> User-defined service unit names can be assigned only to publishers that handle exactly one instance.</li> <li>
+<strong>Single publisher limit (E307):</strong> A protobuf message marked as <code translate="no" dir="ltr">SINGLE_PUB</code> can be published by only one publisher across the entire system.</li> <li>
+<strong>Service unit name uniqueness (E308):</strong> All service unit names (whether generated or user defined) must be unique within their service bundle; user-defined names should be used to resolve conflicts with generated names.</li> <li>
+<strong>Variant specification requirement (E501):</strong> When a publisher uses a user-defined name for a type with multiple variants, it must explicitly specify the variant it publishes.</li> <li>
+<strong>Publisher existence for subscribers (E504):</strong> Every defined subscriber requires at least one corresponding publisher for the specified type and variant.</li> <li>
+<strong>Valid publisher type (E601):</strong> A publisher must reference a type that corresponds to an existing protobuf message.</li> <li>
+<strong>Publication annotation requirement (E602):</strong> The protobuf message type referenced by a publisher must include the <code translate="no" dir="ltr">SdvPublication</code> annotation.</li> <li>
+<strong>Valid variant usage (E606):</strong> If a publisher specifies a variant (instance), that variant must exist within the <code translate="no" dir="ltr">instances_enum</code> defined for the publication type in protobuf.</li> <li>
+<strong>Variant specification condition (E607):</strong> A publisher can specify an explicit variant (instance) only if the publication type defines an <code translate="no" dir="ltr">instances_enum</code> in protobuf.</li> <li>
+<strong>Topic naming (E20D, E20F):</strong> Topics must be in lowercase dash-case and not exceed 127 characters.</li> <li>
+<strong>Topic uniqueness (E314):</strong> Topics must be globally unique across all publishers.</li> <li>
+<strong>Capacity requirements (E406, E407):</strong> Capacity is mandatory and must be an even number &gt;= 2.</li> </ul> <h2 id="subscriber">Subscriber</h2> <p>This section explains the Subscriber message type.</p> <h3 id="ebnf-grammar-subscriber">EBNF grammar</h3> 
+<pre>Subscriber = "{" , { SubscriberElement } , "}" ;
+
+SubscriberElement =
+  "message" , ":" , String |
+  "topic" , ":" , String
+;
+</pre> <h3 id="proto-definition-subscriber">Proto definition</h3> 
+<pre>// Represents a subscriber within a service bundle.
+message Subscriber {
+  // Required. The type of data being subscribed to.
+  string message = 4;
+  // Required. Specific topic(s) of the message to subscribe to.
+  // Must match the publisher's topic.
+  repeated string topic = 6;
+}
+</pre> <h3 id="usage-example-subscriber">Usage example</h3> 
+<pre>subscriber {
+  message: "SeatHeating"
+  topic: "driver-seat"
+}
+</pre> <h3 id="explanation-subscriber">Explanation</h3> <p>The <code translate="no" dir="ltr">Subscriber</code> message defines a publication receiver that <code translate="no" dir="ltr">ServiceBundle</code> provides. This message specifies the type of data being subscribed to and the specific topics of that publication. If there are multiple publishers for a topic, the subscriber receives the messages published by all of them.</p> <h3 id="constraints-subscriber">Constraints</h3> <ul> <li>
+<strong>Publisher existence (E504):</strong> For every defined subscriber, at least one corresponding publisher must exist that publishes the specified publication type and variant.</li> <li>
+<strong>Valid subscription type (E608):</strong> A subscriber must reference a type that corresponds to an existing protobuf message defined with the <code translate="no" dir="ltr">SdvPublication</code> annotation.</li> <li>
+<strong>Valid variant subscription (E609):</strong> If a subscriber specifies a variant (instance), that variant must be a valid value defined within <code translate="no" dir="ltr">instances_enum</code> of the corresponding protobuf publication type.</li> <li>
+<strong>Topic mandatory (E408):</strong> Topic is mandatory for subscribers.</li> <li>
+<strong>Topic redeclaration (E311):</strong> Subscriber topics shouldn't be redeclared in the same service bundle.</li> </ul> <h2 id="rpc-server">RPC server</h2> <p>This section explains the RPC server message type.</p> <h3 id="ebnf-grammar-rpc-server">EBNF grammar</h3> 
+<pre>Server = "{" , { ServerElement } , "}" ;
+
+ServerElement =
+  "service" , ":" , String |
+  "channel" , ":" , String |
+  "service_unit_name" , ":" , String
+;
+</pre> <h3 id="proto-definition-rpc-server">Proto definition</h3> 
+<pre>// Represents an RPC server within a service bundle.
+message Server {
+  // Deprecated. Name of the service unit.
+  string service_unit_name = 3 [ deprecated = true ];
+  // Required. Name of the RPC service.
+  string service = 4;
+  // Required. Name of the RPC channel.
+  // Must be in lowercase dash-case.
+  string channel = 5;
+}
+</pre> <h3 id="usage-example-rpc-server">Usage example</h3> 
+<pre>server {
+  service: "SetTemperature"
+  channel: "temp-setter"
+}
+</pre> <h3 id="explanation-rpc-server">Explanation</h3> <p>The <code translate="no" dir="ltr">Server</code> message defines an RPC server that <code translate="no" dir="ltr">ServiceBundle</code> provides. This message specifies the service that the server implements and the RPC channel.</p> <p>An RPC server exposes a set of methods that clients can invoke remotely. The <code translate="no" dir="ltr">service</code> field specifies the name of the RPC service that the server implements. This service is defined in a proto file and implemented in custom Rust code. RPC services can include unary, client-streaming, and server-streaming methods, as defined in the protobuf service definition. The <code translate="no" dir="ltr">channel</code> field defines the communication endpoint and is mandatory (E409).</p> <h3 id="constraints-rpc-server">Constraints</h3> <ul> <li>
+<strong>Service definition (E603):</strong> An RPC server must specify a <code translate="no" dir="ltr">service</code> value that corresponds to an existing protobuf RPC <code translate="no" dir="ltr">service</code> value.</li> <li>
+<strong>Server limit per service (E100):</strong> Within a single service bundle, a specific RPC <code translate="no" dir="ltr">service</code> can be served by at most one server definition.</li> <li>
+<strong>Channel naming (E20E):</strong> RPC channels must be in lowercase dash-case.</li> <li>
+<strong>Channel mandatory (E409):</strong> RPC channel is mandatory.</li> <li>
+<strong>Channel uniqueness (E40B):</strong> RPC channel must be used by only one service.</li> </ul> <h2 id="rpc-client">RPC client</h2> <p>This section explains the RPC client message type.</p> <h3 id="ebnf-grammar-rpc-client">EBNF grammar</h3> 
+<pre>Client = "{" , { ClientElement } , "}" ;
+
+ClientElement =
+  "service" , ":" , String |
+  "channel" , ":" , String
+;
+</pre> <h3 id="proto-definition-rpc-client">Proto definition</h3> 
+<pre>// Represents an RPC client within a service bundle.
+message Client {
+  // Required. Name of the RPC service.
+  string service = 2;
+  // Required. Name of the RPC channel.
+  // Must match the server's channel and be in lowercase dash-case.
+  string channel = 3;
+}
+</pre> <h3 id="usage-example-rpc-client">Usage example</h3> 
+<pre>client {
+  service: "SetTemperature"
+  channel: "temp-setter"
+}
+</pre> <h3 id="explanation-rpc-client">Explanation</h3> <p><code translate="no" dir="ltr">client</code> defines an RPC client that <code translate="no" dir="ltr">ServiceBundle</code> consumes. <code translate="no" dir="ltr">client</code> specifies the service that the client interacts with and the channel to connect to. The client can interact with unary, client-streaming, and server-streaming methods, depending on the service definition.</p> <h3 id="constraints-rpc-client">Constraints</h3> <ul> <li>
+<strong>Service definition (E60A):</strong> An RPC client must specify a <code translate="no" dir="ltr">service</code> that corresponds to an existing protobuf <code translate="no" dir="ltr">service</code> definition.</li> <li>
+<strong>Unique service source (E60B):</strong> The protobuf <code translate="no" dir="ltr">service</code> definition referenced by an RPC client's <code translate="no" dir="ltr">service</code> must be uniquely defined (not defined multiple times) across all protobuf files.</li> <li>
+<strong>Channel mandatory (E409):</strong> RPC channel is mandatory.</li> </ul> <h2 id="build-configuration">Build configuration</h2> <p>This section explains the Build configuration message type.</p> <h3 id="ebnf-grammar-build-config">EBNF grammar</h3> 
+<pre>BuildConfiguration = "{" , BuildConfigurationElement, "}" ;
+
+BuildConfigurationElement =
+  "target_name" , ":" , String |
+  "skip_codegen" , ":" , Boolean
+;
+</pre> <h3 id="proto-definition-build-config">Proto definition</h3> 
+<pre>// Defines additional information used to configure build settings
+message BuildConfiguration {
+  /// Build target name
+  optional string target_name = 1;
+  // Do not generate code for this service bundle
+  optional bool skip_codegen = 2;
+}
+</pre> <h3 id="usage-example-build-config">Usage example</h3> 
+<pre>build_cfg {
+  target_name: "my_custom_target_name"
+  skip_codegen: false
+}
+</pre> <h3 id="explanation-build-config">Explanation</h3> <p><code translate="no" dir="ltr">BuildConfiguration</code> configures nonstandard parameters of <code translate="no" dir="ltr">ServiceBundle</code> for code generation. All build configurations are optional.</p> <ul> <li>
+<code translate="no" dir="ltr">target_name</code> (optional <code translate="no" dir="ltr">string</code>): Specifies the name of the build target in <code translate="no" dir="ltr">Android.bp</code> files. Use this to set target names with shorter names than the automatically chosen names.</li> <li>
+<code translate="no" dir="ltr">skip_codegen</code> (optional <code translate="no" dir="ltr">bool</code>): Indicates whether code generation should be skipped for this service bundle. If set to <code translate="no" dir="ltr">true</code>, no code is generated for this particular service bundle. This can be useful for service bundles that are implemented manually. By default, this is set to <code translate="no" dir="ltr">false</code>.</li> </ul> <h3 id="constraints-build-config">Constraints</h3> <ul> <li>
+<strong>Target name format (E205, E206, E207, E208):</strong> If a custom build target name (<code translate="no" dir="ltr">build_cfg.target_name</code>) is provided, it must strictly follow snake case formatting: <ul> <li>It must contain only lowercase letters (<code translate="no" dir="ltr">a</code> through <code translate="no" dir="ltr">z</code>), numbers (<code translate="no" dir="ltr">0</code> through <code translate="no" dir="ltr">9</code>), and underscores (<code translate="no" dir="ltr">_</code>).</li> <li>It must not contain consecutive underscores (<code translate="no" dir="ltr">__</code>).</li> <li>It must not start with an underscore.</li> <li>It must not end with an underscore.</li> </ul>
+</li> <li>
+<strong>Target name uniqueness (E301):</strong> A user-defined <code translate="no" dir="ltr">build_cfg.target_name</code> must be unique across the build system and must not conflict with any automatically generated target names derived from other service bundle definitions.</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/core-areas/vsidl/language-specification" class="_attribution-link">https://source.android.com/docs/automotive/sdv/core-areas/vsidl/language-specification</a>
+  </p>
+</div>

@@ -1,0 +1,156 @@
+<h1>Audio chimes</h1>  <p>This content describes chime playback in the high availability renderer (HAR). An <code translate="no" dir="ltr">Audio</code> crate exposes <code translate="no" dir="ltr">AudioManager</code> to the HAR app, which controls chime playback.</p> <p>To keep latency low, playback threads run throughout the lifetime of the app, idling and yielding when no audio plays.</p> <h2 id="terminology">Terminology</h2> <dl> <dt id="asset">asset</dt> <dd>
+<code translate="no" dir="ltr">AudioAsset</code> pertains to playable audio. Assets are commonly known and exist in the app runtime.</dd> <dt id="device">device</dt> <dd>
+<code translate="no" dir="ltr">AudioDevice</code> refers to a separate bus for playback of audio. The device is the most granular unit relating to hardware accessed by the system. In the standard SDVM implementation, <code translate="no" dir="ltr">AudioDevice</code> refers to a single Advanced Linux Sound Architecture (ALSA) PCM. </dd> <dt id="stream">stream</dt> <dd>An instance of playback of an asset on a device. Streams persist from the moment of being scheduled until completed, canceled, or ending in error.</dd> </dl> <h2 id="high-level-overview">Components</h2> <p>Figure 1 displays the component diagram for chime:</p> <p class="android-image-dark-theme-background"><img src="https://source.android.com/static/docs/automotive/sdv/images/har-chime-01.svg" alt="Component diagram"> </p> <p><strong>Figure 1</strong>. Component diagram.</p> <h3 id="audio-device">Audio device and PCM</h3> <p>Audio hardware configuration follows the standard HAR platform abstraction layer design, and <code translate="no" dir="ltr">har-platform-api</code> contains it.</p> <p>The HAR <code translate="no" dir="ltr">Audio</code> crate defines a new structure for <code translate="no" dir="ltr">AudioDevice</code>, which defines fields for all the data structures that affect the internal HAR <code translate="no" dir="ltr">Audio</code> crate and playback. <code translate="no" dir="ltr">AudioDevice</code> also uses generics to wrap potential platform-specific additional parameters. In the case of <code translate="no" dir="ltr">tinyalsa</code>, <code translate="no" dir="ltr">PlatformAudioDevice</code> contains the descriptors and properties of an ALSA PCM.</p> 
+<pre>/// NOTE: The following code is a sample definition to help understanding, it is not a
+/// representation of the final code/implementation.
+
+AudioDevice&lt;PlatformAudioDevice&gt; {
+  /// Internal HAR Identifier for the device.
+  AudioDeviceID,
+
+  /// The size (in bytes) for chunks of audio data to stream to the device.
+  ChunkSize,
+
+  /// Properties necessary to control volume (details in "Mixer control" section).
+  VolumeControl,
+
+  /// Properties necessary to control spatialization (details in "Mixer control"
+  /// section).
+  SpatialControl,
+
+  /// Platform specific data for the AudioDevice.
+  /// E.g. ALSA properties and reference to opened PCM.
+  PlatformAudioDevice
+}
+
+/// Elaboration of the previously mentioned VolumeControl
+VolumeControl {
+  /// Identifier for the control used to change volume.
+  ControlID,
+
+  /// Mapping between Decibel and control values. (see Mixer control section)
+  VolumeOutputIndex
+}
+</pre> <h3 id="audio-assets">Audio assets</h3> <p>This section describes how audio assets are configured and implemented.</p> <h4 id="configuration">Configuration</h4> <p>The initial HAR audio implementation supports statically configured audio assets. A JSON config defines which assets are available and which assets are defined as WAV files.</p> <p>The implementation also supports synthesized and streamed audio assets though a more generic asset implementation, which accepts a function to generate audio data.</p> <h4 id="implementation">Implementation</h4> <p>Implement assets using two separate constructs, <code translate="no" dir="ltr">AudioAsset</code> and <code translate="no" dir="ltr">AudioStream</code>.</p> <p><code translate="no" dir="ltr">AudioAsset</code> defines the static properties of an asset, and a container for potential internal data related to the asset. From <code translate="no" dir="ltr">AudioAsset AudioStream</code> can be derived, which is a single streamable instance of the asset. <code translate="no" dir="ltr">AudioStream</code> contains an internal state related to the singular stream playback.</p> 
+<pre>/// NOTE: The following code is a sample definition to help understanding, it is not a
+/// representation of the final code/implementation.
+
+/// Static properties and definition of an Asset.
+AudioAsset {
+  /// Perform optional initialization steps, e.g. load bytes from file into memory.
+  /// Can also define lazy loading, to load data at first playback instead.
+  fn initialize(LazyLoad);
+
+  /// Create a new AudioStream from the asset.
+  fn create_stream() -&gt; AudioStream;
+
+  /// More functions for metadata etc. of the asset.
+  ...
+}
+
+/// Single streamable instance of an AudioAsset
+AudioStream {
+  /// Gets the next bytes to play from the Asset together with if the current chunk of
+  /// bytes contains any control signals (e.g. fade-out).
+  fn get_playback(num_bytes: usize) -&gt; ([u8], ControlSignals);
+
+  /// Gets playback Mode details used to handle special states of playback
+  /// e.g. when a chime gets is interrupted and put in "fade-out" mode.
+  fn playback_mode() -&gt; PlaybackMode;
+
+  /// [0.0, 1.0] indication of how much of the stream was played.
+  fn progress() -&gt; f32;
+
+  /// Reset the stream, e.g. if it should play again.
+  fn reset();
+
+  /// Time of which the stream was created.
+  fn created_at() -&gt; Instant;
+
+  /// Additional metadata etc. for the stream.
+  ...
+}
+</pre> <h3 id="chime-playback">Chime playback</h3> <p>This section describes the API and procedure for playback of a chime. A singular chime playback is referred to as a <em>stream</em>.</p> <h4 id="stream-lifecycle">Lifecycle of a stream</h4> <p>Figure 2 illustrates the lifecycle of a stream:</p> <p class="android-image-dark-theme-background"><img src="https://source.android.com/static/docs/automotive/sdv/images/har-chime-02.svg" alt="Stream playback and events"> </p> <p><strong>Figure 2</strong>. Stream playback and events.</p> <p>Figure 2 describes these steps:</p> <ol> <li><p><strong>Play:</strong> Schedule stream to play.</p></li> <li>
+<p><strong>Prioritize:</strong> Playback prioritization decides whether to:</p> <ul> <li>Play chime now (started event when the first bytes)</li> <li>Play chime later (paused or resumed event)</li> <li>Deprioritize chime (canceled event)</li> </ul>
+</li> <li><p><strong>Mixer controls:</strong> If needed, update mixer controls based on configured behaviors.</p></li> <li><p><strong>Write bytes:</strong> Write a chunk of bytes to <code translate="no" dir="ltr">AudioDevice</code>.</p></li> <li><p><strong>More data:</strong> If the stream has more data, return to Step 2.</p></li> <li><p><strong>Repeat:</strong> If the stream should be repeated, reset and return to Step 2 (restarted event).</p></li> <li><p><strong>Completed:</strong> The stream completed successfully (<code translate="no" dir="ltr">FinishedSuccessfully</code> event).</p></li> </ol> <p>The chime can be interrupted with pause, resume, or stop calls at any time.</p> <h4 id="chime-priorities">Chime priorities</h4> <p>This logic sets chime priorities:</p> <ol> <li><p>Playback mode overrides. For example, a chime in the fade out mode is always granted top priority until the fade out is completed.</p></li> <li><p>Specified priority.</p></li> <li><p>If equal priority is more recent, the chime plays first.</p></li> </ol> <p>When chimes are of equal priority, <code translate="no" dir="ltr">AudioManager</code> is instantiated with an <code translate="no" dir="ltr">enum</code> value.</p> <h3 id="api">API</h3> <h4 id="events">Events</h4> <p>If an event channel is provided when the chime starts, HAR <code translate="no" dir="ltr">Audio</code> emits a number of events during the playback. The supported events are shown in this example:</p> 
+<pre>/// NOTE: The following code is a sample definition to help understanding, it is not a
+/// representation of the final code/implementation.
+
+StreamBehaviors&lt;PlatformStreamBehaviors&gt; {
+  /// What should happen if the stream is interrupted for a higher priority stream.
+  /// e.g. pause-and-resume or cancel, will also define preference for fade-out.
+
+  OverrunBehavior,
+  /// Urgency, if interrupted streams are allowed to "fade-out", or if the stream should
+  /// urgently disrupt any other playback.
+  Optional&lt;Urgency&gt;,
+
+  /// Priority for the stream (or minimum if not specified).
+  Optional&lt;StreamPriority&gt;
+  /// Descriptor if a stream should be played on repeat.
+  Optional&lt;RepeatBehavior&gt;
+  /// Volume, if the stream should play at a specific volume.
+  Optional&lt;Volume&gt;
+  /// Spatialization, if the stream should play with specific spatialization.
+  Optional&lt;Spatialization&gt;
+
+  /// Optional generic for future expandability of the API, or pass-through of platform
+  /// specific Stream Behaviors
+  Optional&lt;PlatformStreamBehaviors&gt;
+}
+
+/// Plays a chime on specified device with given behaviors. StreamEvents are delivered
+/// using the provided event transmitter. This method won't wait for any events.
+fn play(AudioDeviceID, AssetID, StreamBehaviors, Option&lt;EventTransmitter&gt;) -&gt; StreamController
+
+/// Object used to control a Stream.
+StreamController {
+  /// Gets the current state/metadata of a stream (e.g. ID, progress, playback_state).
+  fn metadata() -&gt; StreamMetadata
+
+  /// Stops the stream.
+  fn stop()
+
+  /// Pauses a given stream, if the specified duration expires the stream is cancelled.
+  /// Timeout is required to make sure there are no paused streams left indefinitely
+  /// pending resumption.
+  fn pause(TimeoutDuration)
+
+  /// Resumes a paused stream.
+  fn resume()
+
+  /// Updates the spatialization of a playing stream.
+  fn set_spatialization(Spatialization)
+
+  /// Updates the volume of a playing stream.
+  fn set_volume(Volume)
+}
+</pre> <h3 id="mixer-control">Mixer control</h3> <p>This section describes how volume and spatialization are controlled.</p> <h4 id="volume">Volume</h4> <p>HAR defines volume consistently in millibels. The <code translate="no" dir="ltr">har-platform-api</code> crate handles conversion from millibels to control signal.</p> <p>The relation between millibels and hardware power output is logarithmic, and varies greatly between different hardware and speaker setups. As a result, provide configuration between the values as part of <code translate="no" dir="ltr">AudioDevice</code> (<a href="#audio-device">Audio Device and PCM</a>) configuration, and conversion must take place before calling the platform layer.</p> <p>As a result, implementation in the PAL API defines two functions.</p> 
+<pre>fn set_volume_millibel(AudioDeviceID, Millibel) {
+  /// Default implementation with conversion using DeviceConfig.
+}
+
+fn set_volume_control(AudioDeviceID, ControlValue);
+</pre> <p>The default implementation for <code translate="no" dir="ltr">set_volume_millibel</code> uses the config provided for <code translate="no" dir="ltr">AudioDevice</code>, including a set of key-value pairs for reference millibel - control, transform the millibel to control values, and then call the <code translate="no" dir="ltr">set_volume_control</code> function with converted value.</p> <p>This design provides a default and enables subsequent implementations to override the default mapping.</p> <p><img src="https://source.android.com/static/docs/automotive/sdv/images/har-chime-03.svg" alt="HAR audio flow" class="android-image-dark-theme-background"> </p> <p><strong>Figure 3</strong>. HAR audio flow.</p> <h4 id="spatialization">Spatialization</h4> <p>The Audio API exposes functionality to control what spatial area audio data should play in. These parameters are passed through to the PAL layer, and be applied downstream using hardware controls. Options are defined as part of the PAL API as:</p> 
+<pre>/// NOTE: The following code is a sample definition to help understanding, it is not a
+/// representation of the final code/implementation.
+
+enum Spatialization {
+  Front,
+  FrontLeft,
+  FrontRight,
+  Center, // No spatialization
+  Rear,
+  RearLeft,
+  RearRight,
+  Right,
+  Left
+}
+</pre> <h3 id="mixer-control-tiers">Mixer control tiers</h3> <p>You can define volume and spatialization on an asset and for a stream. If you define a stream priority, the stream overrides the controls defined by the asset.</p> <h3 id="thread-management">Thread management</h3> <p>The audio manager maintains one thread per <code translate="no" dir="ltr">AudioDevice</code> instance. Each thread operates independently. Interaction between <code translate="no" dir="ltr">AudioManager</code> and the playback thread uses a shared stream queue sorted by priority.</p> <p>ALSA calls use ASYNC writes with polling to determine when data is digested.</p> <figure> <img src="https://source.android.com/static/docs/automotive/sdv/images/har-chimes-04.png" alt="Thread management sequence" class="android-image-dark-theme-background"> </figure> <p><strong>Figure 4</strong>. Thread management sequence.</p> <h4 id="control-signals">Control signals during polling</h4> <p>When awaiting the sound card to digest bytes, control signals can be issued. For example, to change fade or spatialization of the audio. Polling to get the state of the audio device is either configured at the <code translate="no" dir="ltr">AudioManager</code> level or defaults to 1 millisecond. After each polling cycle, the playback thread digests and issues any timed control commands.</p> <h4 id="buffer-management">Buffer management</h4> <p>To minimize interruption latency, buffer sizes written to the device are kept small. When using TinyALSA as a default, buffer size is configured to be the same as the <code translate="no" dir="ltr">startup_threshold</code> parameter. <a href="https://github.com/tinyalsa/tinyalsa/blob/master/src/pcm.c#L510">TinyALSA defines the default</a> as the entire allocated device buffer divided by two.</p> <h3 id="stream-interruption">Stream interruption</h3> <p>When streams are interrupted, the streams maintain thread priority until data they've written to the card is drained. As a result, a transition period takes place between interruption and the new stream.</p> <p><strong>For example,</strong> if an audio sample in HAR uses a:</p> <ul> <li>Size of 3,072</li> <li>Rate of 48,000</li> <li>Sample size of two</li> </ul> <p>The pending buffer is calculated as 3,072 and 6,144 frames, which results in an interruption delay of 64 to 128 milliseconds. A production implementation would require a smaller buffer.</p> <h2 id="error-management">Error management and risks</h2> <p>This section describes how errors are managed and potential risks.</p> <h4 id="stale-streams">Stale streams and queue starvation</h4> <p>Given that <code translate="no" dir="ltr">AudioStream</code> can be paused, and because playback can occur only from the top-priority <code translate="no" dir="ltr">AudioStream</code> instance, the risk arises of a growing queue starving low-priority streams.</p> <p>To avoid this occurrence, each queue is capped at a configurable size. When this value is exceeded, the lowest-priority stream is discarded.</p> <h4 id="monitor-alert">Monitor and alert</h4> <p>In production, the safety monitor tracks audio features to track that playback takes place as expected.</p> <p><code translate="no" dir="ltr">AudioManager</code> monitors the internal statistics specific to latencies and a flag that defines logging performance. After setting these thresholds, warning logs are generated for all debug builds when:</p> <ul> <li>Duration between scheduling and starting playback exceeds <code translate="no" dir="ltr">x</code> milliseconds.</li> <li>(For a non-disrupted stream) asset length and playback time differ by more than <code translate="no" dir="ltr">y</code> percent.</li> </ul> <aside class="note"><strong>Note:</strong><span> Logging is used during development. Before this approach can be used in production, an upgrade is required to send data to the appropriate systems and channels.</span></aside> <h4 id="device-blocked">Device blocked</h4> <p>There's always a small risk of an audio device becoming unresponsive, for example, if it's allocated and written to by another process in the system. Given that playback runs asynchronously in separate threads, and that chimes can be queued up to play later, this is completely transparent to the calling app.</p> <p>To detect this, a thread health check is made whenever a new chime is scheduled to be played, returning error if a playback thread has a populated queue, and hasn't digested any new bytes for the last second.</p> <p>For future purposes it might be necessary to attempt restarting / opening devices, but for the initial implementation, errors shouldn't be invisible.</p> <h3 id="code-structure">Code structure</h3> <p>On a high level, the code related to chimes playback exists across the following crates:</p> <p><code translate="no" dir="ltr">CRATE: display-safety/crates/(harry-app|harry)</code></p> <p>The existing HAR app, which issues calls to play chimes.</p> <p><code translate="no" dir="ltr">NEW CRATE: display-safety/crates/audio</code></p> <p>NEW: Crate to manage audio control and playback (this is where most of the functionality exists).</p> <p><code translate="no" dir="ltr">CRATE: display-safety/crates/har-platform-api/audio</code></p> <p>PAL including all system calls required for audio.</p> <p><code translate="no" dir="ltr">CRATE: display-safety/crates/har-platform-(android|linux)/audio</code></p> <p>Calls to <code translate="no" dir="ltr">tinyalsa-rs</code> for playback using TinyALSA. QNX support isn't implemented in the initial solution, and this will grow as more platforms are supported.</p> <p><code translate="no" dir="ltr">TINYALSA PAL: display-safety/crates/tinyalsa-audio</code></p> <p>TinyALSA-specific code for playback. This is used by the Android and Linux platform implementations.</p> <p><code translate="no" dir="ltr">CRATE: display-safety/crates/tinyalsa-rs</code></p> <p>Rust bindings for TinyALSA C implementation</p> <h2 id="rust-implementation">Rust implementation details</h2> <p>Some specific implementation details:</p> <ul> <li>All API functions return <code translate="no" dir="ltr">Result&lt;X, AudioError&gt;</code> where <code translate="no" dir="ltr">X</code> is either () or a return value.</li> <li>No API functions are marked as <code translate="no" dir="ltr">unsafe</code>.</li> <li>Mutex and synchronization mechanisms are internal and aren't exposed in the <code translate="no" dir="ltr">AudioManager</code> API.</li> </ul> <h3 id="ownership-model-and-audiomanager">Ownership model and AudioManager</h3> <ul> <li><p>All app interaction with the audio system takes place through <code translate="no" dir="ltr">AudioManager</code> or objects returned from <code translate="no" dir="ltr">AudioManager</code>.</p></li> <li><p><code translate="no" dir="ltr">AudioManager</code> is thread safe.</p></li> <li><p><code translate="no" dir="ltr">AudioManager</code> is instantiated once in the HARry app, and <code translate="no" dir="ltr">Moved</code>, for <code translate="no" dir="ltr">Looper</code> to have ownership.</p></li> <li><p><code translate="no" dir="ltr">AudioManager</code> uses a <a href="https://docs.rs/tokio-util/latest/tokio_util/sync/struct.CancellationToken.html"><code translate="no" dir="ltr">tokio_util::CancellationToken</code></a> token to manage its started playback threads, ensuring the threads are terminated and resources released if <code translate="no" dir="ltr">AudioManager</code> is <code translate="no" dir="ltr">Dropped</code>.</p></li> <li><p><code translate="no" dir="ltr">AudioManager</code> doesn't explicitly prevent multiple instances from being created. If more than one instance exists, it logs with the <code translate="no" dir="ltr">warn</code> level.</p></li> </ul> <h3 id="shared_ownership">Shared ownership</h3> <p>A number of objects have shared ownership wrapped and synchronized with exclusive access. These mechanisms aren't exposed in the <code translate="no" dir="ltr">AudioManager</code> API, but are internal to the audio and PAL implementations.</p> <ul> <li><p><code translate="no" dir="ltr">AudioDevice</code> - Each hardware reference (for example, TinyALSA PCM) that is opened (has a handle) has exclusive access. See <a href="https://www.alsa-project.org/wiki/SMP_Design">SMP Design</a>.</p></li> <li>
+<p><code translate="no" dir="ltr">AudioStream</code> instances have exclusive access after they're scheduled for playback because they can be controlled by the app and simultaneously accessed by the playback thread.</p> <p>The playback thread doesn't hold locks during playback, but makes an immutable snapshot of the next buffer to play, and doesn't consider changes until the next buffer is digested.</p>
+</li> <li><p>Each playback thread has a playback queue, a shared reference between <code translate="no" dir="ltr">AudioManager</code> and the playback thread. As a result, the thread needs exclusive access for mutations.</p></li> <li><p>Threads with no streams become idle with the <a href="https://doc.rust-lang.org/std/sync/struct.Condvar.html"><code translate="no" dir="ltr">Condvar</code></a> variable to receive wakeup events when new data is detected. This mechanism has shared ownership.</p></li> </ul> <h3 id="dependencies">Dependencies</h3> <p>Crates and audio crate are designed to reduce dependencies on crates that aren't approved to be built in the Android source tree. See this list of included <a href="https://android.googlesource.com/platform/external/rust/crates/)">crates</a>.</p> <p>Downstream platform implementations for Android and Linux depend on <a href="https://github.com/tinyalsa/tinyalsa">TinyALSA</a> and the existing display safety <code translate="no" dir="ltr">tinyalsa-rs</code> crate.</p> <h2 id="quality-attributes">Quality attributes</h2> <h3 id="reliability">Reliability</h3> <p>While audio playback is safety critical, this design doesn't cover the implementation of a safety monitoring. Implement this in a separate effort, to verify audio playback reliability on hardware and in production.</p> <h3 id="scalability">Scalability</h3> <p>The one thread per device approach is intended to scale to different hardware setups. Given that each thread is primarily idling, waiting for data, or waiting for the device to digest written data, it shouldn't be demanding on the processor or performance intensive on the system.</p> <p>The design decision to only play data to a single device, combined with mixer control commands for all further output control ensures the exact output is handled by sound hardware, and should scale for future systems.</p> <h3 id="latency">Latency</h3> <p>Latency is critical for the audio system, so after implementation, a set of service-level objectives (SLOs) are defined for the latency of the system. To continuously monitor the latency health, monitoring in the system logs not meeting defined SLOs in all debug builds.</p> <p>For the production versions, monitoring data is passed to some system external to the audio implementation, rather than relying on logs.</p> <h2 id="test">Test and test strategy</h2> <p>The crates and the audio crate are designed with test coverage. We added a mock platform implementation to confirm that all capabilities are tested.</p> <p>The complexity of hardware and bindings preclude extensive test coverage for platform implementations. We provide sample implementations to manually test the solution on hardware and on the Cuttlefish emulator.</p> <h2 id="documentation">Documentation</h2> <p>The <code translate="no" dir="ltr">README.md</code> file in <code translate="no" dir="ltr">Audio crates/audio</code> describes how to use <code translate="no" dir="ltr">AudioManager</code>. <code translate="no" dir="ltr">crates/audio/examples</code> contains examples for:</p> <ul> <li>Implement a platform.</li> <li>Create an instance of <code translate="no" dir="ltr">AudioManager</code>.</li> <li>Play <code translate="no" dir="ltr">WavAsset</code>.</li> <li>Play a custom function asset on repeat.</li> <li>Log playback events.</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/display-safety/chimes" class="_attribution-link">https://source.android.com/docs/automotive/sdv/display-safety/chimes</a>
+  </p>
+</div>

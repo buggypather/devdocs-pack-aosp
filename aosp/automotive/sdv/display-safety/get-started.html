@@ -1,0 +1,109 @@
+<h1>Get started with Display Safety</h1>  <p>This page provides an overview for accessing, building, and running the Display Safety components, including the <a href="har-pal">high availability renderer (HAR)</a>, <a href="driverui">DriverUI</a>, and the <a href="toolchain">safety monitor</a>, across the Software Defined Vehicle (SDV) platforms.</p> <h2 id="code-access">Code access</h2> <p>This section covers getting access to the codebase for the <code translate="no" dir="ltr">HAR</code> and <code translate="no" dir="ltr">DriverUI</code> Display Safety components.</p> <h3 id="high-availability-renderer">High availability renderer</h3> <p>The codebase for the high availability renderer (HAR) is available as part of the <a href="../getting-started/code-location">main repository checkout</a> at <code translate="no" dir="ltr">packages/services/display_safety/</code>.</p> <p>The codebase for HAR is structured as follows:</p> <ul> <li>
+<strong>Framework:</strong> Contains core framework interfaces for platform, rendering, animation, and audio.</li> <li>
+<strong>Reference:</strong> Contains platform-specific implementations for framework interfaces, as well as the code for the HAR reference app, and the safety toolchain (Design Compiler, safety monitor).</li> <li>
+<strong>Service:</strong> Android-specific services for sending and receiving vehicle data between components, and definitions for the APEX data packages.</li> <li>
+<strong>Prebuilts:</strong> Provides wrappers for prebuilt binaries such as the Impeller graphics library.</li> </ul> <p>The Harry <strong>reference app</strong> code is located at <code translate="no" dir="ltr">packages/services/display_safety/reference/harry_app</code>.</p> <p>For detailed directory structure of HAR see <a href="code-structure">Display Safety Code structure</a></p> <h3 id="safety-monitor">Safety monitor</h3> <p>The codebase for safety monitor is available as part of the main repository checkout at <code translate="no" dir="ltr">packages/services/display_safety/reference/safety-monitor</code>.</p> <p>The safety monitor code is structured as follows:</p> <ul> <li>
+<code translate="no" dir="ltr">main.rs</code>: Fetches telltale artifacts, initializes the vehicle data server, and telltale monitoring loops. Information on telltale visibility is compared with telltale inspection results, with the results provided using SDV logs.</li> <li>
+<code translate="no" dir="ltr">Vehicle_data_server.rs</code>: The server which subscribes to the vehicle data, updating telltale visibility for the main loop.</li> <li>
+<code translate="no" dir="ltr">Telltale_monitoring.rs</code>: Runs in a loop, fetching a copy of the screenbuffer using the screencap crate, and inspecting the specified regions for telltales. Results of telltale inspections are then sent to the main loop.</li> </ul> <h3 id="driverui">DriverUI</h3> <p>DriverUI is available as part of an unbundled codebase, which you can access from <code translate="no" dir="ltr">ub-automotive-master</code> branch.</p> 
+<pre>mkdir ub-automotive-master &amp;&amp; cd ub-automotive-master
+repo init -u https://android.googlesource.com/platform/manifest -b ub-automotive-master
+repo sync -cq
+</pre> <p>For more information about unbundled and Google source, see <a href="../../unbundled_apps/integration">Integrate unbundled apps</a>.</p> <h2 id="build-and-run">Build and run</h2> <p>This section details the process for compiling and executing the targets for the HAR within SDV Media and the DriverUI within SDV In-Vehicle Infotainment (IVI) to achieve the full cluster solution with SDV.</p> <p><img src="https://source.android.com/static/docs/automotive/sdv/images/display-safety-03.png" alt="Guest VMs"></p> <p><strong>Figure 1.</strong> Display Safety dual VM structure.</p> <h3 id="building-har-and-sdv-media-target">Build HAR and SDV Media target</h3> <ul> <li>
+<strong>Base media target:</strong> <code translate="no" dir="ltr">sdv_media_cf</code> <ul> <li>
+<strong>Description:</strong> A dedicated target for the SDV media stack, facilitating isolated testing of various media frameworks.</li> <li>
+<strong>Directory location:</strong> <code translate="no" dir="ltr">device/google/sdv/</code>
+</li> </ul>
+</li> <li>
+<strong>HAR integrated target:</strong> <code translate="no" dir="ltr">sdv_media_har_cf</code> <ul> <li>
+<strong>Description:</strong> This target integrates the media stack with the HAR, executing SDV Media on Cuttlefish.</li> <li>
+<strong>Directory location:</strong> <code translate="no" dir="ltr">device/google/sdv_display_safety/</code>
+</li> <li><strong>Build execution:</strong></li> </ul>
+</li> </ul> 
+<pre># In the root of the Android source
+source build/envsetup.sh
+lunch sdv_media_har_cf-aosp_current-userdebug
+m -j
+</pre> <h3 id="building-the-driverui">Build the DriverUI</h3> <p>From the <code translate="no" dir="ltr">ub-automotive-master</code> branch, you can build unbundled apps using the <a href="../../unbundled_apps/integration#cli">CommandLine</a> or <a href="../../unbundled_apps/integration#studio">AndroidStudio</a>.</p> <p>In Android Studio, import the Gradle file: <code translate="no" dir="ltr">packages/apps/Car/libs/aaos-apps-gradle-project/build.gradle</code></p> <p>This is the main Gradle project with all unbundled apps including DriverUI. Build the project using Gradle:</p> 
+<pre># To build only DriverUI module of aaos-apps-gradle-project use
+./gradlew :driver-ui:assemble
+</pre> <p>After a successful build, the DriverUI APK is available at <code translate="no" dir="ltr">out/aaos-apps-gradle-build/driver-ui/outputs/apk/default/debug/
+driver-ui-default-debug.apk</code></p> <p>DriverUI code is available at <code translate="no" dir="ltr">packages/apps/Car/DriverUI</code></p> <p><strong>Note</strong>: DriverUI is a submodule of the main Gradle project, so all Gradle tasks are run using <code translate="no" dir="ltr">aaos-apps-gradle-project</code>.</p> <h3 id="building-sdv-ivi-target-with-driverui">Build SDV IVI target with DriverUI</h3> <ul> <li>
+<strong>Base Target:</strong> <code translate="no" dir="ltr">sdv_ivi_cf</code> <ul> <li>
+<strong>Description:</strong> This serves as the foundational SDV target for IVI on the x86-64 architecture.</li> <li>
+<strong>Directory location:</strong> <code translate="no" dir="ltr">device/google/sdv/</code>
+</li> </ul>
+</li> <li>
+<p><strong>DriverUI Integrated Target:</strong> <code translate="no" dir="ltr">sdv_ivi_cf_ds</code></p> <ul> <li>
+<strong>Description:</strong> This target extends the base IVI configuration to incorporate Display Safety components. This target is essential for the validation of Display Safety services and interactions within the instrument cluster.</li> <li>
+<strong>Directory location:</strong> <code translate="no" dir="ltr">device/google/sdv_display_safety/</code>
+</li> <li>
+<p><strong>Add DriverUI binary</strong>: Copy <code translate="no" dir="ltr">DriverUI.apk</code> to <code translate="no" dir="ltr">packages/apps/Car/DriverUIPrebuilt</code> along with a Blueprint <code translate="no" dir="ltr">Android.bp</code> file.</p> 
+<pre># Create a blueprint file, contents of this file are shown in the next step
+touch /path/to/aosp_repo_root/packages/apps/Car/DriverUIPrebuilt/Android.bp
+# Copy DriverUI.apk built
+cp /path/to/ub-automotive-master/out/aaos-apps-gradle-build/driver-ui/outputs/apk/default/debug/driver-ui-default-debug.apk /path/to/aosp_repo_root/packages/apps/Car/DriverUIPrebuilt/DriverUI.apk
+</pre>
+</li> </ul>
+</li> </ul> <p>The <code translate="no" dir="ltr">Android.bp</code> should be set up to use the module name <code translate="no" dir="ltr">DriverUIPrebuilt</code> and override <code translate="no" dir="ltr">DriverUIStubApp</code>:</p> 
+<pre>android_app_import {
+    name: "DriverUIPrebuilt",
+    overrides: ["DriverUIStubApp"],
+    apk: "DriverUI.apk",
+    privileged: true,
+    product_specific: true,
+    certificate: "platform",
+    required: ["allowed_privapp_com.android.car.driverui"],
+
+    optional_uses_libs: [
+        "androidx.window.extensions",
+        "androidx.window.sidecar",
+    ],
+    enforce_uses_libs: false,
+    dex_preopt: {
+        enabled: false,
+    },
+}
+</pre> <ul> <li>
+<p><strong>Build execution:</strong></p> 
+<pre># In the root of the Android source
+source build/envsetup.sh
+lunch sdv_ivi_cf_ds-aosp_current-userdebug
+m -j
+</pre>
+</li> </ul> <h3 id="target-deployment">Target deployment</h3> <p>Upon the successful completion of the build process for both targets, Cuttlefish utilities help initiate the targets as described in this section.</p> <h4 id="sdv-media-and-har-deployment">SDV Media and HAR deployment</h4> <p>The HAR target is created using the predefined <code translate="no" dir="ltr">sdv-media-config.json</code> configuration, which is specified within <code translate="no" dir="ltr">device/google/sdv_media_cf.mk</code>.</p> <p><strong>Note</strong>: SDV Media and SDV IVI are both launched in <code translate="no" dir="ltr">Unlocked</code> boot mode for Display Safety cluster. For detailed information, see <a href="../workstreams/core/vm-attestation/provisioning">SDV Boot Mode</a>.</p> 
+<pre># In the root of the Android source
+source build/envsetup.sh
+lunch sdv_media_har_cf-aosp_current-userdebug
+cvd create --extra_bootconfig_args="androidboot.sdv.boot_mode=unlocked androidboot.sdv.instance_name=instance1 androidboot.virt.address=3"
+</pre> <p>Once created terminal will show logs to access target in browser on a localhost port: <code translate="no" dir="ltr">Point your browser to https://localhost:8443 to interact with the
+device.</code></p> <p><img src="https://source.android.com/static/docs/automotive/sdv/images/display-safety-07.png" alt="HAR in SDV Media VM"></p> <p><strong>Figure 2.</strong> Display Safety SDV Media VM with HAR.</p> <h4 id="sdv-ivi-and-driverui-deployment">SDV IVI and DriverUI deployment</h4> <p>The SDV IVI DriverUI target initiates using the existing <code translate="no" dir="ltr">sdv-ivi-config.json</code> defined in <code translate="no" dir="ltr">device/google/sdv_ivi_cf.mk</code>. You can also specify additional boot configuration parameters and appropriate display dimensions for the cluster screen.</p> 
+<pre># In the root of the Android source
+source build/envsetup.sh
+lunch sdv_ivi_cf_ds-aosp_current-userdebug
+cvd create --extra_bootconfig_args="androidboot.sdv.boot_mode=unlocked androidboot.sdv.instance_name=instance2 androidboot.virt.address=4" --display1=width=1920,height=720
+</pre> <p>After the target is initiated, the terminal shows logs to access target in browser on a localhost port: <code translate="no" dir="ltr">Point your browser to https://localhost:8443 to
+interact with the device.</code></p> <p>The deployment of the SDV-IVI and DriverUI targets initializes two displays: one for the SDV-IVI system and another for the DriverUI. The DriverUI operates as a privileged cluster app, leveraging the <a href="https://android.googlesource.com/platform/packages/services/Car/+/203fbb6ac7/car-lib/src/android/car/cluster/ClusterHomeManager.java"><code translate="no" dir="ltr">ClusterHomeManager</code> class</a> (also known as <a href="https://android.googlesource.com/platform/packages/apps/Car/Cluster/+/refs/heads/main/ClusterHomeSample/">Cluster2</a>).</p> <p><img src="https://source.android.com/static/docs/automotive/sdv/images/display-safety-08.png" alt="DriverUI in SDV-IVI VM"></p> <p><strong>Figure 3.</strong> Display Safety SDV IVI VM with DriverUI.</p> <h4 id="deployment-of-the-dual-vm-cluster">Deployment of the dual VM cluster</h4> <p>Cuttlefish provides the capability to launch two Virtual Machines (VMs) using a dual VM configuration to achieve display overlay.</p> <p><img src="https://source.android.com/static/docs/automotive/sdv/images/display-safety-05.png" alt="Display Composition"></p> <p><strong>Figure 4.</strong> Display Safety display composition overview.</p> <p>You can launch the dual VM configuration using <code translate="no" dir="ltr">ds_toolkit</code> available at <code translate="no" dir="ltr">packages/services/display_safety/service/</code>.</p> 
+<pre>m ds_toolkit
+ds_toolkit launch
+</pre> <p>After the configuration is launched, the terminal shows logs to access target in browser on a localhost port: <code translate="no" dir="ltr">Point your browser to https://localhost:8443 to
+interact with the device.</code></p> <p>This launches both Cuttlefish targets in a fully operational cluster with both virtual machine displays overlaid.</p> <p><img src="https://source.android.com/static/docs/automotive/sdv/images/display-safety-09.png" alt="Display Safety full cluster"></p> <p><strong>Figure 5.</strong> Display Safety full cluster with SDV Media and SDV IVI VM.</p> <h2 id="building-safety-monitor">Building safety monitor</h2> <p>The safety monitor is built by default for either SDV Media target:</p> 
+<pre># In the root of the Android source
+source build/envsetup.sh
+lunch sdv_media_har_cf-aosp_current-userdebug
+m -j
+</pre> <p>At run time, the safety monitor uses a default set of compiler artifacts generated and packaged into the APEX for the reference cluster display.</p> <p>New artifacts may be generated by running <code translate="no" dir="ltr">har-design-compiler</code>. This tool runs on the target to generate artifacts from a design. We recommend to run the tool, pulling the new artifacts from the target, and rebuilding the image. The tool is built and installed on the target by default.</p> 
+<pre># Run the compiler on the target
+adb shell har_design_compiler -c &lt;/path/to/artifacts&gt; -o /data/local/tmp/
+# Pull the artifacts to the local filesystem
+adb pull data/local/tmp/artifacts services/harry-prebuilt/data/assets/
+# Rebuild the image
+m -j
+</pre> <p>The safety monitor initializes when the target is booted. The safety monitor will run continuously in a loop to verify safety-critical elements on the screen against what is expected by analyzing the screen buffer and incoming vehicle data signals.</p> <p>You can view safety monitor logs at any time:</p> 
+<pre>adb logcat | grep har-safety-monitor
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/display-safety/get-started" class="_attribution-link">https://source.android.com/docs/automotive/sdv/display-safety/get-started</a>
+  </p>
+</div>

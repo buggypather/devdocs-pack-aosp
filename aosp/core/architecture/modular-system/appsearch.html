@@ -1,0 +1,17 @@
+<h1>AppSearch</h1>  <p>AppSearch, an on-device indexing and structured search engine, was shipped as an APEX in Android 12. In Android 13, AppSearch is shipped as a Mainline module.</p> <h2 id="motivation">Motivation</h2> <p>To ensure a consistent implementation of AppSearch across the Android ecosystem and support updateability.</p> <p>Benefits:</p> <ul> <li>Allow updating AppSearch via Play Store</li> <li>Ensure compliance with the AppSearch CDD requirements</li> </ul> <h2 id="details">Details</h2> <ul> <li>Data collected through AppSearch APIs remains on the user's device (except aggregated metrics data, which is used for performance optimization purposes).</li> <li>A fast, mobile-first storage implementation with low I/O use</li> <li>Highly efficient indexing and querying over large data sets</li> <li>Multi-language support, such as English, Spanish and CJKT</li> <li>Relevance ranking and usage scoring</li> </ul> <h2 id="appsearch-architecture">AppSearch architecture</h2> <p>Figure 1 highlights AppSearch concepts as well as the system service process boundary.</p> <p><img src="https://source.android.com/static/docs/core/architecture/images/mainline-appsearch-architecture.png" alt="AppSearch module architecture" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> AppSearch module architecture</p> <h2 id="module-boundry">Module boundary</h2> <ul> <li>
+<p>AppSearch Mainline Apex - <code translate="no" dir="ltr">com.android.appsearch</code></p> <ul> <li>AppSearch API surface (Java) <ul> <li>Code Location: <code translate="no" dir="ltr">frameworks/base/apex/appsearch/framework</code>
+</li> <li>Process: <var translate="no">BOOT_CLASS_PATH</var>
+</li> </ul>
+</li> <li>AppSearchManagerService (Java) <ul> <li>Code Location: <code translate="no" dir="ltr">frameworks/base/apex/appsearch/service</code>
+</li> <li>Process: system_server</li> </ul>
+</li> <li>Icing Native library (C++) <ul> <li>Code Location: <code translate="no" dir="ltr">external/icing</code>
+</li> <li>Process: system_server</li> </ul>
+</li> </ul>
+</li> <li>
+<p>HAL Interface/Implementations (C++)</p> <ul> <li>N/A</li> </ul>
+</li> </ul> <p>Refer to the module architecture diagram in Figure 1.</p> <h2 id="package-format">Package format</h2> <p>The main functions of this module are included in the APEX package <code translate="no" dir="ltr">com.android.appsearch</code>.</p> <h2 id="dependencies">Dependencies</h2> <ul> <li>libicu</li> <li>libprotobuf-cpp-lite</li> <li>ndk</li> </ul> <h2 id="customization">Customization</h2> <p>This module is not customizable.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/modular-system/appsearch" class="_attribution-link">https://source.android.com/docs/core/architecture/modular-system/appsearch</a>
+  </p>
+</div>

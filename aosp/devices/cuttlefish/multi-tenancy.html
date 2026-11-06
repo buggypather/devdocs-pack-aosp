@@ -1,0 +1,78 @@
+<h1>Cuttlefish: Multi-tenancy</h1>  <p>Cuttlefish multi-tenancy allows for your host machine to launch multiple virtual guest devices with a single launch invocation.</p> <p>These multiple Cuttlefish virtual machines can share some of the host disk resources, allowing you to conserve disk space. Each virtual machine gets a distinct disk overlay covering the Android partitions (such as <code translate="no" dir="ltr">super</code>, <code translate="no" dir="ltr">userdata</code>, <code translate="no" dir="ltr">boot</code>). Any modification to the guest disk is placed in a guest-specific disk overlay, giving each Cuttlefish virtual machine a copy-on-write view of its disk partitions. As each virtual device writes more data to its view of the disk, the overlay files on the host disk increase in size because they're capturing the delta between the original state and their current state.</p> <p>The overlay files can be reset to return the Cuttlefish disk to its original state. This process is known as <a href="restart"><em>powerwashing</em></a>.</p> <h2 id="instance-numbers">Instance numbers</h2> <p>Cuttlefish devices create and consume resources on the host tied to their <em>instance number</em>. For example, an <code translate="no" dir="ltr">adb</code> connection is exposed through a TCP server socket at port <code translate="no" dir="ltr">6520</code> for the Cuttlefish device with instance number <code translate="no" dir="ltr">1</code>. When multiple instances are launched, it creates a TCP server socket at port <code translate="no" dir="ltr">6520</code> for the first device, <code translate="no" dir="ltr">6521</code> for the second device, and increments the port number for each additional device.</p> <h3 id="modify-max-instances">Modify maximum number of supported instances</h3> <p>Host-side resources, such as TAP network devices, must be preallocated for Cuttlefish virtual machines. By default, the <a href="https://github.com/google/android-cuttlefish">cuttlefish-base</a> Debian package provisions resources for instance numbers <code translate="no" dir="ltr">1</code> through <code translate="no" dir="ltr">10</code>.</p> <p>This can be changed through modifying <code translate="no" dir="ltr">num_cvd_accounts</code> in <code translate="no" dir="ltr">/etc/default/cuttlefish-host-resources</code> and restarting the <code translate="no" dir="ltr">cuttlefish-host-resources</code> service by running the following command:</p> 
+<pre>
+sudo systemctl restart cuttlefish-host-resources
+</pre> <h2 id="canonical-configs">Canonical configurations</h2> <p>Canonical configurations represent the configuration for Cuttlefish devices in JSON format. You can create canonical configuration JSON files to describe the configuration of multiple Cuttlefish devices in a multi-tenant scenario.</p> <p>The following describes the format used for canonical configuration JSON files (replace placeholders with device configurations).</p> 
+<pre>{
+  "common": {
+    CONFIGURATIONS_APPLYING_TO_ALL_DEVICES
+  },
+  "instances": [
+    {
+      FIRST_DEVICE_CONFIGURATION
+    },
+    {
+      NTH_DEVICE_CONFIGURATION
+    }
+  ]
+}
+</pre> <p>The following is an example configuration file of a setup with two devices, a phone device and a wearable device:</p> 
+<pre>{
+  "instances": [
+    {
+      "@import": "phone",
+      "vm": {
+        "memory_mb": 8192,
+        "setupwizard_mode": "OPTIONAL",
+        "cpus": 4
+      },
+      "disk": {
+        "default_build": "/home/username/devices/cf_x86_64_only_phone-userdebug"
+      }
+    },
+    {
+      "@import": "wearable",
+      "vm": {
+        "memory_mb": 8192,
+        "setupwizard_mode": "REQUIRED",
+        "cpus": 4
+      },
+      "disk": {
+        "default_build": "/home/username/devices/cf_gwear_x86-userdebug"
+      }
+    }
+  ]
+}
+</pre> <p>This table describes the elements used in the example configuration with two devices:</p> <table> <tr> <th>Element</th> <th>Type</th> <th>Description</th> </tr> <tr> <td><code translate="no" dir="ltr">instances</code></td> <td>Array</td> <td>Array of JSON objects, each describing a single device in the multi-tenant group of devices to be launched.</td> </tr> <tr> <td><code translate="no" dir="ltr">@import</code></td> <td>String</td> <td>Indicates the device type and sets default values for the device configuration. The supported device types are <code translate="no" dir="ltr">phone</code> and <code translate="no" dir="ltr">wearable</code>.</td> </tr> <tr> <td><code translate="no" dir="ltr">vm</code></td> <td>Object</td> <td>Specifies properties that apply to the VM environment specific to the device instance.</td> </tr> <tr> <td><code translate="no" dir="ltr">memory_mb</code></td> <td>Number</td> <td>The amount of memory to allocate for a specific VM in megabytes.</td> </tr> <tr> <td><code translate="no" dir="ltr">setupwizard_mode</code></td> <td>String</td> <td>Specifies whether the device setup wizard is run for the user at first run of the device. The supported options for setup wizard mode are <code translate="no" dir="ltr">DISABLED</code>, <code translate="no" dir="ltr">OPTIONAL</code>, and <code translate="no" dir="ltr">REQUIRED</code>.</td> </tr> <tr> <td><code translate="no" dir="ltr">cpus</code></td> <td>Number</td> <td>The number of virtual CPUs allocated to the VM.</td> </tr> <tr> <td><code translate="no" dir="ltr">disk</code></td> <td>Object</td> <td>Specifies properties relevant to locating file system artifacts used for running a single VM instance.</td> </tr> <tr> <td><code translate="no" dir="ltr">default_build</code></td> <td>String</td> <td>Local file system path to a folder containing a Cuttlefish virtual device image.</td> </tr> </table> <p>For more examples of configuration files distributed with <code translate="no" dir="ltr">cvd</code>, see the <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:device/google/cuttlefish/host/cvd_test_configs/"><code translate="no" dir="ltr">cvd_test_configs</code></a> folder in the Cuttlefish code tree.</p> <h2 id="controlling-instances">Control multi-tenant instances</h2> <p>This section describes how to create and destroy devices in a multi-tenant scenario. You can launch multiple Cuttlefish devices using the following options:</p> <ul> <li>
+<a href="#start-canonical-config">Canonical config</a>: Launch customized configurations for each device using a JSON config file describing the list of instances to launch.</li> <li>
+<a href="#start-single-guest-image">Single guest image</a>: Launch multiple devices from a single guest image.</li> </ul> <h3 id="start-canonical-config">Start multiple VMs from canonical config</h3> <p>To create multiple VMs using a canonical configuration that describes the multi-tenant scenario, invoke the <code translate="no" dir="ltr">cvd create</code> command with the <code translate="no" dir="ltr">--config_file=</code> flag prefix as follows:</p> 
+<pre>cvd create --config_file=CONFIG_FILE
+</pre> <p>The following is an example invocation referencing a canonical config file named <code translate="no" dir="ltr">/etc/phone.json</code>.</p> 
+<pre>cvd create --config_file=/etc/phone.json
+</pre> <h3 id="start-single-guest-image">Start multiple VMs from single guest image</h3> <p>To launch multiple Cuttlefish devices using a single guest image, use the <code translate="no" dir="ltr">--num_instances=<var translate="no">N</var></code> flag, where <var translate="no">N</var> is the number of devices to launch. By default, devices start from the instance number <code translate="no" dir="ltr">1</code>.</p> 
+<pre>
+cvd create --num_instances=N
+</pre> <p>To change the starting instance number, do one of the following:</p> <ul> <li>
+<p>Add the <code translate="no" dir="ltr">--base_instance_num=<var translate="no">N</var></code> flag with <var translate="no">N</var> as the first instance number.</p> 
+<pre>
+cvd create --base_instance_num=N
+</pre>
+</li> <li>
+<p>Launch Cuttlefish with a user account matching <code translate="no" dir="ltr">vsoc-<var translate="no">NN</var></code>, where <var translate="no">NN</var> is the base instance number in two digit form. For example, to launch Cuttlefish with a user account <code translate="no" dir="ltr">vsoc-<var translate="no">01</var></code>, run:</p> 
+<pre>
+cvd create --base_instance_num=1
+</pre>
+</li> </ul> <h3 id="stopping">How to stop devices</h3> <aside class="note"><strong>Note:</strong><span> When used in a multi-tenant environment, the stop procedure is applied to all devices simultaneously.</span></aside> <p>To stop all the devices launched by the last <code translate="no" dir="ltr">cvd create</code> invocation, run:</p> 
+<pre>
+cvd stop
+</pre> <p>To restart devices that have been stopped, run:</p> 
+<pre>
+cvd start
+</pre> <p>To completely remove a device from the system run:</p> 
+<pre>
+cvd remove
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/devices/cuttlefish/multi-tenancy" class="_attribution-link">https://source.android.com/docs/devices/cuttlefish/multi-tenancy</a>
+  </p>
+</div>

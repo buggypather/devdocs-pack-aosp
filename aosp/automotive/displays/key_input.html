@@ -1,0 +1,16 @@
+<h1>Key input</h1>  <p>Based on the Vehicle HAL property <code translate="no" dir="ltr">VEHICLE_PROPERTY_HW_KEY_INPUT</code>, defined in <code translate="no" dir="ltr">hardware/libhardware/include/hardware/vehicle.h</code>, Android Automotive handles key input from elements that include steering remote switches, hardware buttons, and touch panels.</p> <p>For example, dispatch of a key event over a CAN bus network:</p> <p><img src="https://source.android.com/static/docs/automotive/images/key_input_01.png" class="android-image-dark-theme-background" alt="Key event"></p> <p><strong>Figure 1. </strong>Android Automotive key events over CANbus flow.</p> <h2 id="key-event-data">Key event data</h2> <p>The following data is attached to each key event in the Vehicle HAL:</p> <ul> <li>Input action (up/down): 
+<pre>VEHICLE_HW_KEY_INPUT_ACTION_DOWN = 0,
+VEHICLE_HW_KEY_INPUT_ACTION_UP = 1,</pre> </li> <li>Key code mapped to Android keys in a partner implementation of the Vehicle HAL.</li> <li>Target display (main/instrument cluster): 
+<pre>VEHICLE_DISPLAY_MAIN               = 0,
+VEHICLE_DISPLAY_INSTRUMENT_CLUSTER = 1,</pre> </li> </ul> <p>The key input handling in the instrument cluster uses <code translate="no" dir="ltr">CarInputService</code> (the same service uses for the regular input handling in the vehicle). Key events get propagated to the <code translate="no" dir="ltr">InstrumentClusterRenderingService</code>:</p> 
+<pre>public class MyClusterRenderingService extends
+InstrumentClusterRenderingService {
+    ...
+    @Override protected void onKeyEvent(KeyEvent keyEvent) { /* Inject to
+    Presentation? */ }
+}</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/displays/key_input" class="_attribution-link">https://source.android.com/docs/automotive/displays/key_input</a>
+  </p>
+</div>

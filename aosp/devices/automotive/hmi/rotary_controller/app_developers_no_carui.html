@@ -1,0 +1,17 @@
+<h1>Develop apps without the Car UI library</h1>  <p>The <a href="../../../../automotive/hmi/car_ui">Car UI Library (car-ui-library)</a> is a self-consistent automotive UI library that can be customized by OEMs. Google strongly recommends you use the car-ui-library to create your app. If this isn't feasible, there are two alternatives:</p> <ul> <li>From Android 12, you can use <code translate="no" dir="ltr">car-rotary-lib</code>, a subset of car-ui-library.</li> <li>On Android 11, you MUST implement your own <code translate="no" dir="ltr">FocusParkingView</code>, <code translate="no" dir="ltr">FocusArea</code>, and <code translate="no" dir="ltr">DirectManipulationHelper</code> as described below.</li> </ul> <h2 id="implement-focusparkingview">Implement FocusParkingView</h2> <p>You either can implement your own <code translate="no" dir="ltr">FocusParkingView</code> or copy the class from the car-ui-library to your project.</p> <p>To implement <code translate="no" dir="ltr">FocusParkingView</code>:</p> <ol> <li>Hard code the accessibility class name so that the <code translate="no" dir="ltr">RotaryService</code> can recognize it: 
+<pre>@Override
+public CharSequence getAccessibilityClassName() {
+      return "com.android.car.ui.FocusParkingView";
+}
+</pre> </li> </ol> <h2 id="implement-focusarea">Implement FocusArea</h2> <p>Like <code translate="no" dir="ltr">FocusParkingView</code>, you can either implement your own <code translate="no" dir="ltr">FocusArea</code> or copy the class from the car-ui-library to your project.</p> <p>To implement <code translate="no" dir="ltr">FocusArea</code>:</p> <ol> <li>Hard code the accessibility class name so that rotary service can recognize it: 
+<pre>
+@Override
+public CharSequence getAccessibilityClassName() {
+   return "com.android.car.ui.FocusArea";
+}
+</pre> </li> </ol> <h2 id="implement-directmanipulationhelper">Implement DirectManipulationHelper</h2> <p>This is a utility class. You can copy the class from the car-ui-library to your project.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/devices/automotive/hmi/rotary_controller/app_developers_no_carui" class="_attribution-link">https://source.android.com/docs/devices/automotive/hmi/rotary_controller/app_developers_no_carui</a>
+  </p>
+</div>

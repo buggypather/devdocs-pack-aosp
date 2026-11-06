@@ -1,0 +1,27 @@
+<h1>Android Automotive 12L release details</h1>  <p>This page summarizes new features provided in Android Automotive OS 12L. </p>
+<h2 id="system-ui-and-core-apps-improvements">System UI and core apps improvements</h2> <ul> <li>
+<strong>Quick Controls feature.</strong> Enables OEMs to add selected settings (for example, Bluetooth toggles) to SysUI (for example, the Status bar) to enable users to change key settings safely while driving, without opening the Settings app.</li> <li>
+<strong><a href="../../hmi/rotary_controller">Rotary support</a>.</strong> Improvements and bug fixes.</li> <li>
+<strong>UI Customization.</strong> Enabled plugin architecture for custom classes. See <a href="../../hmi/car_ui/plugins">Car UI plugins</a> for details.</li> <li>
+<strong>Notification visual overhaul.</strong> UX overhaul and grouped notifications improvements.</li> </ul> <h2 id="bluetooth">Bluetooth</h2> <ul> <li>
+<strong>Improved Bluetooth reconnection performance.</strong> Automatically connect to devices more often and under the right circumstances. To learn more, see <a href="../../ivi_connectivity#bluetooth-connection-management">Bluetooth connection management</a>.</li> <li>
+<strong>Messaging database.</strong> Support for using a messaging database through the <a href="../../ivi_connectivity#message-access-profile">Message Access Profile (MAP)</a> to provide more flexibility to messaging apps that rely on Bluetooth.</li> </ul> <h2 id="connectivity">Connectivity</h2> <ul> <li>
+<strong><a href="../../connectivity">Per-Application Network Selection (PANS)</a>.</strong> Enable the creation and enforcement of a dynamic network policy that determines which apps can use <code translate="no" dir="ltr">OEM_PAID networks</code>.</li> <li>
+<strong>Dual STA.</strong> Enable the IVI to connect to an OEM restricted Wi-Fi network, concurrently with a primary connection to a Wi-Fi network.</li> </ul> <h2 id="audio">Audio</h2> <ul> <li>
+<strong>Audio ducking signal.</strong> Provides HAL with audio focus state and information on what output devices to duck.</li> <li>
+<strong>Volume improvements.</strong> Enable for finer control of volume, including providing and API to get active volume groups.</li> <li>
+<strong>Muting per volume group.</strong> Enable per volume group muting and enhance HAL and UI communication about the mute states.</li> <li>
+<strong>AIDL migration for the AudioControl HAL.</strong> Migrated the AudioControl HAL from <a href="../../../core/architecture/aidl/aidl-hals#converting-to-aidl">HIDL to AIDL</a> to fully use AIDL functionality.</li> <li>
+<strong>Power policy handling for Audio.</strong> Enabled power handling functionality for the car audio service, including disable and enable focus requests, and mute and unmute volume groups on power policy changes for audio.</li> </ul> <h2 id="camera">Camera</h2> <ul> <li>
+<strong>CarEvsManager.</strong> Enables OEMs to implement Android Activity that shows the preview from automotive camera services.</li> </ul> <h2 id="system-reliability-and-stability">System reliability and stability</h2> <ul> <li>
+<strong>Car watchdog flash memory management.</strong> Manages system flash memory by limiting the amount of data written to storage. Enables OEMs to define the write thresholds (for OEM, media, and maps packages) and collect statistics for OEM apps. Disables and terminates non-critical apps and services that exceed defined thresholds.</li> </ul> <h2 id="security">Security</h2> <ul> <li>
+<strong><a href="../../security/vehicle-bound">Vehicle bound encryption</a>.</strong> Android storage encryption can now be configured to store some key encryption parameters on an external ECU. This prevents the harvesting of data by removing the head unit from the car (for example, due to theft or relegated to a junkyard).</li> <li>
+<strong>Secure developer options.</strong> Android developer options and ADB can be remotely enabled exclusively by an OEM. Reference implementation provides crypto token access mechanisms and remote web service.</li> </ul> <h2 id="location">Location</h2> <ul> <li>
+<strong>Advanced driver-assistance systems (ADAS) location switch.</strong> Access to device location for apps used for ADAS can now be controlled with a separate location switch in the Settings app.</li> </ul> <h2 id="telemetry">Telemetry</h2> <ul> <li>
+<strong>Edge-based analytics capability.</strong> Enables the ability to perform more edge-based metrics processing on Android Automotive devices. Android infotainment and vehicle property metrics can be configured in scripts written in the Lua language and processed on-device to be sent to the backend of OEM choosing.</li> </ul> <h2 id="compliance">Compliance</h2> <ul> <li>
+<strong>Compliance fixes.</strong> A number of patches ensure compliance with the Android certification test suites. The Android 12L AAOS Release is 100% compliant on CTS, CTS-Verifier, and STS test suites on our internal reference platform with no additional fixes needed in the AOSP software.</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/start/releases/sl_release" class="_attribution-link">https://source.android.com/docs/automotive/start/releases/sl_release</a>
+  </p>
+</div>

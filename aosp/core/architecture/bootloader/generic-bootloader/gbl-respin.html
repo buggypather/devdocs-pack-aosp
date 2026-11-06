@@ -1,0 +1,28 @@
+<h1>GBL respin process</h1> <p>This page describes the Generic Bootloader (GBL) respin process to submit a request for a new release of GBL.</p> <aside class="note"><strong>Note:</strong><span> Respin request bugs are visible to you, the requester, the GBL team, and specific individuals that you add to the bug's CC list.</span></aside> <p>A <em>respin</em> is a new release of GBL. To submit a respin request, follow these steps:</p> <ol> <li>
+<p>Fill out the <a href="https://docs.google.com/forms/d/e/1FAIpQLSej7i3XafKbswojU1qwX-S_qhED2pXbVrcsYX37M1OSSxGF2A/viewform">GBL respin request form</a> and reach out to your Google point of contact immediately.</p> <ul> <li>This form creates a GBL respin request bug. Note the bug ID.</li> </ul>
+</li> <li>
+<p>Prepare your patch:</p> <ul> <li>Verify that the patch is merged into the GBL development branch.</li> <li>Apply the patch to the appropriate GBL release branch.</li> <li>Amend the cherry-picked patch to include the bug ID created in step 1 as a <code translate="no" dir="ltr">Bug: XYZ</code> tag in the commit message.</li> </ul> <p><strong>Example:</strong> To cherry-pick a change list (CL) from <code translate="no" dir="ltr">&lt;development-branch&gt;</code> to <code translate="no" dir="ltr">&lt;release-branch&gt;</code>:</p> 
+<pre># 1. Check out the target release branch
+git checkout &lt;release-branch&gt;
+
+# 2. Fetch the upstream development branch (Source of Truth)
+git fetch aosp &lt;development-branch&gt;
+
+# 3. Cherry-pick the commit (Preserving metadata)
+git cherry-pick -x &lt;commit_hash&gt;
+
+# 4. Update the commit message to include the Respin Bug ID
+# (Don't remove existing Bug IDs or change the Change-Id)
+</pre>
+</li> <li>
+<p>Submit the bug. The following occurs after you submit the request:</p> <ul> <li>
+<p><strong>Review process:</strong></p> <ul> <li>The Google GBL team reviews the request and approves it or assigns it back to you if the team needs more information.</li> <li>After agreeing on a fix, the GBL team reviews the change.</li> <li>The GBL team merges, builds, tests for regression, and certifies the change.</li> </ul>
+</li> <li>
+<p><strong>Release:</strong></p> <ul> <li>The GBL team releases the binary to <a href="https://ci.android.com">ci.android.com</a>.</li> </ul>
+</li> </ul>
+</li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/bootloader/generic-bootloader/gbl-respin" class="_attribution-link">https://source.android.com/docs/core/architecture/bootloader/generic-bootloader/gbl-respin</a>
+  </p>
+</div>

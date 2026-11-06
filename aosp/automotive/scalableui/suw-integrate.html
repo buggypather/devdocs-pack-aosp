@@ -1,0 +1,37 @@
+<h1>Integrate Setup Wizard</h1>  <p>In advanced windowing, the home scene is comprised of multiple, concurrently visible, and interactive app panels instead of a specific home activity. Advanced windowing uses a blank version of a home activity to be a <em>visibility barrier</em> for multi-window tasks.</p> <p>Though Setup Wizard (SUW) is often treated as a home task, we recommend you configure SUW as part of a panel to create more consistent and reliable Home experiences.</p> <h2 id="config-home-visibility">Configure the home visibility barrier</h2> <p>Confirm that the home visibility barrier activity is a direct boot aware home activity that has a higher priority for the home intent filter than the SUW activity.</p> <p>To learn more, see the reference platform in the <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/services/Car/car_product/dewd/apps/StubCarLauncher/Android.bp"><code translate="no" dir="ltr">StubCarLauncher</code></a> package. We recommend you include this package in your builds and install it for all users.</p> <h2 id="config-suw">Configure the SUW panel</h2> <p>We recommend placing SUW in a dedicated panel to handle unique conditions and to allow for dedicated placement outside the default root task You can configure the bounds and layering of this panel.</p> <p>So that SUW is not obstructed from view, we recommend you place the SUW in a relatively high layer. This panel must show and hide the system events of <code translate="no" dir="ltr">_System_EnterSuwEvent</code> and <code translate="no" dir="ltr">_System_ExitSuwEvent</code>, respectively. Consider this sample configuration:</p> 
+<pre>&lt;TaskPanel id="suw_panel" defaultVariant="@id/closed" displayId="0" controller="@xml/suw_panel_controller"&gt;
+    &lt;TaskBehavior newTaskLaunchPolicy="REPARENT_TO_SOURCE"/&gt;
+    &lt;Variant id="@+id/base"&gt;
+        &lt;Layer layer="@integer/suw_panel_layer"/&gt;
+        &lt;Bounds left="0" top="0" width="100%" height="100%" /&gt;
+        &lt;Background color="@color/suw_panel_background_color" /&gt;
+    &lt;/Variant&gt;
+    &lt;Variant id="@+id/opened" parent="@id/base"&gt;
+        &lt;Visibility isVisible="true"/&gt;
+    &lt;/Variant&gt;
+    &lt;Variant id="@+id/closed" parent="@id/base"&gt;
+        &lt;Visibility isVisible="false"/&gt;
+    &lt;/Variant&gt;
+
+    &lt;Transitions&gt;
+        &lt;Transition onEvent="_System_TaskOpenEvent" onEventTokens="panelId=suw_panel" toVariant="@id/opened"/&gt;
+        &lt;Transition onEvent="_System_TaskPanelEmptyEvent" onEventTokens="panelId=suw_panel" toVariant="@id/closed"/&gt;
+        &lt;Transition onEvent="_System_EnterSuwEvent" toVariant="@id/opened"/&gt;
+        &lt;Transition onEvent="_System_ExitSuwEvent" toVariant="@id/closed"/&gt;
+    &lt;/Transitions&gt;
+&lt;/TaskPanel&gt;
+
+...
+
+&lt;Controller id="suw_panel_controller"&gt;
+    &lt;ControllerName&gt;
+        com.android.systemui.car.wm.scalableui.panel.controller.SetupPanelController
+    &lt;/ControllerName&gt;
+    &lt;PersistentPackage&gt;com.android.car.mysetuppackage&lt;/PersistentPackage&gt;
+&lt;/Controller&gt;
+</pre> <p>To align with the typical SUW app, if the SUW panel becomes invisible when setup is in progress, the controller sends an explicit home signal to the SUW activity to announce that SUW is concealed.</p> <p>This addresses instances in which SUW knew the user was attempting to hide SUW by consuming the home intent but without having access to the home signal from the system.</p> <p>If you have different expectations for your SUW design, you can implement the preferred behavior by replacing <code translate="no" dir="ltr">SetupPanelController</code> with a custom controller.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/scalableui/suw-integrate" class="_attribution-link">https://source.android.com/docs/automotive/scalableui/suw-integrate</a>
+  </p>
+</div>

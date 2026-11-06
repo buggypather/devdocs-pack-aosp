@@ -1,0 +1,100 @@
+<h1>App Lock</h1>  <p>App Lock lets users secure individual apps with a unique PIN code. This protects sensitive data from access by guests or secondary users, particularly when the primary user isn't in the vehicle.</p> <p>App Lock operates independently of the profile lock. This design provides users the flexibility to secure specific sensitive apps without needing to lock the entire user profile.</p> <p>App Lock is available as an unbundled app on Android 14 (API level 34) and higher. You can develop this app separately from the core Android Automotive OS (AAOS) platform. However, you must deploy the App Lock app as a platform-signed privileged app included with your platform image.</p> <p>Users are informed about the App Lock feature when they install apps:</p> <p><img src="https://source.android.com/static/docs/automotive/images/app-lock/applock-notification.png" alt="App Lock notification shown after an app is
+installed" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> App Lock notification shown after an app is installed.</p> <p>App Lock is disabled by default. Upon enabling the feature, the user is prompted to set a PIN. This PIN is subsequently required to access any app secured by App Lock:</p> <p><img src="https://source.android.com/static/docs/automotive/images/app-lock/applock-settings.png" alt="App Lock
+settings" class="android-image-dark-theme-background"> </p> <p><strong>Figure 2.</strong> App Lock settings.</p> <p>Upon attempting to open a locked app, the user is prompted to enter the App Lock PIN code:</p> <p><img src="https://source.android.com/static/docs/automotive/images/app-lock/applock-prompt.png" alt="App Lock prompt when attempting to open a locked
+app" class="android-image-dark-theme-background"> </p> <p><strong>Figure 3.</strong> App Lock prompt when attempting to open a locked app.</p> <h2 id="configure-app">Configure App Lock</h2> <p>To apply app configurations, edit <code translate="no" dir="ltr">res/values/config.xml</code>:</p> 
+<pre>&lt;resources&gt;
+    &lt;!--A customizable list of system packages that appear in the App Lock settings. --&gt;
+    &lt;string-array name="system_lockable_packages"&gt;
+        &lt;item&gt;com.android.car.calendar&lt;/item&gt;
+    &lt;/string-array&gt;
+
+    &lt;!-- Config for allowing locking of media apps. --&gt;
+    &lt;bool name="config_enableMediaAppsLocking"&gt;true&lt;/bool&gt;
+
+    &lt;!-- Default account type used for recovering pin. --&gt;
+    &lt;string name="config_recoveryAccountType" translatable="false"&gt;com.google&lt;/string&gt;
+&lt;/resources&gt;
+</pre> <h3 id="customize-lock-apps">Customize lockable apps</h3> <p>By default, system apps aren't lockable. You can specify system apps to be lockable using the <code translate="no" dir="ltr">system_lockable_packages</code> config.</p> <p>Core apps like Settings, navigation apps, and voice assistants can't be locked because doing so might cause unpredictable system behavior.</p> <p>To enable App Lock for a system app, use the <code translate="no" dir="ltr">system_lockable_packages</code> list:</p> 
+<pre>&lt;!-- List of system packages that appear in the App Lock settings. --&gt;
+&lt;string-array name="system_lockable_packages"&gt;
+    &lt;item&gt;com.android.car.calendar&lt;/item&gt;
+&lt;/string-array&gt;
+</pre> <h3 id="configure-media-suspension">Configure media suspension</h3> <p>By default, media apps can be locked if the platform supports the Car Media App from Car-apps-release 17 or higher. If you don't support Car-apps-release 17 or higher, you can disable media app locking:</p> 
+<pre>&lt;!-- Config for allowing locking of media apps. --&gt;
+&lt;bool name="config_enableMediaAppsLocking"&gt;false&lt;/bool&gt;
+</pre> <h3 id="recovery-flow">Set up a recovery flow</h3> <p>Users might forget their App Lock PIN. Use <code translate="no" dir="ltr">config_recoveryAccountType</code> to customize the account type used for PIN recovery.</p> 
+<pre>&lt;!-- Default account type used for recovering pin. --&gt;
+&lt;string name="config_recoveryAccountType" translatable="false"&gt;com.google&lt;/string&gt;
+</pre> <p>App Lock resets the PIN and clears private app data when a user authenticates with an account with the type that matches <code translate="no" dir="ltr">config_recoveryAccountType</code>.</p> <h2 id="style-reference-code">Style the reference code</h2> <p>To customize the reference code, use runtime resource overlays (RROs) to overlay <a href="https://android.googlesource.com/platform/packages/apps/Car/SensitiveAppLock/+/refs/heads/mirror-car-apps-aosp-release/res/values/overlayable.xml"><code translate="no" dir="ltr">SensitiveAppLockOverlayableResources</code></a>.</p> <p>Because App Lock uses the Car UI Library, your existing Car UI Library RROs can also be applied to App Lock.</p> <p>PIN pad keys use the same style as defined in <code translate="no" dir="ltr">styles.xml</code>:</p> 
+<pre>&lt;style name="PinPadKey" parent="Widget.CarUi.Button"&gt;
+    &lt;item  name="android:textSize"&gt;@dimen/pin_pad_key_text_size&lt;/item&gt;
+    &lt;item name="android:layout_height"&gt;@dimen/pin_pad_key_diameter&lt;/item&gt;
+    &lt;item name="android:layout_width"&gt;@dimen/pin_pad_key_diameter&lt;/item&gt;
+    …
+&lt;/style&gt;
+</pre> <p>You can also define the PIN pad dimensions:</p> 
+<pre>&lt;resources&gt;
+  &lt;!-- Default dimensions for PIN pad view --&gt;
+  &lt;dimen name="pin_pad_title_text_size"&gt;44sp&lt;/dimen&gt;
+  &lt;dimen name="pin_pad_subtitle_text_size"&gt;32sp&lt;/dimen&gt;
+  &lt;dimen name="pin_pad_key_diameter"&gt;96dp&lt;/dimen&gt;
+  &lt;dimen name="pin_pad_key_text_size"&gt;32sp&lt;/dimen&gt;
+  &lt;dimen name="pin_pad_key_padding"&gt;0dp&lt;/dimen&gt;
+  &lt;dimen name="pin_pad_row_spacing"&gt;10dp&lt;/dimen&gt;
+  &lt;dimen name="pin_pad_col_spacing"&gt;12dp&lt;/dimen&gt;
+&lt;/resources&gt;
+</pre> <h2 id="suspend-to-ram">Support suspend-to-RAM</h2> <p>To support suspend-to-RAM, you must add the App Lock service to <a href="https://cs.android.com/android/platform/superproject/main/+/main:packages/services/Car/service/res/values/config.xml;l=337;drc=864eb1f09f084f778008b11308351a9c8a2dc0a4"><code translate="no" dir="ltr">config_earlyStartupServices</code></a>:</p> 
+<pre>&lt;string-array translatable="false" name="config_earlyStartupServices"&gt;
+    &lt;!-- App Lock Persistent Background Service --&gt;
+    &lt;item&gt;com.android.car.sensitiveapplock/.service.PersistentBackgroundService#bind=bind,user=foreground,trigger=userUnlocked&lt;/item&gt;
+&lt;/string-array&gt;
+</pre> <h2 id="build-config">Build configuration</h2> <p>App Lock requires system privileged permissions. Platforms that support App Lock must also declare the system feature <code translate="no" dir="ltr">com.android.car.sensitive_app_lock</code>.</p> <p>Add the feature declaration and permissions to <code translate="no" dir="ltr">com.android.car.sensitiveapplock.xml</code>:</p> 
+<pre>&lt;permissions&gt;
+    &lt;feature name="com.android.car.sensitive_app_lock"/&gt;
+
+    &lt;privapp-permissions package="com.android.car.sensitiveapplock"&gt;
+        &lt;permission name="android.permission.GET_ACCOUNTS_PRIVILEGED" /&gt;
+        &lt;permission name="android.permission.QUERY_USERS" /&gt;
+        &lt;permission name="android.permission.MEDIA_CONTENT_CONTROL" /&gt;
+        &lt;permission name="android.car.permission.CAR_POWER" /&gt;
+        &lt;permission name="android.permission.POST_NOTIFICATIONS" /&gt;
+    &lt;/privapp-permissions&gt;
+&lt;/permissions&gt;
+</pre> <p>App Lock must be imported as a signed system app in the <code translate="no" dir="ltr">Android.bp</code> file:</p> 
+<pre>android_app_import {
+    name: "AppLock",
+    apk: "AppLock.apk",
+    certificate: "platform",
+    privileged: true,
+    required: [
+        "privapp-com.android.car.sensitiveapplock",
+    ],
+    optional_uses_libs: [
+        "androidx.window.extensions",
+        "androidx.window.sidecar",
+        "com.android.oem.tokens", /* For Android 16+ */
+    ],
+}
+
+prebuilt_etc {
+    name: "privapp-com.android.car.sensitiveapplock",
+    sub_dir: "permissions",
+    src: "com.android.car.sensitiveapplock.xml",
+    filename_from_src: true,
+}
+</pre> <p>Because headless system user mode (HSUM) and Guest users don't support App Lock, you must enable App Lock only in secondary profiles. Use this configuration to enable the app for secondary users.</p> <p>For example, in your <code translate="no" dir="ltr">preinstalled-packages.xml</code>:</p> 
+<pre>
+&lt;config&gt;
+    …
+    &lt;!-- Config for the Sensitive App Lock app --&gt;
+    &lt;install-in-user-type package="com.android.car.sensitiveapplock"&gt;
+        &lt;!-- Sensitive App Lock is only available to secondary users. Do not install app in Guest users. --&gt;
+        &lt;install-in user-type="android.os.usertype.full.SECONDARY" /&gt;
+    &lt;/install-in-user-type&gt;
+&lt;/config&gt;
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/unbundled_apps/app-lock" class="_attribution-link">https://source.android.com/docs/automotive/unbundled_apps/app-lock</a>
+  </p>
+</div>

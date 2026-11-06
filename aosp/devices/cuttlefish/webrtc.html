@@ -1,0 +1,11 @@
+<h1>Cuttlefish: WebRTC streaming</h1>  <p>WebRTC streaming allows users to remotely control their Cuttlefish virtual devices from their browsers, without having to install any other software in the client machine. Other advantages of WebRTC streaming are:</p> <ul> <li>More efficient encoding than VNC</li> <li>In-browser ADB</li> <li>Extensible protocol (camera stream, microphone, sensor data are all possible over WebRTC)</li> </ul> <h2 id="using-webrtc">Use WebRTC</h2> <p>To use WebRTC and interact with your Cuttlefish device in your browser, do the following:</p> <ol> <li>
+<p>To launch your devices using WebRTC, add the <code translate="no" dir="ltr">--start_webrtc=true</code> flag to your <code translate="no" dir="ltr">launch_cvd</code> invocation.</p> 
+<pre>
+launch_cvd --start_webrtc=true
+</pre>
+</li> <li><p>To see a list of all the devices you can connect to, point your browser to <code translate="no" dir="ltr">&lt;https://localhost:8443&gt;</code>.</p></li> </ol> <h3 id="port-usage">Port usage</h3> <p>Besides <code translate="no" dir="ltr">TCP:8443</code>, WebRTC uses other ports to establish a connection and run. These ports must be allowed on the firewall if connecting from a different machine than where Cuttlefish is being executed. The list of ports needed are:</p> <ul> <li><code translate="no" dir="ltr">TCP:15550..15599</code></li> <li><code translate="no" dir="ltr">UDP:15550..15599</code></li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/devices/cuttlefish/webrtc" class="_attribution-link">https://source.android.com/docs/devices/cuttlefish/webrtc</a>
+  </p>
+</div>

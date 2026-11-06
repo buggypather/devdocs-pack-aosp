@@ -1,0 +1,75 @@
+<h1>Consume car driving state and UX restrictions</h1>  <p>This page explains how apps can transition gracefully to distraction optimized (DO) user interfaces. It describes how to consume a car's driving state as well as the corresponding user experience restrictions. For more information about Car User Experience (UX) restrictions, see <a href="car_uxr">Car User Experience Restrictions</a>, which details the three driving states of Parked, Idling, and Moving.</p> <h2 id="audience">Audience</h2> <p>This content is provided for those who want to design apps that adapt to changes in a car's driving state and the correspondingly imposed UX restrictions.</p> <h2 id="tech">Technical details</h2> <h3 id="CarDrivingStateManager">CarDrivingStateManager</h3> <p>A car's driving state (Parked, Idling, or Moving) is derived from the sensor values provided by the Vehicle Hardware Abstraction Layer (VHAL). Basic sensor information, such as vehicle speed and current gear selection, is used to derive the vehicle's current driving state.</p> <code translate="no" dir="ltr"><a href="https://android.googlesource.com/platform/packages/services/Car/+/android17-release/car-lib/src/android/car/drivingstate/CarDrivingStateEvent.java">CarDrivingStateEvent</a></code>. which provides @SystemApis, meaning that only Platform Internals, Bundled APKs (such as SysUI or Settings), and Privileged APKs (such as) GMSCore can access the APIs. The APIs are protected by permissions specific to driving state <code translate="no" dir="ltr">android.car.permission.CAR_DRIVING_STATE</code>. Clients that require access to driving state information must request this permission. <h3 id="CarUxRestrictionsManager">CarUxRestrictionsManager</h3> <p>Those apps that display a user interface dependent upon driving state must listen to <code translate="no" dir="ltr"><a href="https://developer.android.com/reference/android/car/drivingstate/CarUxRestrictionsManager">CarUxRestrictionsManager</a></code>, which abstracts the mapping from driving state to UX restrictions so that apps don't need to adjust for different market safety requirements.</p> <p class="note"><strong>Note</strong>: These activities <em>must</em> be marked as distraction optimized, as described in <a href="guidelines">Driver distraction guidelines</a>. If the activities aren't marked accordingly, they're blocked.</p> <p>Instead, apps monitor restrictions exposed by the CarUxRestrictionsManager and not an absolute driving state exposed by the CarDrivingStateManager for anything related to the user interface or the user experience.</p> <h2 id="code">Code sample</h2> <p>The following sample code illustrates how an app monitors UX restrictions:</p> <ol> <li>Import the car library packages: 
+<pre>import android.car.Car;
+/* For CarUxRestrictions */
+import android.car.drivingstate.CarUxRestrictions;
+import android.car.drivingstate.CarUxRestrictionsManager;</pre> </li> <li>Implement <code translate="no" dir="ltr">CarUxRestrictionManager.OnUxRestrictionsChangedListener</code> (<code translate="no" dir="ltr">mUxRChangeListener</code>). This listener, when registered with the <a href="https://developer.android.com/reference/android/car/drivingstate/CarUxRestrictionsManager">CarUxRestrictionsManager</a>, is called when a change in the UX restrictions occurs. Handle the restriction changes to be distraction optimized, as needed: 
+<pre>@Nullable private CarUxRestrictionsManager mCarUxRestrictionsManager;
+private CarUxRestrictions mCurrentUxRestrictions;
+
+/* Implement the onUxRestrictionsChangedListener interface */
+private CarUxRestrictionsManager.OnUxRestrictionsChangedListener mUxrChangeListener =
+            new CarUxRestrictionsManager.OnUxRestrictionsChangedListener()
+    {
+        @Override
+        public void onUxRestrictionsChanged(CarUxRestrictions carUxRestrictions) {
+        mCurrentUxRestrictions = carUxRestrictions;
+        /* Handle the new restrictions */
+        handleUxRestrictionsChanged(carUxRestrictions);
+        }
+    };
+  </pre> </li> <li>Call the car APIs to create a car instance named mCar and connect to the car service: 
+<pre>mCar = Car.createCar(context);
+if (mCar == null) {
+// handle car connection error
+}</pre> </li> <li>Call <code translate="no" dir="ltr">mCar.getCarManager() - mCarUxRestrictionsManager</code> to get the <code translate="no" dir="ltr">CarUxRestrictionsManager</code>: 
+<pre>CarUxRestrictionsManager carUxRestrictionsManager = (CarUxRestrictionsManager)
+mCar.getCarManager(Car.CAR_UX_RESTRICTION_SERVICE);</pre> </li> <li>To register <code translate="no" dir="ltr">mUxRChangeListener</code> implemented in Step 2 above with the <code translate="no" dir="ltr">CarUxRestrictionsManager</code> call <code translate="no" dir="ltr">mCarUxRestrictionsManager.registerListener()</code>: 
+<pre>mCarUxRestrictionsManager.registerListener(mUxrChangeListener);
+mUxrChangeListener.onUxRestrictionsChanged(
+mCarUxRestrictionsManager.getCurrentCarUxRestrictions());</pre> </li> </ol> <p>The completed block of sample code (created in Step 3 through Step 5) results in the listener receiving restriction changes when the drive state changes:</p> 
+<pre>mCar = Car.createCar(context);
+if (mCar == null) {
+// handle car connection error
+}
+
+CarUxRestrictionsManager carUxRestrictionsManager = (CarUxRestrictionsManager)
+mCar.getCarManager(Car.CAR_UX_RESTRICTION_SERVICE);
+
+mCarUxRestrictionsManager.registerListener(mUxrChangeListener);
+mUxrChangeListener.onUxRestrictionsChanged(
+mCarUxRestrictionsManager.getCurrentCarUxRestrictions());</pre> <h2 id="CarUxRestrictions">CarUxRestrictions</h2> <p>The <a href="https://developer.android.com/reference/android/car/drivingstate/CarUxRestrictions">CarUxRestrictions</a> object provides two types of information:</p> <ol> <li>Is there a current requirement to be distraction optimized?</li> <li>If so, what restrictions are currently in place?</li> </ol> <p>When <a href="https://developer.android.com/reference/android/car/drivingstate/CarUxRestrictions">CarUxRestrictions</a> is obtained from either <code translate="no" dir="ltr"><a href="https://developer.android.com/reference/android/car/drivingstate/CarUxRestrictionsManager.html#getCurrentCarUxRestrictions()">getCurrentUxRestrictions()</a></code> or the listener callback, apps can now use the <code translate="no" dir="ltr"><a href="https://developer.android.com/reference/android/car/drivingstate/CarUxRestrictions.html#isRequiresDistractionOptimization()">isRequiresDistractionOptimization()</a></code> API to determine if Distraction Optimized is required. If this returns <code translate="no" dir="ltr">false</code>, there is no requirement to be Distraction Optimized and an app can safely run any activity.</p> <p>If optimization is required, then use the <a href="https://developer.android.com/reference/android/car/drivingstate/CarUxRestrictions.html#getActiveRestrictions()">getActiveRestrictions()</a> API to obtain the set of restrictions in place. This API returns an <em>int</em>, which is a bit mask of all the restrictions currently in effect. The set of restrictions currently notified is listed under <code translate="no" dir="ltr"> <a href="https://developer.android.com/reference/android/car/drivingstate/CarUxRestrictions">CarUxRestrictions</a></code>.</p> <p class="note"><strong>Note:</strong> Minor changes to the set of restrictions are anticipated to occur in the near future.</p> <p>For example, if an app wants to determine if a restriction to play video exists, upon getting the CarUxRestrictions object, the app must check for the restriction:</p> 
+<pre>int activeUxR = mCurrentCarUxRestrictions.getActiveRestrictions();
+if ((activeUxR &amp; CarUxRestrictions.UX_RESTRICTIONS_NO_VIDEO) != 0) {
+      handleStopPlayingVideo();
+}</pre> <h2 id="DrivingState">DrivingState</h2> <p>CarDrivingStateManager presents the actual driving state of the vehicle (Parked, Idling, or Moving). CarDrivingStateManager APIs can be called similar to the CarUxRestrictionsManager. Apps can register a listener or get current driving state. The driving state is returned as CarDrivingStateEvent.</p> <code translate="no" dir="ltr"><a href="https://android.googlesource.com/platform/packages/services/Car/+/android17-release/car-lib/src/android/car/drivingstate/CarDrivingStateEvent.java">CarDrivingStateEvent</a></code>. changes, the <code translate="no" dir="ltr">onDrivingStateChanged()</code> method is called with the new <code translate="no" dir="ltr"><a href="https://android.googlesource.com/platform/packages/services/Car/+/android17-release/car-lib/src/android/car/drivingstate/CarDrivingStateEvent.java">CarDrivingStateEvent</a></code>. 
+<pre>import android.car.Car;
+/* For CarDrivingState */
+import android.car.drivingstate.CarDrivingStateEvent;
+import android.car.drivingstate.CarDrivingStateManager;
+
+mDrivingStateManager = (CarDrivingStateManager) mCar.getCarManager(
+       Car.CAR_DRIVING_STATE_SERVICE);
+/* Register the listener (implemented below) */
+mDrivingStateManager.registerListener(mDrivingStateEventListener);
+/* While we wait for a change to be notified, query the current state */
+mDrivingStateEvent = mDrivingStateManager.getCurrentCarDrivingState();
+
+private final CarDrivingStateManager.CarDrivingStateEventListener
+mDrivingStateEventListener =
+       new CarDrivingStateManager.CarDrivingStateEventListener() {
+   @Override
+   public void onDrivingStateChanged(CarDrivingStateEvent event) {
+       mDrivingStateEvent = event;
+       /* handle the state change accordingly */
+       handleDrivingStateChange();
+   }
+};</pre> <h2 id="testing">Testing</h2> <p> You can mimic the changing of gears and speed to change the driving state. Use an ADB shell command to inject vehicle events. This can be useful development and testing.</p> <p>To simulate driving events:</p> <ol> <li>To set speed to 0: 
+<pre>adb shell dumpsys activity service com.android.car inject-vhal-event 0x11600207 0</pre> </li> <li>To set gear to Parked (to simulate CarDrivingStateEvent pointing to PARKED): 
+<pre>adb shell dumpsys activity service com.android.car inject-vhal-event 0x11400400 4</pre> </li> <li>To set gear to Drive, with speed still at 0 (to simulate CarDrivingStateEvent pointing to IDLING): 
+<pre>adb shell dumpsys activity service com.android.car inject-vhal-event 0x11400400 8</pre> </li> <li>To set speed to 30 meters per second (to simulate CarDrivingStateEvent pointing to MOVING): 
+<pre>adb shell dumpsys activity service com.android.car inject-vhal-event 0x11600207 30</pre> </li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/driver_distraction/consume" class="_attribution-link">https://source.android.com/docs/automotive/driver_distraction/consume</a>
+  </p>
+</div>

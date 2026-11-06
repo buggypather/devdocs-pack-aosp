@@ -1,0 +1,17 @@
+<h1>Safe union</h1>  <p><code translate="no" dir="ltr">safe_union</code> in HIDL represents an explicitly tagged union type. This is similar to a <code translate="no" dir="ltr">union</code> except <code translate="no" dir="ltr">safe_union</code> keeps track of the underlying type and is compatible with Java. The <code translate="no" dir="ltr">safe_union</code> type is available in Android 10 and higher for new and upgraded devices.</p> <h2 id="syntax">Syntax</h2> <p>A <code translate="no" dir="ltr">safe_union</code> is expressed in HIDL exactly like a <code translate="no" dir="ltr">union</code> or <code translate="no" dir="ltr">struct</code>.</p> 
+<pre>safe_union MySafeUnion {
+     TypeA a;
+     TypeB b;
+     ...
+};</pre> <h2 id="usage">Usage</h2> <p>At runtime, a <code translate="no" dir="ltr">safe_union</code> is only ever one type. By default, it's the first type in the union. For instance, above, <code translate="no" dir="ltr">MySafeUnion</code> is by default <code translate="no" dir="ltr">TypeA</code>.</p> <p><code translate="no" dir="ltr">hidl-gen</code> generates a custom class or struct for a <code translate="no" dir="ltr">safe_union</code> in both C++ and Java. This class includes a discriminator for each member (in <code translate="no" dir="ltr">hidl_discriminator</code>), a method to get the current discriminator (<code translate="no" dir="ltr">getDiscriminator</code>), and setters and getters for each member. Each setter and getter is named exactly as its member. For instance, the getter for <code translate="no" dir="ltr">TypeA a</code> is called "a", and it returns something of <code translate="no" dir="ltr">TypeA</code>. The corresponding setter is also be called "a" and takes a parameter of <code translate="no" dir="ltr">TypeA</code>. Setting the value in a <code translate="no" dir="ltr">safe_union</code> updates the value of the discriminator as returned by <code translate="no" dir="ltr">getDiscriminator</code>. Accessing a value from a discriminator that isn't the current discriminator aborts the program. For instance, if calling <code translate="no" dir="ltr">getDiscriminator</code> on an instance of <code translate="no" dir="ltr">MySafeUnion</code> returns <code translate="no" dir="ltr">hidl_discriminator::b</code>, then trying to retrieve <code translate="no" dir="ltr">a</code> aborts the program.</p> <h2 id="monostate">Monostate</h2> <p>A <code translate="no" dir="ltr">safe_union</code> always has a value, but if it is desired to not have a value, use <code translate="no" dir="ltr">android.hidl.safe_union@1.0::Monostate</code> as a placeholder. For instance, the following union can either be <code translate="no" dir="ltr">noinit</code> (empty) or <code translate="no" dir="ltr">foo</code>:</p> 
+<pre>import android.hidl.safe_union@1.0::Monostate;
+
+safe_union OptionalFoo {
+     Monostate noinit;
+     Foo foo;
+};</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/hidl/safe_union" class="_attribution-link">https://source.android.com/docs/core/architecture/hidl/safe_union</a>
+  </p>
+</div>

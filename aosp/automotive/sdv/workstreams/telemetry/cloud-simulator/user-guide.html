@@ -1,0 +1,147 @@
+<h1>User guide</h1>  <p>You can run simulations using the provided web demo or by calling the REST API directly.</p> <h2 id="input-output">Input and output</h2> <p>Input and output files use the Cloud Storage bucket from the Terraform setup.</p> <p>The input directory must contain <code translate="no" dir="ltr">metrics_config.zip</code> and <code translate="no" dir="ltr">publisher_config.zip</code> files. You can define the path to it as required.</p> <p>The bucket for outputs contains a <code translate="no" dir="ltr">simulations</code> directory, which stores each simulation by its ID. Each simulation directory contains an <code translate="no" dir="ltr">inputs</code> folder with the copied input files and an <code translate="no" dir="ltr">outputs</code> folder. The <code translate="no" dir="ltr">outputs</code> folder contains the bugreport, the logcat file, and generated simulator files.</p> <h2 id="web-demo">Use the web demo</h2> <p>The platform includes a Flutter-based web application for demonstration purposes that lets you view, create, and manage simulations. You are encouraged to build your own user interface tailored to your needs.</p> <p>The demo app is deployed to App Engine and requires you to sign in with a Google Account. This is protected using an OAuth 2.0 Client ID configured in your Google Cloud project. The signed-in account must have IAM permissions to invoke the deployed Cloud Functions. See <a href="https://cloud.google.com/functions/docs/securing/managing-access-iam">Authorize access with IAM</a> for instructions on granting the necessary permissions to user accounts, such as the Cloud Functions Invoker role (<code translate="no" dir="ltr">roles/cloudfunctions.invoker</code>).</p> <h3 id="user-workflow">User workflow</h3> <ol> <li>Sign in with your Google Account, authenticated using the OAuth 2.0 process.</li> <li>View simulations on the main page, which lists all simulations by querying the Firestore database, which holds all execution information.</li> <li>Navigate to a form to schedule a new simulation by clicking the <strong>+</strong> action button in the lower-right corner. You provide several parameters, including the input path, build ID, and instance type. For more information, see <a href="#create-simulation">Create a simulation</a>.</li> <li>Check the monitor status on the simulation list updates, which show the status of the new simulation, for example, <code translate="no" dir="ltr">PENDING</code>, <code translate="no" dir="ltr">RUNNING</code>, <code translate="no" dir="ltr">COMPLETED</code>.</li> <li>After a simulation completes, view the generated reports and artifacts. The input files, output reports, logs, Logcat, and Bugreports are stored in Cloud Storage.</li> <li>Optional: Cancel a scheduled or running simulation.</li> </ol> <h2 id="api-usage">API use</h2> <p>For automation and integration with other systems, you can use the REST API.</p> <p>The placeholder <var scope="function url" translate="no">CLOUD_FUNCTION_URL</var> used in the Authentication section and in endpoint definitions refers to the base URL of the Cloud Function being invoked. You can find function URLs in the Google Cloud console on the <strong>Cloud Functions</strong> page; the URL for each function is shown on the <strong>Trigger</strong> tab of its <strong>Function details</strong> page. Alternatively, you can find these URLs in the Terraform outputs that are printed after you run an <code translate="no" dir="ltr">apply</code> command.</p> <h3 id="authentication">Authentication</h3> <p>All API requests must be authenticated with an identity token that proves the caller's identity. The identity (user or service account) must have Cloud Functions Invoker permissions on the target function.</p> <ol> <li>
+<p><strong>User invocation (local and CLI):</strong> When invoking the API from a local machine or a non-Google Cloud environment, you must use a Google-issued identity token obtained for a user account.</p> 
+<pre>TOKEN=$(gcloud auth print-identity-token)
+</pre>
+</li> <li>
+<p><strong>Service account invocation (within Google Cloud):</strong> When invoking the API from a Google Cloud resource (for example, a Compute Engine VM, another Cloud Function, or a Kubernetes cluster), use the identity of the resource's attached Service Account. The token should be fetched from the resource's metadata server.</p> 
+<pre>TOKEN=$(curl -s "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience=CLOUD_FUNCTION_URL" -H "Metadata-Flavor: Google")
+</pre>
+</li> </ol> <p>Include the retrieved token in the <code translate="no" dir="ltr">Authorization</code> header of your requests as a <code translate="no" dir="ltr">Bearer</code> token.</p> <h3 id="endpoints">Endpoints</h3> <p>User-facing endpoints of the Cloud Telemetry Simulation stack let you create and delete simulations or read simulation information from the database.</p> <aside class="note"><strong>Note:</strong><span> All API requests must include the <code translate="no" dir="ltr">Authorization: Bearer $TOKEN</code> header as described in the <a href="#authentication">Authentication</a> section.</span></aside> <h4 id="create-simulation">Create a simulation</h4> <p>This endpoint creates a new simulation request and schedules it for execution.</p> <ul> <li>
+<strong>Endpoint:</strong> <code translate="no" dir="ltr">POST https://<var scope="function
+    url" translate="no">CLOUD_FUNCTION_URL</var>/simulation-orchestrator-receive-requests</code>
+</li> <li>
+<p><strong>Request body:</strong></p> 
+<pre>{
+  "build_id": "latest",
+  "file_path": "inputs/my-test-case/",
+  "instance_type": "n1-standard-8",
+  "owner": "user@example.com",
+  "max_simulation_time": 300,
+  "max_report_count": 5
+}
+</pre> <ul> <li>
+<p><code translate="no" dir="ltr">build_id</code> (string): The tag of the agent Docker image to use, for example,<code translate="no" dir="ltr">latest</code>.</p> <aside class="special"><strong>Important:</strong><span> This must match a tag defined in the infrastructure's allowed image map, for example, <code translate="no" dir="ltr">latest</code>, <code translate="no" dir="ltr">stable</code>. The system rejects unknown tags if a SHA256 map is defined in Terraform.</span></aside>
+</li> <li><p><code translate="no" dir="ltr">file_path</code> (string): The path within the GCS bucket to the folder containing <code translate="no" dir="ltr">metrics_config.zip</code> and <code translate="no" dir="ltr">publisher_config.zip</code>.</p></li> <li><p><code translate="no" dir="ltr">instance_type</code> (string): The Compute Engine machine type. This type must support nested virtualization, such as the <code translate="no" dir="ltr">n1</code>, <code translate="no" dir="ltr">n2</code>, or <code translate="no" dir="ltr">t2d</code> series. For more information, see the <a href="https://docs.cloud.google.com/compute/docs/instances/nested-virtualization/overview">nested virtualization overview</a>.</p></li> <li><p><code translate="no" dir="ltr">owner</code> (string): The email of the user initiating the simulation.</p></li> <li><p><code translate="no" dir="ltr">max_simulation_time</code> (integer): The maximum time in seconds that the simulation runs.</p></li> <li><p><code translate="no" dir="ltr">max_report_count</code> (integer): The number of telemetry reports after which the simulation finishes.</p></li> </ul>
+</li> <li>
+<p><strong>Success response (200 OK):</strong></p> 
+<pre>{ "id": "sim-a1b2c3d4e5f6" }
+</pre>
+</li> </ul> <h4 id="delete-simulation">Delete a simulation</h4> <p>This endpoint cancels a pending or running simulation and deletes its associated resources.</p> <ul> <li>
+<strong>Endpoint:</strong> <code translate="no" dir="ltr">POST https://<var scope="function
+    url" translate="no">CLOUD_FUNCTION_URL</var>/simulation-orchestrator-delete-simulation</code>
+</li> <li>
+<strong>Headers:</strong> <ul> <li><code translate="no" dir="ltr">Content-Type: application/json</code></li> </ul>
+</li> <li>
+<p><strong>Request body:</strong></p> 
+<pre>{ "id": "sim-a1b2c3d4e5f6" }
+</pre>
+</li> <li><p><strong>Success response (200 OK):</strong> A plain-text message (<code translate="no" dir="ltr">Request accepted and is being processed</code>).</p></li> </ul> <h4 id="read-simulation">Read simulation data</h4> <p>To read simulation data, you can interact with the <code translate="no" dir="ltr">simulation-reader</code> function. These endpoints use the <code translate="no" dir="ltr">GET</code> method to retrieve history, status, and system configuration.</p> <h5 id="list_simulations">List simulations</h5> <p>Retrieves a paginated list of simulations with support for filtering and sorting.</p> <ul> <li>
+<strong>Endpoint:</strong> <code translate="no" dir="ltr">GET https://<var scope="function
+    url" translate="no">CLOUD_FUNCTION_URL</var>/simulation-reader/simulations</code>
+</li> <li>
+<p><strong>Query parameters (all optional):</strong></p> <ul> <li>
+<code translate="no" dir="ltr">status</code> (string): Filter by simulation status (<code translate="no" dir="ltr">running</code>, <code translate="no" dir="ltr">Simulation
+request received</code>, <code translate="no" dir="ltr">cancelled</code>, <code translate="no" dir="ltr">completed</code>, or <code translate="no" dir="ltr">failed</code>).</li> <li>
+<code translate="no" dir="ltr">owner</code> (string): Filter by the owner's email.</li> <li>
+<code translate="no" dir="ltr">sort_by</code> (string): Field to sort by (<code translate="no" dir="ltr">received_at</code>, <code translate="no" dir="ltr">status_updated_at</code>, <code translate="no" dir="ltr">started_at</code>). Defaults to <code translate="no" dir="ltr">received_at</code>.</li> <li>
+<code translate="no" dir="ltr">sort_order</code> (string): Sort direction, <code translate="no" dir="ltr">asc</code> or <code translate="no" dir="ltr">desc</code>. Defaults to <code translate="no" dir="ltr">desc</code>.</li> <li>
+<code translate="no" dir="ltr">page_size</code> (integer): Number of results per page. Defaults to 20.</li> <li>
+<code translate="no" dir="ltr">page_token</code> (string): Token for fetching the next page of results.</li> </ul>
+</li> <li>
+<p><strong>Example request:</strong></p> 
+<pre>curl -H "Authorization: Bearer $TOKEN"
+"https://CLOUD_FUNCTION_URL/simulation-reader/simulations?status=completed&amp;owner=user@example.com&amp;sort_by=status_updated_at"
+</pre>
+</li> <li>
+<p><strong>Success response (200 OK):</strong></p> <ul> <li>Returns a JSON object containing an array of simulations and an optional <code translate="no" dir="ltr">next_page_token</code>.</li> </ul> 
+<pre>{
+  "simulations": [
+    {
+      "id": "1234-abcd",
+      "owner": "some@email.com",
+      "status": "completed",
+      "status_updated_at": "2025-12-05T14:50:00.952Z",
+      "received_at": "2025-12-05T14:46:43.106Z",
+      "started_at": "2025-12-05T14:47:05.848Z",
+      "ended_at": "0001-01-01T00:00:00Z",
+      "instance_id": "sim-1234-abcd",
+      "ip": "10.156.15.230",
+      "build_id": "europe-west3-docker.pkg.dev/your-project/simulation/simulation-agent:latest",
+      "instance_type": "n1-standard-8",
+      "file_path": "gs://your-project-simulation_files/path/",
+      "max_simulation_time": 60,
+      "max_report_count": 1
+    },
+    {
+      "id": "5678-efgh",
+      "owner": "some@email.com",
+      "status": "completed",
+      "status_updated_at": "2025-11-07T14:49:54.25Z",
+      "received_at": "2025-11-07T14:46:54.959Z",
+      "started_at": "2025-11-07T14:47:13.714Z",
+      "ended_at": "0001-01-01T00:00:00Z",
+      "instance_id": "sim-5678-efgh",
+      "ip": "10.156.15.221",
+      "build_id": "europe-west3-docker.pkg.dev/your-project/simulation/simulation-agent:latest",
+      "instance_type": "n1-standard-8",
+      "file_path": "gs://your-project-simulation_files/path/",
+      "max_simulation_time": 60,
+      "max_report_count": 1
+    }
+  ],
+  "next_page_token": "M7bydGsAptLncj8SOCb1"
+}
+</pre>
+</li> </ul> <h5 id="get_a_specific_simulation">Get a specific simulation</h5> <p>Retrieves the full details of a specific simulation by its ID.</p> <ul> <li>
+<p><strong>Endpoint:</strong></p> 
+<pre>GET https://CLOUD_FUNCTION_URL/simulation-reader/simulations/[SIMULATION_ID]
+</pre>
+</li> <li>
+<p><strong>Success response (200 OK):</strong> Returns a JSON object containing the details of the requested simulation.</p> 
+<pre>{
+  "id": "1234-abcd",
+  "owner": "some@email.com",
+  "status": "completed",
+  "status_updated_at": "2025-12-05T14:50:00.952Z",
+  "received_at": "2025-12-05T14:46:43.106Z",
+  "started_at": "2025-12-05T14:47:05.848Z",
+  "ended_at": "0001-01-01T00:00:00Z",
+  "instance_id": "sim-1234-abcd",
+  "ip": "10.156.15.230",
+  "build_id": "europe-west3-docker.pkg.dev/your-project/simulation/simulation-agent:latest",
+  "instance_type": "n1-standard-8",
+  "file_path": "gs://your-project-simulation_files/path/",
+  "max_simulation_time": 60,
+  "max_report_count": 1
+}
+</pre>
+</li> </ul> <h5 id="get_system_metrics_and_configuration">Get system metrics and configuration</h5> <p>These endpoints provide insight into the current load and configuration of the simulation infrastructure.</p> <ul> <li>
+<p><strong>Get running count:</strong> Returns the count of running simulations.</p> <ul> <li>
+<p><strong>Endpoint:</strong></p> 
+<pre>GET https://CLOUD_FUNCTION_URL/simulation-reader/simulations/running/count
+</pre>
+</li> <li>
+<p><strong>Success response (200 OK):</strong></p> 
+<pre>{
+  "count": 0
+}
+</pre>
+</li> </ul>
+</li> <li>
+<p><strong>Get max concurrent VMs:</strong> Returns the configured maximum number of concurrent running VMs.</p> <ul> <li>
+<p><strong>Endpoint:</strong></p> 
+<pre>GET https://CLOUD_FUNCTION_URL/simulation-reader/config/max-running-vms
+</pre>
+</li> <li>
+<p><strong>Success response (200 OK):</strong></p> 
+<pre>{
+  "max_running_vms": 5
+}
+</pre>
+</li> </ul>
+</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/telemetry/cloud-simulator/user-guide" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/telemetry/cloud-simulator/user-guide</a>
+  </p>
+</div>

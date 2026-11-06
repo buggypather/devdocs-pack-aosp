@@ -1,0 +1,65 @@
+<h1>Source control workflow</h1>  <p> Working with Android code requires using <strong>Git</strong> (an open-source version control system) and <strong>Repo</strong> (a Google-built repository management tool that runs on top of Git). For an explanation of the relationship between Repo and Git and links to supporting documentation for each tool, see <a href="../develop">Source control tools</a>.</p> <h2 id="workflow">Flow</h2> <p>Android development involves the following basic workflow:</p> <ol> <li>Start a new topic branch using <code translate="no" dir="ltr">repo start</code>. </li> <li>Edit the files. </li> <li>Stage changes using <code translate="no" dir="ltr">git add</code>. </li> <li>Commit changes using <code translate="no" dir="ltr">git commit</code>. </li> <li>Upload changes to the review server using <code translate="no" dir="ltr">repo upload</code>. </li> </ol> <h2 id="tasks">Tasks</h2> <p> Working with Git and Repo in the Android code repositories involves performing the following common tasks. </p> <table> <tr> <th>Command</th> <th>Description</th> </tr> <tr> <td><code translate="no" dir="ltr">repo init</code></td> <td>Initializes a new client.</td> </tr> <tr> <td><code translate="no" dir="ltr">repo sync</code></td> <td>Syncs the client to the repositories.</td> </tr> <tr> <td><code translate="no" dir="ltr">repo start</code></td> <td>Starts a new branch.</td> </tr> <tr> <td><code translate="no" dir="ltr">repo status</code></td> <td>Shows the status of the current branch.</td> </tr> <tr> <td><code translate="no" dir="ltr">repo upload</code></td> <td>Uploads changes to the review server.</td> </tr> <tr> <td><code translate="no" dir="ltr">git add</code></td> <td>Stages the files.</td> </tr> <tr> <td><code translate="no" dir="ltr">git commit</code></td> <td>Commits the staged files.</td> </tr> <tr> <td><code translate="no" dir="ltr">git branch</code></td> <td>Shows the current branches.</td> </tr> <tr> <td><code translate="no" dir="ltr">git branch [branch]</code></td> <td>Creates a new topic branch.</td> </tr> <tr> <td><code translate="no" dir="ltr">git checkout [branch]</code></td> <td>Switches <code translate="no" dir="ltr">HEAD</code> to the specified branch.</td> </tr> <tr> <td><code translate="no" dir="ltr">git merge [branch]</code></td> <td>Merges <code translate="no" dir="ltr">[branch]</code> into current branch.</td> </tr> <tr> <td><code translate="no" dir="ltr">git diff</code></td> <td>Shows diff of the unstaged changes.</td> </tr> <tr> <td><code translate="no" dir="ltr">git diff --cached</code></td> <td>Shows diff of the staged changes.</td> </tr> <tr> <td><code translate="no" dir="ltr">git log</code></td> <td>Shows the history of the current branch.</td> </tr> <tr> <td><code translate="no" dir="ltr">git log m/[codeline]..</code></td> <td>Shows the commits that aren't pushed.</td> </tr> </table> <p> For information about using Repo to download source, see <a href="../download/downloading">Download the source</a> and <a href="https://source.android.com/docs/setup/reference/repo">Repo command reference</a>. </p> <h3 id="synchronizing-clients">Synchronize clients</h3> <p> To synchronize the files for all available projects: </p> 
+<pre>repo sync</pre> <p> To synchronize the files for selected projects: </p> 
+<pre>
+repo sync PROJECT0 PROJECT1 ... PROJECTN
+</pre> <h2 id="creating-topic-branches">Create topic branches</h2> <p> Start a topic branch in your local work environment whenever you begin a change, such as when you begin work on a bug or new feature. A topic branch isn't a copy of the original files; it's a pointer to a particular commit, which makes creating local branches and switching among them a lightweight operation. By using branches, you can isolate one aspect of your work from the others. For more about using topic branches, refer to <a href="https://www.kernel.org/pub/software/scm/git/docs/howto/separating-topic-branches.html">How to separate topic branches</a>. </p> <p> To start a topic branch using Repo, navigate to the project and run: </p> 
+<pre>
+repo start BRANCH_NAME .
+</pre> <p> The trailing period (<code translate="no" dir="ltr"> .</code>) represents the project in the current working directory. </p> <p> To verify that the new branch was created: </p> 
+<pre>
+repo status .
+</pre> <h2 id="using-topic-branches">Use topic branches</h2> <p>To assign the branch to a specific project:</p> 
+<pre>
+repo start BRANCH_NAME PROJECT_NAME
+</pre> <p>For a list of all projects, refer to the <a href="https://android.googlesource.com/">Google Git repositories</a>. If you've already navigated to the project directory, just use a period to represent the current project. </p> <p> To switch to another branch in your local work environment: </p> 
+<pre>
+git checkout BRANCH_NAME
+</pre> <p> To view a list of existing branches: </p> 
+<pre>
+git branch
+</pre> <p>or</p> 
+<pre>
+repo branches
+</pre> <p> Both commands return the list of existing branches with the name of the current branch preceded by an asterisk (*). </p> <aside class="note"><strong>Note:</strong> A bug might cause <code translate="no" dir="ltr">repo
+sync</code> to reset the local topic branch. If <code translate="no" dir="ltr">git branch</code> shows * (no branch) after you run <code translate="no" dir="ltr">repo sync</code>, run <code translate="no" dir="ltr">git checkout</code> again.</aside> <h2 id="staging-files">Stage files</h2> <p> By default, Git notices but doesn't track the changes that you make in a project. To tell Git to preserve your changes, you must mark or <em>stage</em> those changes for inclusion in a commit. </p> <p> To stage changes: </p> 
+<pre>
+git add
+</pre> <p> This command accepts arguments for files or directories within the project directory. Despite the name, <code translate="no" dir="ltr">git add</code> doesn't just add files to the Git repository; it can also be used to stage file modifications and deletions. </p> <h2 id="viewing-client-status">View client status</h2> <p> To list the state of files: </p> 
+<pre>
+repo status
+</pre> <p> To view uncommitted edits (local edits that are <strong>not</strong> marked for commit): </p> 
+<pre>
+repo diff
+</pre> <p> To view committed edits (located edits that <strong>are marked</strong> for commit), ensure that you're in the project directory then run <code translate="no" dir="ltr">git
+  diff</code> with the <code translate="no" dir="ltr">cached</code> argument: </p> 
+<pre>
+cd ~/WORKING_DIRECTORY/PROJECT
+git diff --cached
+</pre> <h2 id="committing-changes">Commit changes</h2> <p> A <em>commit</em> is the basic unit of revision control in Git and consists of a snapshot of the directory structure and file contents for the entire project. Use this command to create a commit in Git: </p> 
+<pre>
+git commit
+</pre> <p> When prompted for a commit message, provide a short (but helpful) message for changes submitted to AOSP. If you don't add a commit message, the commit fails.</p> <aside class="special">Clear, concise, detailed commit messages are important and required. For guidance on creating them, see <a href="../contribute/submit-patches#make-your-change">Making your change</a></aside> <h3 id="uploading-changes-to-gerrit">Upload changes to Gerrit</h3> <p> Update to the latest revision, then upload the change: </p> 
+<pre>
+repo sync
+repo upload
+</pre> <p> These commands return a list of changes you have committed and prompt you to select the branches to upload to the review server. If there's only one branch, you see a simple <code translate="no" dir="ltr">y/n</code> prompt. </p> <h3 id="resolving-sync-conflicts">Resolve sync conflicts</h3> <p> If the <code translate="no" dir="ltr">repo sync</code> command returns sync conflicts: </p> <ol> <li>View the files that are unmerged (status code = U).</li> <li>Edit the conflict regions as necessary.</li> <li>Change to the relevant project directory. Add and commit the affected files, then rebase the changes: 
+<pre>
+git add .
+git commit
+git rebase --continue
+</pre> </li> <li>After the rebase completes, start the entire sync again: 
+<pre>
+repo sync PROJECT0 PROJECT1 ... PROJECTN
+</pre> </li> </ol> <h2 id="cleaning-up-client-files">Clean up clients</h2> <p> After merging changes to Gerrit, update your local working directory, then use <code translate="no" dir="ltr">repo prune</code> to safely remove stale topic branches: </p> 
+<pre>
+repo sync
+repo prune
+</pre> <h2 id="deleting-clients">Delete clients</h2> <p> Because all state information is stored in your client, you only need to delete the directory from your file system: </p> 
+<pre>
+rm -rf WORKING_DIRECTORY
+</pre> <p> Deleting a client permanently deletes any changes you haven't uploaded for review. </p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/setup/create/coding-tasks" class="_attribution-link">https://source.android.com/docs/setup/create/coding-tasks</a>
+  </p>
+</div>

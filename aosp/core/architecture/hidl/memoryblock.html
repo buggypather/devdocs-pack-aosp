@@ -1,0 +1,157 @@
+<h1>HIDL MemoryBlock</h1>  <p>The HIDL <code translate="no" dir="ltr">MemoryBlock</code> is an abstract layer built on <code translate="no" dir="ltr">hidl_memory</code>, <code translate="no" dir="ltr">HIDL
+@1.0::IAllocator</code>, and <code translate="no" dir="ltr">HIDL @1.0::IMapper</code>. It is designed for HIDL services that have multiple memory blocks to share a single memory heap.</p> <h2 id="performance_improvements">Performance improvements</h2> <p>Using <code translate="no" dir="ltr">MemoryBlock</code> in apps can significantly reduce the number of <code translate="no" dir="ltr">mmap</code>/<code translate="no" dir="ltr">munmap</code> and user space segmentation faults, thus improving performance. For example:</p> <ul> <li>Using per <code translate="no" dir="ltr">hidl_memory</code> for each buffer allocation averages 238 us/1 allocation.</li> <li>Using <code translate="no" dir="ltr">MemoryBlock</code> and sharing a single <code translate="no" dir="ltr">hidl_memory</code> averages 2.82 us/1 allocation.</li> </ul> <h2 id="architecture">Architecture</h2> <p>The HIDL <code translate="no" dir="ltr">MemoryBlock</code> architecture includes HIDL services with multiple memory blocks sharing a single memory heap:</p> <p><img src="https://source.android.com/static/docs/core/architecture/images/hidl_memoryblock_arch.png" alt="HIDL MemoryBlock" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> HIDL MemoryBlock architecture</p> <h2 id="normal_usage">Normal usage</h2> <p>This section provides an example of using <code translate="no" dir="ltr">MemoryBlock</code> by first declaring the HAL then implementing the HAL.</p> <h3 id="declare_the_hal">Declare the HAL</h3> <p>For the following example IFoo HAL:</p> 
+<pre>import android.hidl.memory.block@1.0::MemoryBlock;
+
+interface IFoo {
+    getSome() generates(MemoryBlock block);
+    giveBack(MemoryBlock block);
+};
+</pre> <p>The <code translate="no" dir="ltr">Android.bp</code> is as follows:</p> 
+<pre>hidl_interface {
+    ...
+    srcs: [
+        "IFoo.hal",
+    ],
+    interfaces: [
+        "android.hidl.memory.block@1.0",
+        ...
+};
+</pre> <h3 id="implement_the_hal">Implement the HAL</h3> <p>To implement the example HAL:</p> <ol> <li>
+<p>Get the <code translate="no" dir="ltr">hidl_memory</code> (for details, refer to <a href="../hidl-cpp">HIDL C++</a>).</p> 
+<pre>#include &lt;android/hidl/allocator/1.0/IAllocator.h&gt;
+
+using ::android::hidl::allocator::V1_0::IAllocator;
+using ::android::hardware::hidl_memory;
+...
+  sp&lt;IAllocator&gt; allocator = IAllocator::getService("ashmem");
+  allocator-&gt;allocate(2048, [&amp;](bool success, const hidl_memory&amp; mem)
+  {
+        if (!success) { /* error */ }
+        // you can now use the hidl_memory object 'mem' or pass it
+  }));
+</pre>
+</li> <li>
+<p>Make a <code translate="no" dir="ltr">HidlMemoryDealer</code> instance with the acquired <code translate="no" dir="ltr">hidl_memory</code>:</p> 
+<pre>#include &lt;hidlmemory/HidlMemoryDealer.h&gt;
+
+using ::android::hardware::HidlMemoryDealer
+/* The mem argument is acquired in the Step1, returned by the ashmemAllocator-&gt;allocate */
+sp&lt;HidlMemoryDealer&gt; memory_dealer = HidlMemoryDealer::getInstance(mem);
+</pre>
+</li> <li>
+<p>Allocate <code translate="no" dir="ltr">MemoryBlock</code>, which is a struct defined with HIDL.</p> <p>Example <code translate="no" dir="ltr">MemoryBlock</code>:</p> 
+<pre>struct MemoryBlock {
+IMemoryToken token;
+uint64_t size;
+uint64_t offset;
+};
+</pre> <p>Example using the <code translate="no" dir="ltr">MemoryDealer</code> to allocate a <code translate="no" dir="ltr">MemoryBlock</code>:</p> 
+<pre>#include &lt;android/hidl/memory/block/1.0/types.h&gt;
+
+using ::android::hidl::memory::block::V1_0::MemoryBlock;
+
+Return&lt;void&gt; Foo::getSome(getSome_cb _hidl_cb) {
+    MemoryBlock block = memory_dealer-&gt;allocate(1024);
+    if(HidlMemoryDealer::isOk(block)){
+        _hidl_cb(block);
+    ...
+</pre>
+</li> <li>
+<p>Deallocate <code translate="no" dir="ltr">MemoryBlock</code>:</p> 
+<pre>Return&lt;void&gt; Foo::giveBack(const MemoryBlock&amp; block) {
+    memory_dealer-&gt;deallocate(block.offset);
+...
+</pre>
+</li> <li>
+<p>Manipulate the data:</p> 
+<pre>#include &lt;hidlmemory/mapping.h&gt;
+#include &lt;android/hidl/memory/1.0/IMemory.h&gt;
+
+using ::android::hidl::memory::V1_0::IMemory;
+
+sp&lt;IMemory&gt; memory = mapMemory(block);
+uint8_t* data =
+
+static_cast&lt;uint8_t*&gt;(static_cast&lt;void*&gt;(memory-&gt;getPointer()));
+</pre>
+</li> <li>
+<p>Config <code translate="no" dir="ltr">Android.bp</code>:</p> 
+<pre>shared_libs: [
+        "android.hidl.memory@1.0",
+
+        "android.hidl.memory.block@1.0"
+
+        "android.hidl.memory.token@1.0",
+        "libhidlbase",
+        "libhidlmemory",
+</pre>
+</li> <li>
+<p>Review the flow to determine if you need to <code translate="no" dir="ltr">lockMemory</code>.</p> <p>Normally, <code translate="no" dir="ltr">MemoryBlock</code> uses reference count to maintain the shared <code translate="no" dir="ltr">hidl_memory</code> which is <code translate="no" dir="ltr">mmap()</code>-ed the first time one of its <code translate="no" dir="ltr">MemoryBlock
+instances is mapped and is</code>munmap()<code translate="no" dir="ltr">-ed when nothing refers to it. To keep</code>hidl_memory<code translate="no" dir="ltr">always mapped, you can use</code>lockMemory<code translate="no" dir="ltr">, a RAII style object
+that keeps the corresponding</code>hidl_memory` mapped throughout the lock lifecycle. Example:</p> 
+<pre>#include &lt;hidlmemory/mapping.h&gt;
+
+sp&lt;RefBase&gt; lockMemory(const sp&lt;IMemoryToken&gt; key);
+</pre>
+</li> </ol> <h2 id="extended_usage">Extended usage</h2> <p>This section provides details about the extended usage of <code translate="no" dir="ltr">MemoryBlock</code>.</p> <h3 id="use_reference_count_to_manage_memoryblock">Use reference count to manage MemoryBlock</h3> <p>In most situations, the most efficient way to use <code translate="no" dir="ltr">MemoryBlock</code> is to explicitly allocate/deallocate. However, in complicated apps using reference count for garbage collection might be a better idea. To have reference count on <code translate="no" dir="ltr">MemoryBlock</code>, you can bind <code translate="no" dir="ltr">MemoryBlock</code> with a binder object, which helps to count the references and deallocate the <code translate="no" dir="ltr">MemoryBlock</code> when the count decreases to zero.</p> <h3 id="declare_the_hal_2">Declare the HAL</h3> <p>When declaring the HAL, describe a HIDL struct that contains a <code translate="no" dir="ltr">MemoryBlock</code> instance and an IBase:</p> 
+<pre>import android.hidl.memory.block@1.0::MemoryBlock;
+
+struct MemoryBlockAllocation {
+    MemoryBlock block;
+    IBase refcnt;
+};
+</pre> <p>Use <code translate="no" dir="ltr">MemoryBlockAllocation</code> to replace <code translate="no" dir="ltr">MemoryBlock</code> and remove the method to give back <code translate="no" dir="ltr">MemoryBlock</code>. It's deallocated by reference counting with <code translate="no" dir="ltr">MemoryBlockAllocation</code>. Example:</p> 
+<pre>interface IFoo {
+    allocateSome() generates(MemoryBlockAllocation allocation);
+};
+</pre> <h3 id="implement_the_hal_2">Implement the HAL</h3> <p>Example of the service side implementation of the HAL:</p> 
+<pre>class MemoryBlockRefCnt: public virtual IBase {
+   MemoryBlockRefCnt(uint64_t offset, sp&lt;MemoryDealer&gt; dealer)
+     : mOffset(offset), mDealer(dealer) {}
+   ~MemoryBlockRefCnt() {
+       mDealer-&gt;deallocate(mOffset);
+   }
+ private:
+   uint64_t mOffset;
+   sp&lt;MemoryDealer&gt; mDealer;
+};
+
+Return&lt;void&gt; Foo::allocateSome(allocateSome_cb _hidl_cb) {
+    MemoryBlockAllocation allocation;
+    allocation.block = memory_dealer-&gt;allocate(1024);
+    if(HidlMemoryDealer::isOk(block)){
+        allocation.refcnt= new MemoryBlockRefCnt(...);
+        _hidl_cb(allocation);
+</pre> <p>Example of the client side implementation of the HAL:</p> 
+<pre>ifoo-&gt;allocateSome([&amp;](const MemoryBlockAllocation&amp; allocation){
+    ...
+);
+</pre> <h3 id="attach_and_retrieve_metadata">Attach and retrieve metadata</h3> <p>Some apps need additional data to bind with the allocated <code translate="no" dir="ltr">MemoryBlock</code>. You can append and retrieve metadata using two methods:</p> <ul> <li>
+<p>If the app accesses the metadata as often as the block itself, append the metadata and pass them all in a struct. Example:</p> 
+<pre>import android.hidl.memory.block@1.0::MemoryBlock;
+
+struct MemoryBlockWithMetaData{
+    MemoryBlock block;
+    MetaDataStruct metaData;
+};
+</pre>
+</li> <li>
+<p>If the app accesses the metadata much less frequently than the block, it is more efficient to pass the metadata passively with an interface. Example:</p> 
+<pre>import android.hidl.memory.block@1.0::MemoryBlock;
+
+struct MemoryBlockWithMetaData{
+    MemoryBlock block;
+    IMetaData metaData;
+};
+</pre> <p>Next, bind the metadata with the <code translate="no" dir="ltr">MemoryBlock</code> using <code translate="no" dir="ltr">MemoryDealer</code>. Example:</p> 
+<pre>MemoryBlockWithMetaData memory_block;
+memory_block.block = dealer-&gt;allocate(size);
+if(HidlMemoryDealer::isOk(block)){
+    memory_block.metaData = new MetaData(...);
+</pre>
+</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/hidl/memoryblock" class="_attribution-link">https://source.android.com/docs/core/architecture/hidl/memoryblock</a>
+  </p>
+</div>

@@ -1,0 +1,76 @@
+<h1>MM events historical memory statistics</h1>  <p>Devices that launch on Android 12 and higher utilize <code translate="no" dir="ltr">mm_events</code>, a set of memory-related statistics that get captured periodically while a system experiences memory pressure. <code translate="no" dir="ltr">mm_events</code> is integrated with <code translate="no" dir="ltr">perfetto</code> tracing mechanisms, and because it’s activated only when memory pressure is detected, its added performance overhead is minimal. The statistics collection starts when the kernel's <code translate="no" dir="ltr">kswapd</code>, <code translate="no" dir="ltr">direct reclaim,</code> or <code translate="no" dir="ltr">compaction</code> mechanisms get activated, and it stays active for a <a href="#customization">configurable period of time</a> to capture statistics at regular intervals.</p> <p>Instead of providing a one-time snapshot of the system memory state when a bug report is filed, <code translate="no" dir="ltr">mm_events</code> shows a brief historical view of the memory statistics during periods of memory pressure. The captured statistics are listed in the following tables.</p> <p><strong>vmstat fields</strong></p> <table> <tbody> <tr>
+<td><code translate="no" dir="ltr">nr_free_pages</code></td>
+<td><code translate="no" dir="ltr">nr_slab_reclaimable</code></td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">nr_slab_unreclaimable</code></td>
+<td><code translate="no" dir="ltr">nr_active_file</code></td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">nr_inactive_file</code></td>
+<td><code translate="no" dir="ltr">nr_active_anon</code></td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">nr_inactive_anon</code></td>
+<td><code translate="no" dir="ltr">workingset_refault</code></td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">workingset_activate</code></td>
+<td><code translate="no" dir="ltr">nr_file_pages</code></td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">pgpgin</code></td>
+<td><code translate="no" dir="ltr">pgpgout</code></td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">pswpin</code></td>
+<td><code translate="no" dir="ltr">pswpout</code></td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">pgsteal_kswapd_dma</code></td>
+<td><code translate="no" dir="ltr">pgsteal_kswapd_normal</code></td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">pgsteal_kswapd_movable</code></td>
+<td><code translate="no" dir="ltr">pgsteal_direct_dma</code></td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">pgsteal_direct_normal</code></td>
+<td><code translate="no" dir="ltr">pgsteal_direct_movable</code></td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">pgscan_kswapd_dma</code></td>
+<td><code translate="no" dir="ltr">pgscan_kswapd_normal</code></td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">pgscan_kswapd_movable</code></td>
+<td><code translate="no" dir="ltr">pgscan_direct_dma</code></td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">pgscan_direct_normal</code></td>
+<td><code translate="no" dir="ltr">pgscan_direct_movable</code></td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">compact_migrate_scanned</code></td>
+<td><code translate="no" dir="ltr">compact_free_scanned</code></td>
+</tr> </tbody> </table> <p><strong>mm-related trace events</strong></p> <table> <tbody> <tr>
+<td><code translate="no" dir="ltr">vmscan/mm_vmscan_kswapd_wake</code></td>
+<td><code translate="no" dir="ltr">vmscan/mm_vmscan_kswapd_sleep</code></td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">vmscan/mm_vmscan_direct_reclaim_begin</code></td>
+<td><code translate="no" dir="ltr">vmscan/mm_vmscan_direct_reclaim_end</code></td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">compaction/mm_compaction_begin</code></td>
+<td><code translate="no" dir="ltr">compaction/mm_compaction_end</code></td>
+</tr> </tbody> </table> <h2 id="analyze-mmevents-data">Analyze mm_events data</h2> <p>If <code translate="no" dir="ltr">mm_events</code> is enabled, the bug reports for the events that get captured soon after a device begins to experience high memory pressure provide the historical <code translate="no" dir="ltr">mm_events</code> stats, in the form of a zipped report in <code translate="no" dir="ltr">FS/data/misc/perfetto-traces/bugreport/systrace.pftrace.</code></p> <p>Both the <code translate="no" dir="ltr">vmstat</code> data and <code translate="no" dir="ltr">ftrace</code> events can be viewed for analysis using the <a href="https://ui.perfetto.dev/">Perfetto UI</a>.</p> <h3 id="vmstat-data">vmstat data</h3> <p>Upload the <code translate="no" dir="ltr">systrace.pftrace</code> file to Perfetto UI to see the <code translate="no" dir="ltr">vmstat</code> data graphed on a timeline as shown in Figure 1:</p> <p><img src="https://source.android.com/static/docs/core/architecture/images/vmstat-graphical-data.png" alt="vmstat data graphed on a timeline" title="Graphical presentation of vmstat data over time" class="android-image-dark-theme-background"> </p> <p id="figure1"><strong>Figure 1.</strong> Timeline of vmstat graphical data. </p> <h3 id="ftrace-events">ftrace events</h3> <p>The captured <code translate="no" dir="ltr">ftrace</code> <code translate="no" dir="ltr">mm_events</code> aren't shown graphically on the timeline. To view them, click the <strong>Query SQL</strong> tab, located as shown in Figure 2:</p> <p><img src="https://source.android.com/static/docs/core/architecture/images/click-query-sql-to-access.png" alt="Locate the Query SQL tab and click to view ftrace and mm_events captured and graphed" title="Image shows where to locate the Query SQL tab to click it and see graphs of ftrace and mm_events captures" class="android-image-dark-theme-background"> </p> <p id="figure2"><strong>Figure 2.</strong> Click Query (SQL) to access. </p> <h2 id="enabling-mmevents">Enable mm_events</h2> <p>To enable mm_events, set sysprop <code translate="no" dir="ltr">persist.mm_events.enabled=true</code> from vendor <code translate="no" dir="ltr">init.rc</code>.</p> <aside class="note"><strong>Note:</strong><span> When enabling <code translate="no" dir="ltr">mm_events</code>, set <code translate="no" dir="ltr">persist.mm_events.enabled</code> to <code translate="no" dir="ltr">true</code> before <code translate="no" dir="ltr">post-fs-data</code> is triggered to ensure that the <code translate="no" dir="ltr">mm_events</code> tracing instance is available before <code translate="no" dir="ltr">mm_events</code> is started.</span></aside><aside class="warning"><strong>Warning:</strong><span> <code translate="no" dir="ltr">mm_events</code> has ~0.3% max CPU usage when capturing data. Proceed carefully if you are considering using <code translate="no" dir="ltr">mm_events</code> for production builds, since the frequency of memory pressure events is highly device-dependent. For example, devices with low memory budgets experience memory pressure events more frequently, and consequently, <code translate="no" dir="ltr">mm_events</code> <em>can stay active</em> (always on) for them.</span></aside> <p>The following are in place to mitigate the memory and CPU footprint of mm_events:</p> <ul> <li>An <code translate="no" dir="ltr">mm-events ftrace</code> instance uses a 4 KB buffer per CPU.</li> <li>The <code translate="no" dir="ltr">kmem_activity</code> trigger is rate-limited to once per minute.</li> <li>Only 1 <code translate="no" dir="ltr">mm-events</code> trace session can be active at any time.</li> </ul> <h2 id="customization">Customization</h2> <p><code translate="no" dir="ltr">mm_events</code> uses a <code translate="no" dir="ltr">perfetto</code> trace config file to specify which stats to capture during the tracing session.</p> <p>You can provide a custom Perfetto trace config in <code translate="no" dir="ltr">/vendor/etc/mm_events.cfg</code>. For a description of the available trace config fields, see the <a href="https://perfetto.dev/docs/reference/trace-config-proto">Perfetto Docs</a>. For a sample trace configuration, see this <a href="https://android.googlesource.com/platform/external/perfetto/+/9a1689eeaa281b21c5bcedcad5d54ddaeeb7889c/test/configs/mm_events.cfg"><code translate="no" dir="ltr">mm_events.cfg</code></a> example.</p> <p>The important fields to include in your trace config to ensure it gets triggered by memory pressure are shown in the snippet:</p> 
+<pre># Ensures only 1 tracing session with this key can be active
+unique_session_name: "perfetto_mm_events_session"
+
+# If a trace with bugreport_score &gt; 0 is running,
+# the captured data is made available in the zipped bugreport
+# at FS/data/misc/perfetto-traces/bugreport/systrace.pftrace
+bugreport_score: 100
+
+trigger_config {
+  trigger_mode: START_TRACING
+  trigger_timeout_ms: 3600000   # 1 hour
+  triggers {
+    # kmem_activity trigger gets activated when memory pressure
+    # is detected
+    name: "kmem_activity"
+    stop_delay_ms: 360000       # 6 mins
+  }
+}
+</pre> <p>In this configuration <code translate="no" dir="ltr">mm_events</code> initiates the perfetto <code translate="no" dir="ltr">kmem_activity</code> trigger and the Perfetto trace session begins capturing <code translate="no" dir="ltr">vm_stats</code> and <code translate="no" dir="ltr">ftrace</code> memory events until the end of the configured <code translate="no" dir="ltr">stop_delay_ms</code> period, 36000 ms (6 minutes). The trigger timeout is set to a large value (in this case, 1 hour) and <a href="https://android.googlesource.com/platform/external/perfetto/+/9a1689eeaa281b21c5bcedcad5d54ddaeeb7889c/tools/mm_events"><code translate="no" dir="ltr">mm_events config</code></a> is periodically rearmed to ensure that <code translate="no" dir="ltr">mm_events</code> is always enabled. A bug report gets generated as a result, containing the type of data shown in <a href="#figure1">Figure 1</a> and <a href="#figure2">Figure 2</a>.</p> <aside class="note"><strong>Note:</strong><span> If you don’t provide a custom config, a <a href="https://android.googlesource.com/platform/external/perfetto/+/9a1689eeaa281b21c5bcedcad5d54ddaeeb7889c/tools/mm_events">default</a> trace configuration is used instead.</span></aside><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/perf/mmevents-stats" class="_attribution-link">https://source.android.com/docs/core/perf/mmevents-stats</a>
+  </p>
+</div>

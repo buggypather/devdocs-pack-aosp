@@ -1,0 +1,182 @@
+<h1>Collect and view traces</h1>  <p>This page provides detailed instructions for collecting Perfetto traces to use with Wattson and for analyzing the resulting power data in the Perfetto UI.</p> <p>While there are many ways to collect a Perfetto trace, the methods on this page include the specific requirements and workflows for generating a trace compatible with Wattson.</p> <aside class="note"><strong>Note:</strong><span> If you're unfamiliar with Wattson, see <a href="wattson">Power analysis overview</a>.</span></aside> <h2 id="minimum-build-requirements">Minimum build requirements</h2> <p>To verify that Wattson has the required metadata to function correctly, you must collect traces from a device running a recent build. The minimum build versions for CPU and GPU power estimation vary by device.</p> <table> <tr> <th>Device</th> <th>Minimum build requirement: CPU estimation</th> <th>Minimum build requirement: GPU estimation</th> </tr> <tr> <td>
+<strong>Pixel Watch 2</strong> </td> <td>No minimum build requirement </td> <td>Not supported </td> </tr> <tr> <td>
+<strong>Pixel Watch 3</strong> </td> <td>
+<a>25Q2</a> </td> <td>Not supported </td> </tr> <tr> <td>
+<strong>Pixel 6</strong> </td> <td>No minimum build requirement </td> <td>
+<a>25Q2</a> </td> </tr> <tr> <td>
+<strong>Pixel 9</strong> </td> <td>
+<a>25Q2</a> </td> <td>Not supported </td> </tr> <tr> <td>
+<strong>Pixel 10</strong> </td> <td>
+<a>25Q2</a> </td> <td>Not supported </td> </tr> <tr> <td>
+<strong>Galaxy XR (SXR2230P)</strong> </td> <td>No minimum build requirement </td> <td>Not supported </td> </tr> </table> <h2 id="wattson-cmd-lines">Collect Perfetto trace from the command line</h2> <p>This section presents an example workflow for collecting Perfetto traces for use with Wattson. All commands listed in the following steps are meant to be issued from the <a href="https://developer.android.com/tools/adb">Android Debug Bridge (adb)</a> host.</p> <ol> <li>
+<p>Configure and start the trace by creating a Perfetto configuration file on the device. An example configuration can be found at <a href="#wattson-config"><code translate="no" dir="ltr">wattson.cfg</code></a> in the source tree.</p> <p>The minimum configuration must include the following trace events:</p> 
+<pre># Polls CPU and DSU devfreq state at the start of trace
+data_sources: {
+   config {
+      name: "linux.sys_stats"
+      sys_stats_config {
+         # Large period so polling doesn't happen continuously
+         # Intent is just to poll once upfront
+         cpufreq_period_ms: 100000000
+         devfreq_period_ms: 100000000
+      }
+   }
+}
+data_sources: {
+   config {
+      name: "linux.ftrace"
+      ftrace_config {
+         ftrace_events: "devfreq/devfreq_frequency"
+         ftrace_events: "cpuhp/cpuhp_enter"
+         ftrace_events: "cpuhp/cpuhp_exit"
+         ftrace_events: "cpuhp/cpuhp_multi_enter"
+         ftrace_events: "power/cpu_frequency"
+         ftrace_events: "power/cpu_idle"
+         ftrace_events: "power/suspend_resume"
+      }
+   }
+}
+</pre>
+</li> <li>
+<p>To enable L3 cache energy usage estimates, enable the <code translate="no" dir="ltr">fttrace/print</code> event:</p> 
+<pre>adb shell perfetto --txt -c /data/misc/perfetto-configs/wattson.cfg --background-wait -o /data/misc/perfetto-traces/trace
+
+# Optional
+adb shell simpleperf stat -a -e arm_dsu_0/l3d_cache/,arm_dsu_0/bus_access/ --interval 10
+</pre>
+</li> <li>
+<p>(Optional) Set start of Wattson window, a marker embedded in the Perfetto trace that indicates the start of the record. This marker adds additional accuracy of the Wattson measurement.</p> 
+<pre># Optional
+adb shell "echo 'I|0|wattson_start' &gt;/sys/kernel/tracing/trace_marker"
+</pre>
+</li> <li><p>Run the workload of interest.</p></li> <li>
+<p>(Optional) Enable the <code translate="no" dir="ltr">ftrace/print</code> trace event to set the end of the Wattson window:</p> 
+<pre># Optional
+adb shell "echo 'I|0|wattson_stop' &gt;/sys/kernel/tracing/trace_marker"
+</pre>
+</li> <li>
+<p>Flush the trace buffers and pull the Perfetto trace file:</p> 
+<pre>adb shell killall -w perfetto
+adb pull /data/misc/perfetto-traces/trace my_perfetto_trace.pb
+</pre>
+</li> </ol> <h2 id="ui-based-settings">Collect Perfetto trace using Perfetto UI</h2> <p>To collect traces using the <a href="https://ui.perfetto.dev/">Perfetto UI</a> , you must enable specific settings for Wattson. When recording a new trace in the Perfetto UI, enable the <strong>Scheduling details</strong> and <strong>CPU frequency and idle states</strong> toggles:</p> <p><img src="https://source.android.com/static/docs/core/power/wattson/images/Perfetto.png" alt="Scheduling details and CPU frequency and idle states toggles" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> Scheduling details and CPU frequency and idle states toggles.</p> <p>For Pixel 9 devices, under <strong>Ftrace</strong> settings, select the <strong>devfreq</strong> checkbox to enable device frequency collection:</p> <p class="screenshot"><img src="https://source.android.com/static/docs/core/power/wattson/images/devfreq.png" alt="Enable Device frequency" class="android-image-dark-theme-background"></p> <p><strong>Figure 2.</strong> Enable device frequency.</p> <h2 id="per-rail-tracks">View per rail break down</h2> <p>With Perfetto, analyze Wattson power estimates by selecting a time range to view per-rail statistics, or enable specific trace configurations to attribute power consumption at the thread, process, or package level.</p> <p>To interact with Wattson in Perfetto:</p> <ol> <li>
+<p>Open a trace in Perfetto.</p> <p>If your device is supported by Wattson, the Wattson traces are automatically listed:</p> <p class="screenshot"><img src="https://source.android.com/static/docs/core/power/wattson/images/Wattson_Perfetto.png" alt="View Wattson traces in Perfetto" class="android-image-dark-theme-background"></p> <p><strong>Figure 3.</strong> View Wattson traces in Perfetto.</p>
+</li> <li>
+<p>Click <strong>Wattson</strong> to expand and view per virtual rail breakdown:</p> <ul> <li><p>All rail graphs are automatically scaled to the same value to show proportion between rails.</p></li> <li><p>Statistics are generated for any user-selected (or marked) region.</p></li> <li><p>The statistics table can be sorted by clicking any column name.</p></li> <li><p>Estimate totals are displayed directly below the column titles.</p></li> </ul> <p class="screenshot"><img src="https://source.android.com/static/docs/core/power/wattson/images/Wattson_Breakdown.png" alt="Rail estimates" class="android-image-dark-theme-background"></p> <p><strong>Figure 4.</strong> Rail estimates.</p>
+</li> </ol> <h2 id="per-thread-attribution">View trace per thread, process, or package attributions</h2> <p>If you have scheduler traces enabled and can see thread slices in Perfetto, you can also get thread-level or process-level power or energy attribution:</p> <ol> <li>In Perfetto, select a region of thread slices.</li> <li>View the breakdown for the thread, process, or package.</li> </ol> <p>As with per-rail track statistics, you can click any of the column names to sort by that column.</p> <h3 id="thread-level-breakdown">Analyze thread-level breakdown</h3> <p>In addition to the minimum requirements for basic power estimation, you need to add the following configuration to the <code translate="no" dir="ltr">linux.ftrace</code> section in the <a href="#wattson-config"><code translate="no" dir="ltr">wattson.cfg</code></a> for per thread level power attribution:</p> 
+<pre>data_sources: {
+    config {
+        name: "linux.ftrace"
+        ftrace_config {
+            ftrace_events: "sched/sched_switch"
+        }
+    }
+}
+</pre> <p class="screenshot"><img src="https://source.android.com/static/docs/core/power/wattson/images/Wattson_Totals.png" alt="Thread level breakdowns" class="android-image-dark-theme-background"></p> <p><strong>Figure 5.</strong> Thread level breakdowns.</p> <h3 id="process-level-breakdown">Process-level breakdown</h3> <p>Process-level attribution requires <code translate="no" dir="ltr">process_states</code> to be enabled on the data collected in the Perfetto trace. Enable the following data source in your <a href="#wattson-config"><code translate="no" dir="ltr">wattson.cfg</code></a> configuration file:</p> 
+<pre>data_sources: {
+    config {
+        name: "linux.process_stats"
+        target_buffer: 1
+        process_stats_config {
+            scan_all_processes_on_start: true
+        }
+    }
+}
+</pre> <p class="screenshot"><img src="https://source.android.com/static/docs/core/power/wattson/images/Wattson_by_Process.png" alt="By process breakdown" class="android-image-dark-theme-background"></p> <p><strong>Figure 6.</strong> By process breakdown.</p> <h3 id="package-level-breakdown">Package-level breakdown</h3> <p>Package-level attribution requires <code translate="no" dir="ltr">android.packages_list</code> enabled on the data collected in the Perfetto trace. Enable the following data source in your <a href="#wattson-config"><code translate="no" dir="ltr">wattson.cfg</code></a> configuration file:</p> 
+<pre>data_sources {
+  config {
+    name: "android.packages_list"
+    target_buffer: 1
+  }
+}
+</pre> <p>Similar to the thread-level and process-level attribution, when you select a range of thread slices, review package-level breakdown.</p> <p class="screenshot"><img src="https://source.android.com/static/docs/core/power/wattson/images/Wattson_by_Breakdown.png" alt="Thread-level breakdown" class="android-image-dark-theme-background"></p> <p><strong>Figure 7.</strong> Thread-level breakdown.</p> <h2 id="gpu-power-estimation">GPU power estimation</h2> <p>GPU power estimation is supported on Pixel 6, 6 Pro, and 6a. To enable GPU power estimation, enable the following data source in your <a href="#wattson-config"><code translate="no" dir="ltr">wattson.cfg</code></a> configuration file:</p> 
+<pre>data_sources: {
+  config {
+    name: "linux.ftrace"
+    ftrace_config {
+      ftrace_events: "mali/gpu_power_state"
+      ftrace_events: "power/gpu_frequency"
+
+      # [Optional] Enable GPU Work Period (not used by Wattson, but useful for debugging)
+      ftrace_events: "power/gpu_work_period"
+    }
+  }
+}
+</pre> <p>For a given selection, the Wattson GPU power estimates appear in the Perfetto UI on the <strong>Wattson estimates</strong> tab.</p> <p class="screenshot"><img src="https://source.android.com/static/docs/core/power/wattson/images/Wattson_GPU_estimation.png" alt="GPU Power Estimation" class="android-image-dark-theme-background"></p> <p><strong>Figure 8.</strong> GPU power estimation.</p> <h2 id="faqs">FAQs</h2> <p>Here are some frequently asked questions about Wattson.</p> <h3 id="is_wattson_expected_to_match_lab_power_measurement_hardware_output">Is Wattson expected to match lab power measurement hardware output?</h3> <p>For most workloads, the Wattson estimate matches the lab power hardware measurements. However, this isn't always the case and isn't the intent of Wattson.</p> <p>Wattson is meant to validate power improvements or catch power regressions without noise from environmental factors (temperature), unit-to-unit variations in chip leakage (the same SoC can have different leakage on a per-unit basis), or calibration differences between lab power measurement hardware.</p> <h3 id="how_is_wattson_more_useful_than_looking_at_cpu_time_or_cpu_cycles">How is Wattson more useful than looking at CPU time or CPU cycles?</h3> <p>CPU time and cycles don't account for the difference in power or energy consumption between CPU frequencies and CPU types (little versus mid versus big).</p> <p>A doubled CPU frequency doesn't always result in doubled CPU power or doubled performance.</p> <h3 id="is_wattson_accurate_when_compared_to_hardware_solutions">Is Wattson accurate when compared to hardware solutions?</h3> <p>We have compared Wattson with lab power measurement hardware across multiple use cases provided by multiple teams. The average error in Wattson is 1% points and the standard deviation is 1.5% points. This level of correlation is maintained across tests that are 10 seconds to tests that run for 4 hours. So there's no error creep or error masking that's a factor of time.</p> <h2 id="pixel-6">Pixel 6 kernel config experiments</h2> <p>Here are some baseline experiments of typical Wattson breakdowns using Pixel 6:</p> <ul> <li><a href="https://ui.perfetto.dev/#!/">Baseline</a></li> <li><a href="https://ui.perfetto.dev/#!/"><code translate="no" dir="ltr">RCU_LAZY</code></a></li> <li><a href="https://ui.perfetto.dev/#!/"><code translate="no" dir="ltr">HZ_1000</code></a></li> </ul> <h2 id="wattson-config">Wattson.cfg</h2> <p>This section provides the typical configuration for Wattson enablement on Perfetto:</p> 
+<pre>  write_into_file: true
+  flush_period_ms: 30000
+  file_write_period_ms: 30000
+
+  buffers: {
+      size_kb: 2048
+      fill_policy: RING_BUFFER
+  }
+  buffers: {
+      size_kb: 200000
+      fill_policy: RING_BUFFER
+  }
+
+  # Needed for process level power attribution
+  data_sources: {
+      config {
+          name: "linux.process_stats"
+          target_buffer: 0
+          process_stats_config {
+              scan_all_processes_on_start: true
+          }
+      }
+  }
+
+  # Needed for package level power attribution
+  data_sources: {
+      config {
+          name: "android.packages_list"
+          target_buffer: 0
+      }
+  }
+
+  # Needed for determining CPU freq and DSU devfreq initial state
+  data_sources: {
+      config {
+          name: "linux.sys_stats"
+          sys_stats_config {
+              cpufreq_period_ms: 100000000
+              devfreq_period_ms: 100000000
+          }
+      }
+  }
+
+  # Needed for estimating power and thread level power attribution
+  data_sources: {
+      config {
+          name: "linux.ftrace"
+          target_buffer: 1
+          ftrace_config {
+              # Minimum data sources for estimating power
+              ftrace_events: "power/cpu_frequency"
+              ftrace_events: "power/cpu_idle"
+              ftrace_events: "power/suspend_resume"
+              ftrace_events: "cpuhp/cpuhp_enter"
+              ftrace_events: "cpuhp/cpuhp_exit"
+              ftrace_events: "cpuhp/cpuhp_multi_enter"
+              ftrace_events: "devfreq/devfreq_frequency"
+
+              # Needed for Wattson start/stop markers
+              ftrace_events: "ftrace/print"
+
+              # Needed for thread level power attribution
+              ftrace_events: "sched/sched_switch"
+
+              # Needed for process level power attribution
+              ftrace_events: "sched/sched_process_free"
+              ftrace_events: "task/task_newtask"
+              ftrace_events: "task/task_rename"
+          }
+      }
+  }
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/power/wattson/how-to-wattson" class="_attribution-link">https://source.android.com/docs/core/power/wattson/how-to-wattson</a>
+  </p>
+</div>

@@ -1,0 +1,135 @@
+<h1>Display cutouts</h1>  <p>Android 9 adds support for implementing different types of display cutouts on devices. Display cutouts allow you to create immersive, edge-to-edge experiences while still allowing space for important sensors on the front of devices.</p> <p><img src="https://source.android.com/static/docs/core/display/images/top-center-cutout.png" class="android-image-dark-theme-background" alt="Top center display cutout" width="250px"></p> <p><strong>Figure 1.</strong> Top center display cutout</p> <p>Android 9 supports the following types of cutouts:</p> <ul> <li>Top center: Cutout at the center of the top edge</li> <li>Top uncentered: Cutout may be in the corner or slightly off-center</li> <li>Bottom: Cutout at the bottom</li> <li>Dual: One cutout on top and one on the bottom</li> </ul> <h2 id="examples_and_source">Examples and source</h2> <p>The following window manager code at <a href="https://android.googlesource.com/platform/frameworks/base/+/android17-release/services/core/java/com/android/server/policy/PhoneWindowManager.java">PhoneWindowManager.java</a> shows how display frames are inset to the safe area when <code translate="no" dir="ltr">LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS</code> is not set.</p> 
+<pre>// Ensure that windows with a DEFAULT or NEVER display cutout mode are laid out in
+// the cutout safe zone.
+if (cutoutMode != LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS) {
+    final Rect displayCutoutSafeExceptMaybeBars = mTmpDisplayCutoutSafeExceptMaybeBarsRect;
+    displayCutoutSafeExceptMaybeBars.set(displayFrames.mDisplayCutoutSafe);
+    if (layoutInScreen &amp;&amp; layoutInsetDecor &amp;&amp; !requestedFullscreen
+            &amp;&amp; cutoutMode == LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT) {
+        // At the top we have the status bar, so apps that are
+        // LAYOUT_IN_SCREEN | LAYOUT_INSET_DECOR but not FULLSCREEN
+        // already expect that there's an inset there and we don't need to exclude
+        // the window from that area.
+        displayCutoutSafeExceptMaybeBars.top = Integer.MIN_VALUE;
+    }
+    if (layoutInScreen &amp;&amp; layoutInsetDecor &amp;&amp; !requestedHideNavigation
+            &amp;&amp; cutoutMode == LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT) {
+        // Same for the navigation bar.
+        switch (mNavigationBarPosition) {
+            case NAV_BAR_BOTTOM:
+                displayCutoutSafeExceptMaybeBars.bottom = Integer.MAX_VALUE;
+                break;
+            case NAV_BAR_RIGHT:
+                displayCutoutSafeExceptMaybeBars.right = Integer.MAX_VALUE;
+                break;
+            case NAV_BAR_LEFT:
+                displayCutoutSafeExceptMaybeBars.left = Integer.MIN_VALUE;
+                break;
+        }
+    }
+    if (type == TYPE_INPUT_METHOD &amp;&amp; mNavigationBarPosition == NAV_BAR_BOTTOM) {
+        // The IME can always extend under the bottom cutout if the navbar is there.
+        displayCutoutSafeExceptMaybeBars.bottom = Integer.MAX_VALUE;
+    }
+    // Windows that are attached to a parent and laid out in said parent already avoid
+    // the cutout according to that parent and don't need to be further constrained.
+    // Floating IN_SCREEN windows get what they ask for and lay out in the full screen.
+    // They will later be cropped or shifted using the displayFrame in WindowState,
+    // which prevents overlap with the DisplayCutout.
+    if (!attachedInParent &amp;&amp; !floatingInScreenWindow) {
+        mTmpRect.set(pf);
+        pf.intersectUnchecked(displayCutoutSafeExceptMaybeBars);
+        parentFrameWasClippedByDisplayCutout |= !mTmpRect.equals(pf);
+    }
+    // Make sure that NO_LIMITS windows clipped to the display don't extend under the
+    // cutout.
+    df.intersectUnchecked(displayCutoutSafeExceptMaybeBars);
+}
+</pre> <p>SystemUI renders in the cutout area, and needs to determine where it can draw. <a href="https://android.googlesource.com/platform/frameworks/base/+/android17-release/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarView.java">PhoneStatusBarView.java</a> provides an example of a view that determines where the display cutout is, how big it is, and whether or not the inset from the nav bar avoids the cutout area.</p> <p>By overriding <code translate="no" dir="ltr">onApplyWindowInsets()</code>, a view can determine where the cutout is and update its layout accordingly.</p> 
+<pre>@Override
+    public WindowInsets onApplyWindowInsets(WindowInsets insets) {
+        if (updateOrientationAndCutout(mLastOrientation)) {
+            updateLayoutForCutout();
+            requestLayout();
+        }
+        return super.onApplyWindowInsets(insets);
+    }
+</pre> <p>These methods outline how cutouts are handled in the status bar in all cases (i.e. top center, top uncentered, bottom, and dual-cutouts in all rotations).</p> <h2 id="requirements">Requirements</h2> <p>To ensure that apps are not negatively impacted by cutouts, you must ensure that:</p> <ul> <li>The status bar extends to at least the height of the cutout in portrait mode</li> <li>The cutout area must be letterboxed in fullscreen and landscape modes</li> </ul> <p>Your device can have up to one cutout on each short edge (top and bottom).</p> <p>For more information, see the <a href="../../compatibility/android-cdd#3_8_15_display_cutout">CDD</a>.</p> <aside class="note"><strong>Note:</strong><span> For apps targeting Android 8.0 or lower, you can provide users with an option to extend a fullscreen or landscape app into the cutout area (e.g. toggle in the navigation bar). As this may lead to content getting cut off, the <code translate="no" dir="ltr">layoutInDisplayCutoutMode</code> activity theme attribute has been backported to Android 8.1 to allow apps to opt out. If the attribute is set, you may not show a special mode toggle.</span></aside> <h2 id="implementation">Implementation</h2> <p>To implement display cutouts on your device, you must configure the following values for System UI.</p> <table> <thead> <tr> <th>Value</th> <th>Description</th> </tr> </thead> <tbody> <tr> <td>
+<code translate="no" dir="ltr">
+quick_qs_offset_height
+</code> </td> <td>
+<p>Defines the top margin for the quick settings panel. The clock and battery are displayed in the space above the panel.</p> <p>In values-land, set to <code translate="no" dir="ltr">status_bar_height_landscape</code>, and in portrait set to either the default of 48dp, or the height of the cutout, whichever is larger. Can optionally be taller than the cutout if desired.</p>
+</td> </tr> <tr> <td>
+<code translate="no" dir="ltr">
+quick_qs_total_height
+</code> </td> <td>
+<p>Total height of the quick-quick settings panel (collapsed quick settings panel) when the notification shade is expanded, including the space above the panel containing the clock.</p> <p> Because of the way quick settings is laid out, the total height of the quick-quick settings panel (including the offset) must be known statically, so this value must be adjusted by the same delta <code translate="no" dir="ltr">quick_qs_offset_height</code>. Values-land defaults this to 152dp, while the portrait default is 176dp.</p>
+</td> </tr> <tr> <td>
+<code translate="no" dir="ltr">
+status_bar_height_portrait
+</code> </td> <td>
+<p>The default height of the status bar from the framework's perspective.</p> <p>In most devices, this defaults to 24dp. When there is a cutout, set this value to the height of the cutout. Can optionally be taller than the cutout if desired.</p>
+</td> </tr> <tr> <td>
+<code translate="no" dir="ltr">
+status_bar_height_landscape
+</code> </td> <td>
+<p>The height of the status bar in landscape. Cutouts are only supported on the short edges of the device, so this will always be an unaltered status bar height.</p> <p>In a device with no cutout, this is equivalent to <code translate="no" dir="ltr">status_bar_height_portrait</code>. When a cutout is present, keep this value at the default status bar height.</p>
+</td> </tr> <tr> <td>
+<code translate="no" dir="ltr">
+config_mainBuiltInDisplayCutout
+</code> </td> <td>
+<p>The path defining the shape of the cutout. This is a string parsable by <code translate="no" dir="ltr">android.util.PathParser</code>, and is how the size and shape of the cutout is defined to the system.</p> <p><code translate="no" dir="ltr">@dp</code> can be specified on the path to emulate a shape targeting different devices. Because physical cutouts have an exact pixel size, do not use the <code translate="no" dir="ltr">@dp</code> specifier when defining the path for a hardware notch.</p>
+</td> </tr> <tr> <td>
+<code translate="no" dir="ltr">
+config_fillMainBuiltinDisplayCutout
+</code> </td> <td>
+<p>A boolean value that determines whether to draw the cutout path (defined above) in software. Can be used to emulate a cutout, or to fill in a physical cutout to achieve anti-aliasing.</p> <p>If true, <code translate="no" dir="ltr">config_mainBuiltInDisplayCutout</code> is filled in black.</p>
+</td> </tr> </tbody> </table> <p>See these <code translate="no" dir="ltr">dimens</code> files for the default definitions:</p> <ul> <li>
+<a href="https://android.googlesource.com/platform/frameworks/base/+/android17-release/core/res/res/values-land/dimens.xml"><code translate="no" dir="ltr">core/res/res/values-land/dimens.xml</code></a> </li> <li>
+<a href="https://android.googlesource.com/platform/frameworks/base/+/android17-release/core/res/res/values/dimens.xml"><code translate="no" dir="ltr">core/res/res/values/dimens.xml</code></a> </li> </ul> <p>Example overlay for an emulated cutout:</p> 
+<pre>&lt;resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2"&gt;
+
+    &lt;!-- The bounding path of the cutout region of the main built-in display.
+         Must either be empty if there is no cutout region, or a string that is parsable by
+         {@link android.util.PathParser}.
+
+         The path is assumed to be specified in display coordinates with pixel units and in
+         the display's native orientation, with the origin of the coordinate system at the
+         center top of the display.
+
+         To facilitate writing device-independent emulation overlays, the marker `@dp` can be
+         appended after the path string to interpret coordinates in dp instead of px units.
+         Note that a physical cutout should be configured in pixels for the best results.
+         --&gt;
+    &lt;string translatable="false" name="config_mainBuiltInDisplayCutout"&gt;
+        M 0,0
+        L -48, 0
+        L -44.3940446283, 36.0595537175
+        C -43.5582133885, 44.4178661152 -39.6, 48.0 -31.2, 48.0
+        L 31.2, 48.0
+        C 39.6, 48.0 43.5582133885, 44.4178661152 44.3940446283, 36.0595537175
+        L 48, 0
+        Z
+        @dp
+    &lt;/string&gt;
+
+    &lt;!-- Whether the display cutout region of the main built-in display should be forced to
+         black in software (to avoid aliasing or emulate a cutout that is not physically existent).
+     --&gt;
+    &lt;bool name="config_fillMainBuiltInDisplayCutout"&gt;true&lt;/bool&gt;
+
+    &lt;!-- Height of the status bar --&gt;
+    &lt;dimen name="status_bar_height_portrait"&gt;48dp&lt;/dimen&gt;
+    &lt;dimen name="status_bar_height_landscape"&gt;28dp&lt;/dimen&gt;
+    &lt;!-- Height of area above QQS where battery/time go (equal to status bar height if &gt; 48dp) --&gt;
+    &lt;dimen name="quick_qs_offset_height"&gt;48dp&lt;/dimen&gt;
+    &lt;!-- Total height of QQS (quick_qs_offset_height + 128) --&gt;
+    &lt;dimen name="quick_qs_total_height"&gt;176dp&lt;/dimen&gt;
+
+&lt;/resources&gt;
+</pre> <h2 id="validation">Validation</h2> <p>To validate your implementation of display cutouts, run the CTS tests at <a href="https://android.googlesource.com/platform/cts/+/android17-release/tests/framework/base/windowmanager/src/android/server/wm">tests/framework/base/windowmanager/src/android/server/wm</a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/display/display-cutouts" class="_attribution-link">https://source.android.com/docs/core/display/display-cutouts</a>
+  </p>
+</div>

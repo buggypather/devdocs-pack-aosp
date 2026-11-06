@@ -1,0 +1,96 @@
+<h1>Android 17 Camera Image Test Suite release notes</h1>  <p>The Android 17 release includes a number of changes to <a href="camera-hal#its_tests">Camera ITS</a>. This page summarizes the Camera ITS changes for Android 17.</p> <h2 id="package-versions">Python and package versions</h2> <p>For Android 17 and higher, we strongly recommend using package management software to bundle the correct versions of packages to create a virtual environment for Android release development. For an example package management tool that handles most of the packages required, see the Python 3 documentation for <a href="https://docs.python.org/3/library/venv.html">venv</a>.</p> <aside class="note"><strong>Note:</strong><span> The correct Python version and FFmpeg must be installed directly as part of the initial setup. Because <code translate="no" dir="ltr">pip</code> is designed solely for installing Python packages, it can't handle Python itself or external dependencies such as FFmpeg.</span></aside> <p>To create the virtual environment with venv, follow these steps:</p> <ol> <li>
+<p>Install Python 3.14 and python3-venv</p> 
+<pre>sudo apt install python3.14
+sudo apt install python3.14-venv python3.14-dev
+</pre>
+</li> <li>
+<p>Verify python installation</p> 
+<pre>python3.14 --version
+</pre>
+</li> <li>
+<p>Update apt and install pip</p> 
+<pre>sudo apt-get update
+sudo apt install python3-pip
+</pre>
+</li> <li>
+<p>Create a virtual environment</p> 
+<pre>python3.14 -m venv its_android17_env
+</pre>
+</li> <li>
+<p>Activate the virtual environment</p> 
+<pre>source its_android17_env/bin/activate
+</pre>
+</li> <li>
+<p>Create <code translate="no" dir="ltr">its_android17_env.txt</code> with the list of required packages</p>  
+<pre>ImageIO==2.37.4
+PyYAML==6.0.3
+contourpy==1.3.3
+cycler==0.12.1
+fonttools==4.61.1
+imagecodecs==2025.11.11
+kiwisolver==1.5.0
+lazy-loader==0.*
+matplotlib==3.10.9
+mobly==1.13.1
+mobly-android-partner-tools==1.5.2
+networkx==3.4.2
+numpy==2.5.3
+opencv-python==5.0.0.*
+packaging==26.0.0
+pillow==12.3
+portpicker==1.6.0
+protobuf&lt;=7.37.0
+psutil==5.9.4
+pyparsing==3.2.3
+pyserial==3.5.0
+python-dateutil==2.9.0.post0
+pyudev==0.22.0
+scikit-image==0.26.0
+scipy==1.18.1
+six==1.17.0
+snippet-uiautomator==1.1.2
+tifffile==2026.2.16
+</pre> </li> <li>
+<p>Install packages listed <code translate="no" dir="ltr">its_android17_env.txt</code></p> 
+<pre>pip install -r its_android17_env.txt
+</pre>
+</li> <li>
+<p>Install FFmpeg version 7.0.2 with ffmpeg downloader</p> 
+<pre>pip install ffmpeg-downloader
+ffdl install 7.0.2
+</pre> <p>(optional) If ffmpeg downloader doesn't work, download 7.0.2 from an online source.</p>
+</li> <li>
+<p>Verify FFmpeg installation of version 7.0.2</p> 
+<pre>ffmpeg -version
+</pre> <p>If the FFmpeg version still isn't 7.0.2, symlink the binaries (adjust <var translate="no">PATH</var> based on where you save <code translate="no" dir="ltr">its_android17_env</code>).</p> 
+<pre>ln -s ~/.local/share/ffmpeg-downloader/ffmpeg/ffmpeg ~/PATH/its_android17_env/bin/ffmpeg
+ln -s ~/.local/share/ffmpeg-downloader/ffmpeg/ffprobe ~/PATH/its_android17_env/bin/ffprobe
+</pre>
+</li> <li>
+<p>Verify which packages are installed</p> 
+<pre>pip freeze
+</pre>
+</li> <li>
+<p>(Optional) Command to deactivate the environment:</p> 
+<pre>deactivate
+</pre>
+</li> </ol> <h2 id="new-scenes">New or updated scenes</h2> <p>Android 17 introduces the following scenes: </p>
+<table> <thead> <tr> <th>Scene</th> <th>Description</th> </tr> </thead> <tbody> <tr> <td><code translate="no" dir="ltr">gen2_chart</code></td> <td>New scene that uses the <code translate="no" dir="ltr">test_chart_gen2</code> paper chart instead of tablet scenes to improve test consistency and reliability . The <code translate="no" dir="ltr">test_chart_gen2</code> is also used in <code translate="no" dir="ltr">scene_ip</code>.</td> </tr> <tr> <td><code translate="no" dir="ltr">wide_gamut</code></td> <td>New scene for tablets with wide gamut support.</td> </tr> <tr> <td><code translate="no" dir="ltr">3</code></td> <td>Uses ArUco markers for chart detection to improve speed and reliability. This change accommodates the wider range of FoV and distances seen in tele camera testing. Using markers bypasses the current sizing logic and optimizer issues. For more information, see <a href="camera-its-tests#scene3">scene3</a>. </td> </tr> <tr> <td><code translate="no" dir="ltr">flash</code></td> <td>Tests can be run using the Gen2 rig.</td> </tr> </tbody> </table> <h2 id="new-tests">New tests</h2> <p>Android 17 introduces the following tests: </p>
+<table> <thead> <tr> <th>Scene</th> <th>Test name</th> <th>Description</th> </tr> </thead> <tbody> <tr> <td><code translate="no" dir="ltr">gen2_chart</code></td> <td><code translate="no" dir="ltr">test_tonemap_sequence</code></td> <td>Verifies the <code translate="no" dir="ltr">android.tonemap.mode</code> parameter is applied correctly for uniform and non-uniform distribution.</td> </tr> <tr> <td><code translate="no" dir="ltr">ip</code></td> <td><code translate="no" dir="ltr">test_jca_jpegr_ip</code></td> <td>Verifies that the white balance difference between JPEG_R JCA preview snapshot and captured images is within the chosen threshold.</td> </tr> <tr> <td><code translate="no" dir="ltr">wide_gamut</code></td> <td><code translate="no" dir="ltr">test_display_p3</code></td> <td>Verifies P3 JPEG output has an appropriate icc profile and contains more than 1 percent of colors outside of the sRGB gamut.</td> </tr> </tbody> </table> <h2 id="refactored-tests">Refactored tests</h2> <p>In Android 17, the following tests are refactored to increase test coverage and group tests more logically: </p>
+<table> <thead> <tr> <th>Scene</th> <th>Test name</th> <th>Description</th> </tr> </thead> <tbody> <tr> <td><code translate="no" dir="ltr">1_2</code></td> <td><code translate="no" dir="ltr">tests_param_tonemap_mode</code></td> <td>The scene1_2 version of the tests_param_tonemap_mode test is deprecated and is used only on devices running Android 16 or lower.</td> </tr> <tr> <td><code translate="no" dir="ltr">1_2</code></td> <td><code translate="no" dir="ltr">test_tonemap_sequence</code></td> <td>The scene1_2 version of the test_tonemap_sequence test is used only on devices running Android 16 or lower. </td> </tr> <tr> <td><code translate="no" dir="ltr">2_b</code></td> <td><code translate="no" dir="ltr">test_yuv_jpeg_capture_sameness</code></td> <td>The RMS difference threshold is decreased to help ensure that hue-related color discrepancies are flagged as failures whenever they result in a visible difference for the user.</td> </tr> <tr> <td><code translate="no" dir="ltr">3</code></td> <td><code translate="no" dir="ltr">test_edge_enhancement</code></td> <td>Uses ArUco markers to validate both presence and orientation. This method provides a stable detection for cameras from Ultra-Wide (UW) to tele applications.</td> </tr> <tr> <td><code translate="no" dir="ltr">3</code></td> <td><code translate="no" dir="ltr">test_flip_mirror</code></td> <td>Uses ArUco markers to validate both presence and orientation. A <code translate="no" dir="ltr">PASS</code> status is only granted if all markers are detected and correctly aligned. The test fails for displaced or rotated charts.</td> </tr> <tr> <td><code translate="no" dir="ltr">3</code></td> <td><code translate="no" dir="ltr">test_landscape_to_portrait</code></td> <td>Loads updated scene3 chart with ArUco markers.</td> </tr> <tr> <td><code translate="no" dir="ltr">3</code></td> <td><code translate="no" dir="ltr">test_lens_movement_report</code></td> <td>Uses ArUco markers to validate both presence and orientation. This method provides a stable detection for cameras from Ultra-Wide (UW) to tele applications.</td> </tr> <tr> <td><code translate="no" dir="ltr">4</code></td> <td><code translate="no" dir="ltr">test_multi_camera_alignment</code></td> <td>Skips the test if the devica has only one wide and one super TELE camera. </td> </tr> <tr> <td><code translate="no" dir="ltr">flash</code></td> <td><code translate="no" dir="ltr">test_auto_flash</code></td> <td>Updates the test to verify that the flash works properly at various zoom levels. </td> </tr> <tr> <td><code translate="no" dir="ltr">ip</code></td> <td><code translate="no" dir="ltr">test_default_jca_ip</code></td> <td>Mandates the existing checks: brightness difference, white balance difference and FoV mismatch. Adds a <code translate="no" dir="ltr">not_yet_mandated</code> check for color rendering difference between default camera app and JCA captures. </td> </tr> </tbody> </table> <h2 id="separated-test-activities">Separated test activities</h2> <p>In Android 17, for parallel testing on separate devices, the camera ITS tests are separated into two CTS Verifier activities, <code translate="no" dir="ltr">Camera ITS Test</code> and <code translate="no" dir="ltr">Camera ITS Sensor Fusion Rig Test</code>. The <code translate="no" dir="ltr">Camera ITS Sensor Fusion Rig Test</code> activity contains the <a href="camera-its-tests#feature_combination"><code translate="no" dir="ltr">feature_combination</code></a> and <a href="camera-its-tests#sensor_fusion"><code translate="no" dir="ltr">sensor_fusion</code></a> scenes, and can be run separately in a sensor fusion test rig. The following table describes the scenes included in each activity.</p> <table> <thead> <tr> <th>Activity</th> <th>Scenes</th> <th>Description</th> </tr> </thead> <tbody> <tr> <td><code translate="no" dir="ltr">Camera ITS Test</code></td> <td>
+<code translate="no" dir="ltr">gen2_chart</code>, <code translate="no" dir="ltr">scene0</code>, <code translate="no" dir="ltr">scene1_1</code>, <code translate="no" dir="ltr">scene1_2</code>, <code translate="no" dir="ltr">scene1_3</code>, <code translate="no" dir="ltr">scene2_a</code>, <code translate="no" dir="ltr">scene2_b</code>, <code translate="no" dir="ltr">scene2_c</code>, <code translate="no" dir="ltr">scene2_d</code>, <code translate="no" dir="ltr">scene2_e</code>, <code translate="no" dir="ltr">scene2_f</code>, <code translate="no" dir="ltr">scene2_g</code>, <code translate="no" dir="ltr">scene3</code>, <code translate="no" dir="ltr">scene4</code>, <code translate="no" dir="ltr">scene5</code>, <code translate="no" dir="ltr">scene6</code>, <code translate="no" dir="ltr">scene8</code>, <code translate="no" dir="ltr">scene9</code>, <code translate="no" dir="ltr">scene_flash</code>, <code translate="no" dir="ltr">scene_hdr</code>, <code translate="no" dir="ltr">scene_ip</code>, <code translate="no" dir="ltr">scene_low_light</code>, <code translate="no" dir="ltr">scene_video</code>, <code translate="no" dir="ltr">wide_gamut</code> </td> <td>Scenes that run in the <a href="camera-its-box-assembly"> camera ITS-in-a-box test rig</a> and <a href="camera-its-box-gen2">Gen2 test rig</a>.</td> </tr> <tr> <td><code translate="no" dir="ltr">Camera ITS Sensor Fusion Rig Test</code></td> <td>
+<code translate="no" dir="ltr">feature_combination</code>, <code translate="no" dir="ltr">sensor_fusion</code>
+</td> <td>Scenes that run in the <a href="sensor-fusion-box-assembly"> sensor fusion test rig</a>.</td> </tr> </tbody> </table> <h2 id="deprecated-tests">Deprecated tests</h2> <p>In Android 17, the following tests are deprecated due to test function being covered by other tests: </p>
+<table> <thead> <tr> <th>Scene</th> <th>Test name</th> <th>Description</th> </tr> </thead> <tbody> <tr> <td><code translate="no" dir="ltr">sensor_fusion</code></td> <td><code translate="no" dir="ltr">test_video_stabilization</code></td> <td>This test is deprecated. Use <a href="camera-its-tests#test_video_stabilization_jca">test_video_stabilization_jca</a> instead.</td> </tr> </tbody> </table> <h2 id="gen2-rig-updates">Gen2 rig updates</h2> <p>Android 17 the following tests have been migrated to the <a href="camera-its-box-gen2">Gen2 rig</a>: </p>
+<table> <thead> <tr> <th>Scene</th> <th>Test name</th> <th>Description</th> </tr> </thead> <tbody> <tr> <td><code translate="no" dir="ltr">7</code></td> <td><code translate="no" dir="ltr">test_multi_camera_switch</code></td> <td>Migrated the test to gen2 rig setup to use the Gen2 chart for AE and AWB checks. This transition replaces tablet-based targets with physical charts to eliminate Moiré effects and provide a more stable, reproducible testing environment. </td> </tr> <tr> <td><code translate="no" dir="ltr">flash</code></td> <td><code translate="no" dir="ltr">all tests</code></td> <td>Migrated scene_flash tests in gen2 rig. Users can execute these tests in either a sensor fusion rig or Gen2 rig environment. </td> </tr> <tr> <td><code translate="no" dir="ltr">sensor_fusion</code></td> <td><code translate="no" dir="ltr">all tests</code></td> <td>Migrated sensor_fusion tests to gen2 rig. Users can execute these tests in either a sensor fusion rig or Gen2 rig environment. </td> </tr> </tbody> </table> <p>Before running the migrated tests, install the Gen2 rig chart introduced in Android 17. The new chart lets you run all sensor fusion tests in the Gen2 rig. For more information, see <a href="camera-its-box-gen2#setup-chart">Set up the chart for testing</a>.</p> <h2 id="status-pass-star">New test status: PASS*</h2> <p>17 introduces the test status <code translate="no" dir="ltr">PASS*</code> to detect marginally passing tests. For more information, see <a href="camera-its#marginal-pass-test-status">Marginally passing tests (PASS* test status)</a>.</p> <h2 id="chart-scaling-improvements">Chart scaling improvements</h2> <p>Android 17 adds the <code translate="no" dir="ltr">chart_scaling</code> parameter in <code translate="no" dir="ltr">config.yml</code> for <code translate="no" dir="ltr">TEST_BED_TABLET_SCENES</code> to handle the chart scaling issues with wider field of view (FoV) tele camera devices. For more information, see <a href="camera-its#chart-scaling-param">Chart scaling improvements: chart_scaling param</a>.</p> <h2 id="new-tablet-on-allowlist">New tablet for wide-gamut testing support</h2> <p>For Android 17 and higher, the Samsung Galaxy Tab S10 FE (both Wi-Fi and 5G models) is on the <a href="camera-its-box#tablet-requirements">tablet allowlist</a>. The Samsung Galaxy Tab S10 FE is approved for displaying wide-gamut test charts, as well as all other tablet-based scenes. To verify that your device is on the allowlist, use the command <code translate="no" dir="ltr">adb shell getprop ro.product.device</code> to confirm the product ID matches the value listed in the following list.</p> 
+<pre>    'gts10fewifi',  # Samsung Galaxy Tab S10 FE
+    'gts10fe',  # Samsung Galaxy Tab S10 FE 5G
+</pre> <h2 id="aggregated-submission">Aggregated result submission for build approvals</h2> <p>Android 17 introduces a process for submitting aggregated Camera ITS test results for build approval using the updated CTS Verifier APK.</p> <p>The new aggregation system provides the following improvements:</p> <ul> <li>
+<strong>Time savings:</strong> Eliminates the need to repeatedly rerun passing scenes on devices that share the same build fingerprint.</li> <li>
+<strong>Parallel execution:</strong> Allows concurrent testing of multiple scenes across several devices, provided they share the same build fingerprint.</li> <li>
+<strong>Simplified reporting:</strong> Enables aggregation of test results from multiple CTS Verifier reports (collected from different test runs or devices) into a single, unified submission.</li> </ul> <p>For more information, see <a href="camera-its#result-aggregation">Submit aggregate test results</a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/compatibility/cts/its-release-notes-17" class="_attribution-link">https://source.android.com/docs/compatibility/cts/its-release-notes-17</a>
+  </p>
+</div>

@@ -1,0 +1,188 @@
+<h1>Vendor APEX</h1>  <p>You can use the <a href="apex">APEX file format</a> to package and install lower-level Android OS modules. It allows independent building and installation of components like native services and libraries, HAL implementations, firmware, config files, etc.</p> <p>Vendor APEXes are installed by the build system automatically in the <code translate="no" dir="ltr">/vendor</code> partition and activated at runtime by <code translate="no" dir="ltr">apexd</code> just like APEXes in other partitions.</p> <h2 id="use_cases">Use cases</h2> <h3 id="modularization_of_vendor_images">Modularization of vendor images</h3> <p>APEXes facilitate a natural bundling and modularization of feature implementations on vendor images.</p> <p>When vendor images are built as a combination of independently-built vendor APEXes, device manufacturers are able to easily pick and choose the specific vendor implementations wanted on their device. Manufacturers can even create a new vendor APEX if none of the provided APEXes fit their need, or they have a brand new custom hardware.</p> <p>For example, an OEM may choose to compose their device with the AOSP wifi implementation APEX, the SoC bluetooth implementation APEX, and a custom OEM telephony implementation APEX.</p> <p>Without vendor APEXes, an implementation with so many dependencies between vendor components requires careful coordination and tracking. By wrapping all components (including configuration files and extra libraries) in APEXes with clearly defined interfaces at any point of cross-feature communication, the different components become interchangeable.</p> <h3 id="developer_iteration">Developer iteration</h3> <p>Vendor APEXes help developers iterate faster while developing vendor modules by bundling an entire feature implementation, like the wifi HAL, inside a vendor APEX. Developers can then build and individually push the vendor APEX to test changes, instead of rebuilding the whole vendor image.</p> <p>This simplifies and speeds up the developer iteration cycle for developers who primarily work in one feature area and want to iterate on just that feature area.</p> <p>The natural bundling of a feature area into an APEX also simplifies the process of building, pushing, and testing changes for that feature area. For example, reinstalling an APEX automatically updates any bundled library or config files the APEX includes.</p> <p>Bundling a feature area into an APEX also simplifies debugging or reverting when bad device behavior is observed. For example, if telephony is working poorly in a new build, then developers could try installing an older telephony implementation APEX on a device (without needing to flash a full build) and seeing if good behavior is restored.</p> <p>Example workflow:</p> 
+<pre># Build the entire device and flash. OR, obtain an already-flashed device.
+source build/envsetup.sh &amp;&amp; lunch oem_device-userdebug
+m
+fastboot flashall -w
+
+# Test the device.
+... testing ...
+
+# Check previous behavior using a vendor APEX from one week ago, downloaded from
+# your continuous integration build.
+... download command ...
+adb install &lt;path to downloaded APEX&gt;
+adb reboot
+... testing ...
+
+# Edit and rebuild just the APEX to change and test behavior.
+... edit APEX source contents ...
+m &lt;apex module name&gt;
+adb install out/&lt;path to built APEX&gt;
+adb reboot
+... testing ...
+</pre> <h2 id="examples">Examples</h2> <h3 id="basics">Basics</h3> <p>See the main <a href="apex">APEX File Format</a> page for generic APEX information, including device requirements, file format details, and installation steps.</p> <p>In <code translate="no" dir="ltr">Android.bp</code>, setting the <code translate="no" dir="ltr">vendor: true</code> property makes an APEX module a vendor APEX.</p> 
+<pre>apex {
+  ..
+  vendor: true,
+  ..
+}
+</pre> <h3 id="binaries_and_shared_libraries">Binaries and shared libraries</h3> <p>An APEX includes transitive dependencies inside the APEX payload unless they have stable interfaces.</p> <p>Stable native interfaces for vendor APEX dependencies include <code translate="no" dir="ltr">cc_library</code> with <code translate="no" dir="ltr">stubs</code> and LLNDK libraries. These dependencies are excluded from packaging, and dependencies are recorded in the APEX manifest. The manifest is processed by <code translate="no" dir="ltr">linkerconfig</code> so that the external native dependencies are available at runtime.</p> <p>In the following snippet, the APEX contains both the binary (<code translate="no" dir="ltr">my_service</code>) and its non-stable dependencies (<code translate="no" dir="ltr">*.so</code> files).</p> 
+<pre>apex {
+  ..
+  vendor: true,
+  binaries: ["my_service"],
+  ..
+}
+</pre> <p>In the following snippet, the APEX contains the shared library <code translate="no" dir="ltr">my_standalone_lib</code>and any of its non-stable dependencies (as described above).</p> 
+<pre>apex {
+  ..
+  vendor: true,
+  native_shared_libs: ["my_standalone_lib"],
+  ..
+}
+</pre> <h4 id="make_apex_smaller">Make APEX smaller</h4> <p>APEX may get bigger because it bundles non-stable dependencies. We recommend using static linking. Common libraries like <code translate="no" dir="ltr">libc++.so</code> and <code translate="no" dir="ltr">libbase.so</code> can be statically linked to HAL binaries. Making a dependency to provide a stable interface can be another option. The dependency won't be bundled in the APEX.</p> <h3 id="hal_implementations">HAL implementations</h3> <p>To define a HAL implementation, provide the corresponding binaries and libraries inside a vendor APEX similar to the following examples:</p> <ul> <li><a href="https://android-review.googlesource.com/c/platform/hardware/interfaces/+/1817319/">Sensors HAL</a></li> <li><a href="https://android-review.googlesource.com/c/platform/hardware/interfaces/+/1828079/">Vibrator HAL</a></li> <li><a href="https://android-review.googlesource.com/c/device/google/cuttlefish/+/1843844">Wifi HAL</a></li> <li><a href="https://android-review.googlesource.com/c/device/google/cuttlefish/+/1843673/">Telephony HAL</a></li> </ul> <p>To fully encapsulate the HAL implementation, the APEX should also specify any relevant VINTF fragments and init scripts.</p> <h4 id="vintf_fragments">VINTF fragments</h4> <p>VINTF fragments can be served from a vendor APEX when fragments are located in <code translate="no" dir="ltr">etc/vintf</code> of the APEX.</p> <p>Use the <code translate="no" dir="ltr">prebuilts</code> property to embed the VINTF fragments in the APEX.</p> 
+<pre>apex {
+  ..
+  vendor: true,
+  prebuilts: ["fragment.xml"],
+  ..
+}
+
+prebuilt_etc {
+  name: "fragment.xml",
+  src: "fragment.xml",
+  sub_dir: "vintf",
+}
+</pre>
+<aside class="note"><strong>Note:</strong><span> <code translate="no" dir="ltr">apex</code> module can set <code translate="no" dir="ltr">vintf_fragments</code> property like other APEX modules types. When set, the files are installed in <code translate="no" dir="ltr">/vendor/etc/vintf/manifest</code>, not in the APEX.</span></aside> <h4 id="query_apis">Query APIs</h4> <p>When VINTF fragments are added to APEX, use <code translate="no" dir="ltr">libbinder_ndk</code> APIs to get the mappings of HAL interfaces and APEX names.</p> <ul> <li>
+<code translate="no" dir="ltr">AServiceManager_isUpdatableViaApex("com.android.foo.IFoo/default")</code> : <code translate="no" dir="ltr">true</code> if the HAL instance is defined in APEX.</li> <li>
+<code translate="no" dir="ltr">AServiceManager_getUpdatableApexName("com.android.foo.IFoo/default", ...)</code> : gets the APEX name which defines the HAL instance.</li> <li>
+<code translate="no" dir="ltr">AServiceManager_openDeclaredPassthroughHal("mapper", "instance", ...)</code> : use this to open a passthrough HAL.</li> </ul> <h4 id="init-scripts">Init scripts</h4> <p>APEXes can include init scripts in two ways: (A) a prebuilt text file within the APEX payload, or (B) a regular init script in <code translate="no" dir="ltr">/vendor/etc</code>. You can set both for the same APEX.</p> <p>Init script in APEX:</p> 
+<pre>prebuilt_etc {
+  name: "myinit.rc",
+  src: "myinit.rc"
+}
+
+apex {
+  ..
+  vendor: true,
+  prebuilts: ["myinit.rc"],
+  ..
+}
+</pre> <p>Init scripts in vendor APEXes can have <code translate="no" dir="ltr">service</code> definitions and <code translate="no" dir="ltr">on &lt;property or event&gt;</code> directives.</p> <p>Make sure that a <code translate="no" dir="ltr">service</code> definition points a binary in the same APEX. For example, <code translate="no" dir="ltr">com.android.foo</code> APEX may define a service named <code translate="no" dir="ltr">foo-service</code>.</p> 
+<pre>on foo-service /apex/com.android.foo/bin/foo
+  ...
+</pre> <p>Be careful when using <code translate="no" dir="ltr">on</code> directives. Since init scripts in APEXes are parsed and executed <em>after</em> APEXes are activated, some events or properties can't be used. Use <code translate="no" dir="ltr">apex.all.ready=true</code> to fire actions as early as possible. <a href="#bootstrap-vendor-apex">Bootstrap APEXes</a> can use <code translate="no" dir="ltr">on init</code>, but not <code translate="no" dir="ltr">on early-init</code>.</p> <h3 id="firmware">Firmware</h3> <p><strong>Example:</strong></p> <ul> <li><a href="https://r.android.com/1415993">Vibrator service firmware</a></li> </ul> <p>Embed firmware in a vendor APEX with the <code translate="no" dir="ltr">prebuilt_firmware</code> module type, as follows.</p> 
+<pre>prebuilt_firmware {
+  name: "my.bin",
+  src: "path_to_prebuilt_firmware",
+  vendor: true,
+}
+
+apex {
+  ..
+  vendor: true,
+  prebuilts: ["my.bin"],  // installed inside APEX as /etc/firmware/my.bin
+  ..
+}
+</pre> <p><code translate="no" dir="ltr">prebuilt_firmware</code> modules are installed in the <code translate="no" dir="ltr">&lt;apex name&gt;/etc/firmware</code> directory of the APEX. <code translate="no" dir="ltr">ueventd</code> scans <code translate="no" dir="ltr">/apex/*/etc/firmware</code> directories to find firmware modules.</p> <aside class="note"><strong>Note:</strong><span> If the kernel parameter <code translate="no" dir="ltr">firmware_class.path=&lt;paths&gt;</code> is passed, the kernel loads firmware directly from the specified locations and doesn't use <code translate="no" dir="ltr">ueventd</code>. To make the kernel fall back to <code translate="no" dir="ltr">ueventd</code> so that <code translate="no" dir="ltr">ueventd</code> loads firmware from APEXes, add the following line in <code translate="no" dir="ltr">on early-init</code> (or similar): <code translate="no" dir="ltr">write /proc/sys/kernel/firmware_config/force_sysfs_fallback 1\`</code></span></aside> <p>The <code translate="no" dir="ltr">file_contexts</code> of the APEX should label any firmware payload entries properly to ensure that these files are accessible by <code translate="no" dir="ltr">ueventd</code> at runtime; typically, the <code translate="no" dir="ltr">vendor_file</code> label is sufficient. For example:</p> 
+<pre>(/.*)? u:object_r:vendor_file:s0
+</pre> <h3 id="kernel_modules">Kernel modules</h3> <p>Embed kernel modules in a vendor APEX as prebuilt modules, as follows.</p> 
+<pre>prebuilt_etc {
+  name: "my.ko",
+  src: "my.ko",
+  vendor: true,
+  sub_dir: "modules"
+}
+
+apex {
+  ..
+  vendor: true,
+  prebuilts: ["my.ko"],  // installed inside APEX as /etc/modules/my.ko
+  ..
+}
+</pre> <p>The <code translate="no" dir="ltr">file_contexts</code> of the APEX should label any kernel module payload entries properly. For example:</p> 
+<pre>/etc/modules(/.*)? u:object_r:vendor_kernel_modules:s0
+</pre> <p>Kernel modules must be installed explicitly. The following example init script in the vendor partition shows installation via <code translate="no" dir="ltr">insmod</code>:</p> <p><code translate="no" dir="ltr">my_init.rc</code>:</p> 
+<pre>on early-boot
+  insmod /apex/myapex/etc/modules/my.ko
+  ..
+</pre> <h3 id="runtime_resource_overlays">Runtime resource overlays</h3> <p><strong>Example:</strong></p> <ul> <li><a href="https://android-review.googlesource.com/q/topic:cf-vapex-rro+project:device/google/cuttlefish">Cuttlefish RROs</a></li> </ul> <p>Embed <a href="../architecture/rros">runtime resource overlays</a> in a vendor APEX using the <code translate="no" dir="ltr">rros</code> property.</p> 
+<pre>runtime_resource_overlay {
+    name: "my_rro",
+    soc_specific: true,
+}
+
+
+apex {
+  ..
+  vendor: true,
+  rros: ["my_rro"],  // installed inside APEX as /overlay/my_rro.apk
+  ..
+}
+</pre> <h3 id="other_config_files">Other config files</h3> <p>Vendor APEXes support various other config files typically found on the vendor partition as prebuilts inside vendor APEXes, and more are being added.</p> <p><strong>Examples:</strong></p> <ul> <li>
+<a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/native/data/etc/">Feature declaration XMLs</a> <ul> <li>Sensors feature XMLs as <a href="https://android-review.googlesource.com/c/platform/hardware/interfaces/+/1817319/7/sensors/2.1/default/apex/Android.bp">prebuilts in a sensor HAL vendor APEX</a>
+</li> </ul>
+</li> <li>
+<a href="../interaction/input/input-device-configuration-files">Input config files</a> <ul> <li>Touchscreen configs as <a href="https://r.android.com/1836620">prebuilts in a config-only vendor APEX</a>
+</li> </ul>
+</li> </ul> <h3 id="bootstrap-vendor-apex">Bootstrap Vendor APEXes</h3> <p>Some HAL services like <code translate="no" dir="ltr">keymint</code> should be available before APEXes are activated. Those HALs usually set <code translate="no" dir="ltr">early_hal</code> in their service definition in the init script. Another example is <code translate="no" dir="ltr">animation</code> class which is typically started earlier than the <code translate="no" dir="ltr">post-fs-data</code> event. When such an early HAL service is packaged in vendor APEX, make the apex <code translate="no" dir="ltr">"vendorBootstrap": true</code> in its APEX Manifest so that it can be activated earlier. Note that bootstrap APEXes can be activated only from the prebuilt location like <code translate="no" dir="ltr">/vendor/apex</code>, not from <code translate="no" dir="ltr">/data/apex</code>.</p> <h3 id="system_properties">System properties</h3> <p>These are the system properties that the framework reads to support vendor APEXes:</p> <ul> <li>
+<code translate="no" dir="ltr">input_device.config_file.apex=&lt;apex name&gt;</code> - when set, the input configuration files (<code translate="no" dir="ltr">*.idc</code>, <code translate="no" dir="ltr">*.kl</code>, and <code translate="no" dir="ltr">*.kcm</code>) are searched from <code translate="no" dir="ltr">/etc/usr</code> directory of the APEX.</li> <li>
+<code translate="no" dir="ltr">ro.vulkan.apex=&lt;apex name&gt;</code> - when set, the Vulkan driver is loaded from the APEX. Since the Vulkan driver is used by early HALs, make the APEX <a href="#bootstrap-vendor-apex">Bootstrap APEX</a> and configure that linker namespace visible.</li> </ul> <p>Set the system properties in <a href="#init-scripts">init scripts</a> using <code translate="no" dir="ltr">setprop</code> command.</p> <h2 id="extra_features">Extra features</h2> <h3 id="apex-selection">APEX selection at bootup</h3> <p><strong>Example:</strong></p> <ul> <li><a href="https://android-review.googlesource.com/q/topic:vapex-multi-install-cf-camera">Cuttlefish Emulated Camera HAL APEX</a></li> </ul> <p>Vendor APEXes can be optionally activated during boot. If you specify a filename using the system property <code translate="no" dir="ltr">ro.vendor.apex.&lt;apex name&gt;</code>, only the APEX matching the filename is activated for the specific <code translate="no" dir="ltr">&lt;apex name&gt;</code>. The APEX with <code translate="no" dir="ltr">&lt;apex name&gt;</code> is ignored (not activated) if this system property is set to <code translate="no" dir="ltr">none</code>. You can use this feature to install multiple copies of an APEX with the same name. If there are multiple versions of the same APEX, they should share the same key.</p> <p>Example use cases:</p> <ul> <li>
+<strong>Install 3 versions of the wifi HAL vendor APEX:</strong> QA teams can run manual or automated testing using one version, then reboot into another version and rerun the tests, then compare the final results.</li> <li>
+<strong>Install 2 versions of the camera HAL vendor APEX, <em>current</em> and <em>experimental</em>:</strong> Dogfooders can use the experimental version without downloading and installing an additional file, so they can easily swap back.</li> </ul> <p>During bootup, <code translate="no" dir="ltr">apexd</code> looks for sysprops following a specific format to activate the right APEX version.</p> <p>The expected formats for the property key are:</p> <ul> <li>
+<strong><a href="../architecture/bootloader/implementing-bootconfig">Bootconfig</a>:</strong> <ul> <li>Used to set the default value, in <code translate="no" dir="ltr">BoardConfig.mk</code>.</li> <li>
+<code translate="no" dir="ltr">androidboot.vendor.apex.&lt;apex name&gt;</code> (exported as <code translate="no" dir="ltr">ro.boot.vendor.apex.&lt;apex name&gt;</code>).</li> </ul>
+</li> <li>
+<strong>Dynamic early-boot configuration (<code translate="no" dir="ltr">init_dev_config</code>):</strong> <ul> <li>Recommended production mechanism for per-SKU APEX activation and disabling (available in Android 17 and higher).</li> <li>Sets <code translate="no" dir="ltr">ro.boot.vendor.apex.&lt;apex name&gt;</code> dynamically at boot before <code translate="no" dir="ltr">apexd-bootstrap</code> runs. Setting the property value to <code translate="no" dir="ltr">none</code> explicitly disables activation of the APEX.</li> <li>See <a href="../architecture/configuration#init-dev-config">Early boot device configuration (<code translate="no" dir="ltr">init_dev_config</code>)</a> for architectural details.</li> </ul>
+</li> <li>
+<strong><a href="https://source.android.com/devices/architecture/configuration/add-system-properties">Persistent sysprop</a> (deprecated):</strong> <ul> <li><code translate="no" dir="ltr">persist.vendor.apex.&lt;apex name&gt;</code></li> <li>Development-only feature. Because <code translate="no" dir="ltr">apexd</code> activates preinstalled APEXes before the <code translate="no" dir="ltr">/data</code> partition is mounted, persistent sysprops stored in <code translate="no" dir="ltr">/data</code> cannot be used for early APEX selection in production builds.</li> </ul>
+</li> </ul> <p>The value of the property should be the filename of the APEX which should be activated, or <code translate="no" dir="ltr">none</code> to disable the APEX.</p> 
+<pre>// Default version.
+apex {
+  name: "com.oem.camera.hal.my_apex_default",
+  vendor: true,
+  ..
+}
+
+// Non-default version.
+apex {
+  name: "com.oem.camera.hal.my_apex_experimental",
+  vendor: true,
+  ..
+}
+</pre> <h4 id="bootconfig-apex-selection">Use bootconfig for APEX selection</h4> <p>To declare which APEX to use at build time, configure the default version using bootconfig in <code translate="no" dir="ltr">BoardConfig.mk</code>:</p> 
+<pre># Example for APEX "com.oem.camera.hal" with the default above:
+BOARD_BOOTCONFIG += \
+    androidboot.vendor.apex.com.oem.camera.hal=com.oem.camera.hal.my_apex_default
+</pre> <p>If the device supports updating bootconfig after flashing (such as using <code translate="no" dir="ltr">fastboot oem</code> commands), then changing the bootconfig property for the multi-installed APEX also changes the version activated on bootup.</p> <p>For virtual reference devices based on <a href="../../devices/cuttlefish">Cuttlefish</a>, you can use the <code translate="no" dir="ltr">--extra_bootconfig_args</code> command to set the bootconfig property directly while launching. For example:</p> 
+<pre>launch_cvd --noresume \
+  --extra_bootconfig_args "androidboot.vendor.apex.com.oem.camera.hal:=com.oem.camera.hal.my_apex_experimental";
+</pre> <h4 id="init-dev-config-apex-selection">Use init_dev_config for APEX selection</h4> <p>In Android 17 and higher, to dynamically select or disable vendor APEXes at runtime, implement a vendor tool executed by the <code translate="no" dir="ltr">init_dev_config</code> service. The tool runs during <code translate="no" dir="ltr">early-init</code> before <code translate="no" dir="ltr">apexd-bootstrap</code> and sets <code translate="no" dir="ltr">ro.boot.vendor.apex.*</code> properties using <code translate="no" dir="ltr">rustutils::system_properties</code>.</p> <p>Setting the property to the filename of an APEX selects that specific version for activation, while setting the value to <code translate="no" dir="ltr">none</code> can be used to explicitly disable activating an APEX, for example, on SKUs where hardware peripherals are absent.</p> 
+<pre>use rustutils::system_properties;
+
+fn main() {
+    // Select an APEX version based on detected SKU, or disable it altogether:
+    let hal_apex = match sku_type {
+        1 =&gt; "com.oem.camera.hal.my_apex_default",
+        2 =&gt; "com.oem.camera.hal.my_apex_experimental",
+        _ =&gt; "none",
+    };
+    system_properties::write(
+        "ro.boot.vendor.apex.com.oem.camera.hal",
+        hal_apex,
+    ).expect("Failed to set vendor APEX selection property");
+}
+</pre> <h4 id="persistent-sysprop-apex-selection">Use persistent sysprops for development (deprecated)</h4> <p>For development and debugging purposes, after the device is booted, you can change the activated version by setting the persistent sysprop:</p> 
+<pre>$ adb root;
+$ adb shell setprop \
+    persist.vendor.apex.com.oem.camera.hal \
+    com.oem.camera.hal.my_apex_experimental;
+$ adb reboot;
+</pre>
+<aside class="note"><strong>Note:</strong><span> Changing the persistent sysprop doesn't immediately change the mounted APEX; the device must be rebooted to load the prop through the <code translate="no" dir="ltr">apexd</code> command and activate the new APEX. Because preinstalled APEXes are activated before the <code translate="no" dir="ltr">/data</code> partition is mounted, you can't use persistent sysprops for early APEX selection in production builds.</span></aside><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/ota/vendor-apex" class="_attribution-link">https://source.android.com/docs/core/ota/vendor-apex</a>
+  </p>
+</div>

@@ -1,0 +1,43 @@
+<h1>HIDL C++</h1>  <p>Android 8 re-architects the Android OS to define clear interfaces between the device-independent Android platform and device- and vendor-specific code. Android already defines many such interfaces in the form of HAL interfaces, defined as C headers in <code translate="no" dir="ltr">hardware/libhardware</code>. HIDL replaces these HAL interfaces with stable, versioned interfaces, which can be client- and server-side HIDL interfaces in C++ (described below) or <a href="hidl-java">Java</a>.</p> <p>The pages in this section describe C++ implementations of HIDL interfaces, including details about the files auto-generated from the HIDL <code translate="no" dir="ltr">.hal</code> files by the <code translate="no" dir="ltr">hidl-gen</code> compiler, how these files are packaged, and how to integrate these files with the C++ code that uses them.</p> <h2 id="client-server">Client and server implementations</h2> <p>HIDL interfaces have client and server implementations:</p> <ul> <li>A <strong>client</strong> of a HIDL interface is the code that uses the interface by calling methods on it.</li> <li>A <strong>server</strong> is an implementation of a HIDL interface that receives calls from clients and returns results (if necessary).</li> </ul> <p>In transitioning from <code translate="no" dir="ltr">libhardware</code> HALs to HIDL HALs, the HAL implementation becomes the server and the process calling into the HAL becomes the client. Default implementations can serve both passthrough and binderized HALs, and can change over time:</p> <p><img src="https://source.android.com/docs/core/architecture/images/treble_cpp_legacy_hal_progression.png" class="android-image-dark-theme-background"></p> <p><strong>Figure 1.</strong> Development progression for legacy HALs.</p> <h2 id="create-client">Create the HAL client</h2> <p>Start by including the HAL libraries in the makefile:</p> <ul> <li>Make: <code translate="no" dir="ltr">LOCAL_SHARED_LIBRARIES += android.hardware.nfc@1.0</code>
+</li> <li>Soong: <code translate="no" dir="ltr">shared_libs: [ …, android.hardware.nfc@1.0 ]</code>
+</li> </ul> <p>Next, include the HAL header files:</p> 
+<pre>#include &lt;android/hardware/nfc/1.0/IFoo.h&gt;
+…
+// in code:
+sp&lt;IFoo&gt; client = IFoo::getService();
+client-&gt;doThing();</pre> <h2 id="create-server">Create the HAL server</h2> <p>To create the HAL implementation, you must have the <code translate="no" dir="ltr">.hal</code> files that represent your HAL and have already generated makefiles for your HAL using <code translate="no" dir="ltr">-Lmakefile</code> or <code translate="no" dir="ltr">-Landroidbp</code> on <code translate="no" dir="ltr">hidl-gen</code> (<code translate="no" dir="ltr">./hardware/interfaces/update-makefiles.sh</code> does this for internal HAL files and is a good reference). When transferring over HALs from <code translate="no" dir="ltr">libhardware</code>, you can do a lot of this work easily using c2hal.</p> <p>To create the necessary files to implement your HAL:</p> 
+<pre>PACKAGE=android.hardware.nfc@1.0
+LOC=hardware/interfaces/nfc/1.0/default/
+m -j hidl-gen
+hidl-gen -o $LOC -Lc++-impl -randroid.hardware:hardware/interfaces \
+    -randroid.hidl:system/libhidl/transport $PACKAGE
+hidl-gen -o $LOC -Landroidbp-impl -randroid.hardware:hardware/interfaces \
+    -randroid.hidl:system/libhidl/transport $PACKAGE</pre> <p>For the HAL to work in passthrough mode, you must have the function <code translate="no" dir="ltr">HIDL_FETCH_IModuleName</code> residing in <code translate="no" dir="ltr">/(system|vendor|...)/lib(64)?/hw/android.hardware.package@3.0-impl(<var translate="no">OPTIONAL_IDENTIFIER</var>).so</code> where <var translate="no">OPTIONAL_IDENTIFIER</var> is a string identifying the passthrough implementation. The passthrough mode requirements are met automatically by the above commands, which also create the <code translate="no" dir="ltr">android.hardware.nfc@1.0-impl</code> target, but any extension can be used. For instance <code translate="no" dir="ltr">android.hardware.nfc@1.0-impl-foo</code> uses <code translate="no" dir="ltr">-foo</code> to differentiate itself.</p> <p>If a HAL is a minor version or an extension of another HAL, the base HAL should be used to name this binary. For instance, <code translate="no" dir="ltr">android.hardware.graphics.mapper@2.1</code> implementations should still be in a binary called <code translate="no" dir="ltr">android.hardware.graphics.mapper@2.0-impl(<var translate="no">OPTIONAL_IDENTIFIER</var>)</code>. Usually, the <var translate="no">OPTIONAL_IDENTIFIER</var> here would include the actual HAL version. By naming the binary like this, 2.0 clients can retrieve it directly, and 2.1 clients can upcast the implementation.</p> <p>Next, fill out the stubs with functionality and setup a daemon. Example daemon code (supporting passthrough):</p> 
+<pre>#include &lt;hidl/LegacySupport.h&gt;
+
+int main(int /* argc */, char* /* argv */ []) {
+    return defaultPassthroughServiceImplementation&lt;INfc&gt;("nfc");
+}</pre> <p><code translate="no" dir="ltr">defaultPassthroughServiceImplementation</code> calls <code translate="no" dir="ltr">dlopen()</code> for the provided <code translate="no" dir="ltr">-impl</code> library and provides it as a binderized service. Example daemon code (for pure binderized service):</p> 
+<pre>int main(int /* argc */, char* /* argv */ []) {
+    // This function must be called before you join to ensure the proper
+    // number of threads are created. The threadpool never exceeds
+    // size one because of this call.
+    ::android::hardware::configureRpcThreadpool(1 /*threads*/, true /*willJoin*/);
+
+    sp&lt;INfc&gt; nfc = new Nfc();
+    const status_t status = nfc-&gt;registerAsService();
+    if (status != ::android::OK) {
+        return 1; // or handle error
+    }
+
+    // Adds this thread to the threadpool, resulting in one total
+    // thread in the threadpool. We could also do other things, but
+    // would have to specify 'false' to willJoin in configureRpcThreadpool.
+    ::android::hardware::joinRpcThreadpool();
+    return 1; // joinRpcThreadpool should never return
+}</pre> <p>This daemon usually lives in <code translate="no" dir="ltr">$PACKAGE + "-service-suffix"</code> (for example, <code translate="no" dir="ltr">android.hardware.nfc@1.0-service</code>), but it could be anywhere. The <a href="../../security/features/selinux/device-policy">sepolicy</a> for a specific class of HALs is the attribute <code translate="no" dir="ltr">hal_&lt;module&gt;</code> (for instance, <code translate="no" dir="ltr">hal_nfc)</code>. This attribute must be applied to the daemon that runs a particular HAL (if the same process serves multiple HALs, multiple attributes can be applied to it).</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/hidl-cpp" class="_attribution-link">https://source.android.com/docs/core/architecture/hidl-cpp</a>
+  </p>
+</div>

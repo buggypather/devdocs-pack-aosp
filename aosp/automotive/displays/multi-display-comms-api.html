@@ -1,0 +1,192 @@
+<h1>Multi-Display Communications API</h1>  <p>The Multi-Display Communications API can be used by a system privileged app in AAOS to communicate with the same app (same package name) running in a different occupant zone in a car. This page describes how to integrate the API. To learn more, you can also see <a href="https://developer.android.com/reference/android/car/CarOccupantZoneManager.OccupantZoneInfo"><code translate="no" dir="ltr">CarOccupantZoneManager.OccupantZoneInfo</code></a>.</p> <aside class="note"><strong>Note:</strong><span> The Multi-Display Communications API supports communication within a single system on a chip (SoC). For distributed multi-SoC and multi-VM communication across vehicle domains, see <a href="../sdv/core-areas/vsidl">VSIDL and middleware overview</a> and <a href="../sdv/sdv-gateway-on-ivi">Use the SDV Gateway on IVI</a>.</span></aside> <h2 id="occupant-zone">Occupant zone</h2> <p>The concept of an <em>occupant zone</em> maps a user to a set of displays. Each occupant zone has a display with the type <a href="https://developer.android.com/reference/android/car/CarOccupantZoneManager#DISPLAY_TYPE_MAIN"><code translate="no" dir="ltr">DISPLAY_TYPE_MAIN</code></a>. An occupant zone may also have additional displays, such as a cluster display. Each occupant zone is assigned an Android user. Each user has their own accounts and apps.</p> <h2 id="hardware-config">Hardware configuration</h2> <p>The Comms API supports only a single SoC. In the single SoC model, all occupant zones and users run on the same SoC. The Comms API consists of three components:</p> <ul> <li><p><strong>Power management API</strong> allows the client to manage the power of the displays in the occupant zones.</p></li> <li><p><strong>Discovery API</strong> allows the client to monitor the states of other occupant zones in the car, and to monitor peer clients in those occupant zones. Use the Discovery API before using the Connection API.</p></li> <li><p><strong>Connection API</strong> allows the client to connect to its peer client in another occupant zone and to send a payload to the peer client.</p></li> </ul> <p>The Discovery API and the Connection API are required for connection. The Power management API is optional.</p> <p>The Comms API doesn't support communication between different apps. Instead, it's designed <strong>only</strong> for communication between apps with the same package name and used <strong>only</strong> for communication between different visible users.</p> <h2 id="integration-guide">Integration guide</h2> <h3 id="implement_abstractreceiverservice">Implement AbstractReceiverService</h3> <p>To receive the <code translate="no" dir="ltr">Payload</code>, the receiver app MUST implement the abstract methods defined in <code translate="no" dir="ltr">AbstractReceiverService</code>. For example:</p> 
+<pre>public class MyReceiverService extends AbstractReceiverService {
+
+    @Override
+    public void onConnectionInitiated(@NonNull OccupantZoneInfo senderZone) {
+    }
+
+    @Override
+    public void onPayloadReceived(@NonNull OccupantZoneInfo senderZone,
+            @NonNull Payload payload) {
+    }
+}
+</pre> <p><code translate="no" dir="ltr">onConnectionInitiated()</code> is invoked when the sender client requests a connection to this receiver client. If user confirmation is needed to establish the connection, <code translate="no" dir="ltr">MyReceiverService</code> <strong>can</strong> override this method to launch a permission activity, and call <code translate="no" dir="ltr">acceptConnection()</code> or <code translate="no" dir="ltr">rejectConnection()</code> based on the result. Otherwise, <code translate="no" dir="ltr">MyReceiverService</code> <strong>can</strong> just call <code translate="no" dir="ltr">acceptConnection()</code>.</p> <p><code translate="no" dir="ltr">onPayloadReceived()</code> is invoked when <code translate="no" dir="ltr">MyReceiverService</code> has received a <code translate="no" dir="ltr">Payload</code> from the sender client. <code translate="no" dir="ltr">MyReceiverService</code> <strong>can</strong> override this method to:</p> <ul> <li>Forward the <code translate="no" dir="ltr">Payload</code> to the corresponding receiver endpoint(s), if any. To get the registered receiver endpoints, call <code translate="no" dir="ltr">getAllReceiverEndpoints()</code>. To forward the <code translate="no" dir="ltr">Payload</code> to a given receiver endpoint, call <code translate="no" dir="ltr">forwardPayload()</code>
+</li> </ul> <p><em>OR,</em></p> <ul> <li>Cache the <code translate="no" dir="ltr">Payload</code>, and send it when the expected receiver endpoint is registered, for which the <code translate="no" dir="ltr">MyReceiverService</code> is notified through <code translate="no" dir="ltr">onReceiverRegistered()</code>
+</li> </ul> <h3 id="declare_abstractreceiverservice">Declare AbstractReceiverService</h3> <p>The receiver app MUST declare the implemented <code translate="no" dir="ltr">AbstractReceiverService</code> in its manifest file, add an intent filter with action <code translate="no" dir="ltr">android.car.intent.action.RECEIVER_SERVICE</code> for this service, and require the <code translate="no" dir="ltr">android.car.occupantconnection.permission.BIND_RECEIVER_SERVICE</code> permission:</p> 
+<pre>&lt;service android:name=".MyReceiverService"
+         android:permission="android.car.occupantconnection.permission.BIND_RECEIVER_SERVICE"
+         android:exported="true"&gt;
+    &lt;intent-filter&gt;
+        &lt;action android:name="android.car.intent.action.RECEIVER_SERVICE" /&gt;
+    &lt;/intent-filter&gt;
+&lt;/service&gt;
+</pre> <p>The <code translate="no" dir="ltr">android.car.occupantconnection.permission.BIND_RECEIVER_SERVICE</code>permission ensures that only the framework can bind to this service. If this service doesn't require the permission, a different app might be able to bind to this service and send a <code translate="no" dir="ltr">Payload</code> to it directly.</p> <h3 id="declare_permission">Declare permission</h3> <p>The client app MUST declare the permissions in its manifest file.</p> 
+<pre>&lt;!-- This permission is needed for connection API --&gt;
+&lt;uses-permission android:name="android.car.permission.MANAGE_OCCUPANT_CONNECTION"/&gt;
+&lt;!-- This permission is needed for discovery API --&gt;
+&lt;uses-permission android:name="android.car.permission.MANAGE_REMOTE_DEVICE"/&gt;
+&lt;!-- This permission is needed if the client app calls CarRemoteDeviceManager#setOccupantZonePower() --&gt;
+&lt;uses-permission android:name="android.car.permission.CAR_POWER"/&gt;
+</pre> <p>Each of the three permissions above are privileged permissions, which MUST be pre-granted by allowlist files. For example, here is the allowlist file of <code translate="no" dir="ltr">MultiDisplayTest</code> app:</p> 
+<pre>// packages/services/Car/data/etc/com.google.android.car.multidisplaytest.xml
+&lt;permissions&gt;
+    &lt;privapp-permissions package="com.google.android.car.multidisplaytest"&gt;
+        … …
+        &lt;permission name="android.car.permission.MANAGE_OCCUPANT_CONNECTION"/&gt;
+        &lt;permission name="android.car.permission.MANAGE_REMOTE_DEVICE"/&gt;
+        &lt;permission name="android.car.permission.CAR_POWER"/&gt;
+    &lt;/privapp-permissions&gt;
+&lt;/permissions&gt;
+</pre>
+<aside class="note"><strong>Note:</strong><span> If your app doesn't already have an allowlist file, you MUST create one.</span></aside> <h3 id="get_car_managers">Get Car managers</h3> <p>To use the API, the client app MUST register a <code translate="no" dir="ltr">CarServiceLifecycleListener</code> to get the associated Car managers:</p> 
+<pre>private CarRemoteDeviceManager mRemoteDeviceManager;
+private CarOccupantConnectionManager mOccupantConnectionManager;
+
+private final Car.CarServiceLifecycleListener mCarServiceLifecycleListener = (car, ready) -&gt; {
+   if (!ready) {
+       Log.w(TAG, "Car service crashed");
+       mRemoteDeviceManager = null;
+       mOccupantConnectionManager = null;
+       return;
+   }
+   mRemoteDeviceManager = car.getCarManager(CarRemoteDeviceManager.class);
+   mOccupantConnectionManager = car.getCarManager(CarOccupantConnectionManager.class);
+};
+
+Car.createCar(getContext(), /* handler= */ null, Car.CAR_WAIT_TIMEOUT_WAIT_FOREVER,
+       mCarServiceLifecycleListener);
+</pre> <h3 id="sender_discover">(Sender) Discover</h3> <p>Before connecting to the receiver client, the sender client SHOULD discover the receiver client by registering a <code translate="no" dir="ltr">CarRemoteDeviceManager.StateCallback</code>:</p> 
+<pre>// The maps are accessed by the main thread only, so there is no multi-thread issue.
+private final ArrayMap&lt;OccupantZoneInfo, Integer&gt; mOccupantZoneStateMap = new ArrayMap&lt;&gt;();
+private final ArrayMap&lt;OccupantZoneInfo, Integer&gt; mAppStateMap = new ArrayMap&lt;&gt;();
+
+private final StateCallback mStateCallback = new StateCallback() {
+        @Override
+        public void onOccupantZoneStateChanged(
+                @androidx.annotation.NonNull OccupantZoneInfo occupantZone,
+                int occupantZoneStates) {
+            mOccupantZoneStateMap.put(occupantZone, occupantZoneStates);
+        }
+        @Override
+        public void onAppStateChanged(
+                @androidx.annotation.NonNull OccupantZoneInfo occupantZone,
+                int appStates) {
+            mAppStateMap.put(occupantZone, appStates);
+        }
+    };
+
+if (mRemoteDeviceManager != null) {
+   mRemoteDeviceManager.registerStateCallback(getActivity().getMainExecutor(),
+           mStateCallback);
+}
+</pre> <p>Before requesting a connection to the receiver, the sender SHOULD make sure all the flags of the receiver occupant zone and receiver app are set. Otherwise, errors can occur. For example:</p> 
+<pre>private boolean canRequestConnectionToReceiver(OccupantZoneInfo receiverZone) {
+    Integer zoneState = mOccupantZoneStateMap.get(receiverZone);
+    if ((zoneState == null) || (zoneState.intValue() &amp; (FLAG_OCCUPANT_ZONE_POWER_ON
+            // FLAG_OCCUPANT_ZONE_SCREEN_UNLOCKED is not implemented yet. Right now
+            // just ignore this flag.
+            //  | FLAG_OCCUPANT_ZONE_SCREEN_UNLOCKED
+            | FLAG_OCCUPANT_ZONE_CONNECTION_READY)) == 0) {
+        return false;
+    }
+    Integer appState = mAppStateMap.get(receiverZone);
+    if ((appState == null) ||
+        (appState.intValue() &amp; (FLAG_CLIENT_INSTALLED
+            | FLAG_CLIENT_SAME_LONG_VERSION | FLAG_CLIENT_SAME_SIGNATURE
+            | FLAG_CLIENT_RUNNING | FLAG_CLIENT_IN_FOREGROUND)) == 0) {
+        return false;
+    }
+    return true;
+}
+</pre> <p>We recommend the sender request a connection to the receiver only when all the flags of the receiver are set. That said, there are exceptions:</p> <ul> <li><p><code translate="no" dir="ltr">FLAG_OCCUPANT_ZONE_CONNECTION_READY</code> and <code translate="no" dir="ltr">FLAG_CLIENT_INSTALLED</code> are the minimum requirements needed to establish a connection.</p></li> <li><p>If the receiver app needs to displays a UI to get user approval of the connection, <code translate="no" dir="ltr">FLAG_OCCUPANT_ZONE_POWER_ON</code> and <code translate="no" dir="ltr">FLAG_OCCUPANT_ZONE_SCREEN_UNLOCKED</code> become additional requirements. For a better user experience, <code translate="no" dir="ltr">FLAG_CLIENT_RUNNING</code> and <code translate="no" dir="ltr">FLAG_CLIENT_IN_FOREGROUND</code> are also recommended, otherwise the user might be surprised.</p></li> <li><p>For now (Android 15), <code translate="no" dir="ltr">FLAG_OCCUPANT_ZONE_SCREEN_UNLOCKED</code> isn't implemented. The client app can just ignore it.</p></li> <li><p>For now (Android 15), the Comms API only supports multiple users on the same Android instance so that peer apps can have the same long version code (<code translate="no" dir="ltr">FLAG_CLIENT_SAME_LONG_VERSION</code>) and signature (<code translate="no" dir="ltr">FLAG_CLIENT_SAME_SIGNATURE</code>). As a result, apps needn't verify that the two values agree.</p></li> </ul> <p>For a better user experience, the sender client CAN show a UI if a flag is not set. For example, if <code translate="no" dir="ltr">FLAG_OCCUPANT_ZONE_SCREEN_UNLOCKED</code> is not set, the sender can show a toast or a dialog to prompt the user to unlock the screen of the receiver occupant zone.</p> <p>When the sender no longer needs to discover the receivers (for example, when it finds all receivers and established connections or becomes inactive), it CAN stop the discovery.</p> 
+<pre>if (mRemoteDeviceManager != null) {
+    mRemoteDeviceManager.unregisterStateCallback();
+}
+</pre> <p>When discovery is stopped, existing connections aren't affected. The sender can continue to send <code translate="no" dir="ltr">Payload</code> to the connected receivers.</p> <h3 id="sender-request-connection">(Sender) Request connection</h3> <p>When all flags of the receiver are set, the sender CAN request a connection to the receiver:</p> 
+<pre>    private final ConnectionRequestCallback mRequestCallback = new ConnectionRequestCallback() {
+        @Override
+        public void onConnected(OccupantZoneInfo receiverZone) {
+        }
+
+        @Override
+        public void onFailed(OccupantZoneInfo receiverZone, int connectionError) {
+        }
+
+        @Override
+        public void onDisconnected(OccupantZoneInfo receiverZone) {
+        }
+    };
+
+if (mOccupantConnectionManager != null &amp;&amp; canRequestConnectionToReceiver(receiverZone)) {
+    mOccupantConnectionManager.requestConnection(receiverZone,
+                getActivity().getMainExecutor(), mRequestCallback);
+}
+</pre> <h3 id="receiver_service_accept_the_connection">(Receiver service) Accept the connection</h3> <p>Once the sender requests a connection to the receiver, the <code translate="no" dir="ltr">AbstractReceiverService</code> in the receiver app will be bound by the car service, and <code translate="no" dir="ltr">AbstractReceiverService.onConnectionInitiated()</code> will be invoked. As explained in the <a href="#sender-request-connection">(Sender) Request Connection</a>, <code translate="no" dir="ltr">onConnectionInitiated()</code> is an abstracted method and MUST be implemented by the client app.</p> <p>When the receiver accepts the connection request, the sender's <code translate="no" dir="ltr">ConnectionRequestCallback.onConnected()</code> will be invoked, then the connection is established.</p> <h3 id="send-the-payload">(Sender) Send the payload</h3> <p>Once the connection is established, the sender CAN send <code translate="no" dir="ltr">Payload</code> to the receiver:</p> 
+<pre>if (mOccupantConnectionManager != null) {
+    Payload payload = ...;
+    try {
+        mOccupantConnectionManager.sendPayload(receiverZone, payload);
+    } catch (CarOccupantConnectionManager.PayloadTransferException e) {
+        Log.e(TAG, "Failed to send Payload to " + receiverZone);
+    }
+}
+</pre> <p>The sender can put a <code translate="no" dir="ltr">Binder</code> object, or a byte array in the <code translate="no" dir="ltr">Payload</code>. If the sender needs to send other data types, it MUST serialize the data into a byte array, use the byte array to construct a <code translate="no" dir="ltr">Payload</code> object, and send the <code translate="no" dir="ltr">Payload</code>. Then the receiver client gets the byte array from the received <code translate="no" dir="ltr">Payload</code>, and deserializes the byte array into the expected data object. For example, if the sender wants to send a String <code translate="no" dir="ltr">hello</code> to the receiver endpoint with ID <code translate="no" dir="ltr">FragmentB</code>, it can use Proto Buffers to define a data type like this:</p> 
+<pre>message MyData {
+  required string receiver_endpoint_id = 1;
+  required string data = 2;
+}
+</pre> <p><strong>Figure 1</strong> illustrates the <code translate="no" dir="ltr">Payload</code> flow:</p> <p> <img src="https://source.android.com/static/docs/automotive/images/comms-api-01.svg" alt="Send the Payload" class="screenshot android-image-dark-theme-background" width="700"> <figcaption><b>Figure 1.</b> Send the Payload.</figcaption> </p> <h3 id="receiver_service_receive_and_dispatch_the_payload">(Receiver service) Receive and dispatch the payload</h3> <p>Once the receiver app receives the <code translate="no" dir="ltr">Payload</code>, its <code translate="no" dir="ltr">AbstractReceiverService.onPayloadReceived()</code> will be invoked. As explained in the <a href="#send-the-payload">Send the payload</a>, <code translate="no" dir="ltr">onPayloadReceived()</code> is an abstracted method and MUST be implemented by the client app. In this method, the client CAN forward the <code translate="no" dir="ltr">Payload</code> to the corresponding receiver endpoint(s), or cache the <code translate="no" dir="ltr">Payload</code> then send it once the expected receiver endpoint is registered.</p> <h3 id="receiver_endpoint_register_and_unregister">(Receiver endpoint) Register and unregister</h3> <p>The receiver app SHOULD call <code translate="no" dir="ltr">registerReceiver()</code> to register the receiver endpoints. A typical use case is that a Fragment needs to receiver <code translate="no" dir="ltr">Payload</code>, so it registers a receiver endpoint:</p> 
+<pre>private final PayloadCallback mPayloadCallback = (senderZone, payload) -&gt; {
+    …
+};
+
+if (mOccupantConnectionManager != null) {
+    mOccupantConnectionManager.registerReceiver("FragmentB",
+                getActivity().getMainExecutor(), mPayloadCallback);
+}
+</pre> <p>Once the <code translate="no" dir="ltr">AbstractReceiverService</code> in the receiver client dispatches the <code translate="no" dir="ltr">Payload</code> to the receiver endpoint, the associated <code translate="no" dir="ltr">PayloadCallback</code> will be invoked.</p> <p>The client app CAN register multiple receiver endpoints as long as their <code translate="no" dir="ltr">receiverEndpointId</code>s are unique among the client app. The <code translate="no" dir="ltr">receiverEndpointId</code> will be used by the <code translate="no" dir="ltr">AbstractReceiverService</code> to decide which receiver endpoint(s) to dispatch the Payload to. For example:</p> <ul> <li>The sender specifies <code translate="no" dir="ltr">receiver_endpoint_id:FragmentB</code> in the <code translate="no" dir="ltr">Payload</code>. When receiving the <code translate="no" dir="ltr">Payload</code>, the <code translate="no" dir="ltr">AbstractReceiverService</code> in the receiver calls <code translate="no" dir="ltr">forwardPayload("FragmentB", payload)</code> to dispatch the Payload to <code translate="no" dir="ltr">FragmentB</code>
+</li> <li>The sender specifies <code translate="no" dir="ltr">data_type:VOLUME_CONTROL</code> in the <code translate="no" dir="ltr">Payload</code>. When receiving the <code translate="no" dir="ltr">Payload</code>, the <code translate="no" dir="ltr">AbstractReceiverService</code> in the receiver knows that this type of <code translate="no" dir="ltr">Payload</code> should be dispatched to <code translate="no" dir="ltr">FragmentB</code>, so it calls <code translate="no" dir="ltr">forwardPayload("FragmentB", payload)</code>
+</li> </ul> <aside class="note"><strong>Note:</strong><span> the receiver endpoint can be registered at any time, even after the sender sends the <code translate="no" dir="ltr">Payload</code>. When the receiver endpoint is registered, the <code translate="no" dir="ltr">AbstractReceiverService</code> in the receiver app will be notified using <code translate="no" dir="ltr">onReceiverRegistered()</code>, in which the <code translate="no" dir="ltr">AbstractReceiverService</code> can dispatch the cached <code translate="no" dir="ltr">Payload</code> to the receiver endpoint, if there is any. When the receiver endpoint no longer needs to receive the <code translate="no" dir="ltr">Payload</code> (for example, it becomes inactive), it SHOULD be unregistered:</span></aside>
+<pre>if (mOccupantConnectionManager != null) {
+    mOccupantConnectionManager.unregisterReceiver("FragmentB");
+}
+</pre> <h3 id="sender_terminate_the_connection">(Sender) Terminate the connection</h3> <p>Once the sender no longer needs to send <code translate="no" dir="ltr">Payload</code> to the receiver (for example, it becomes inactive), it SHOULD terminate the connection.</p> 
+<pre>if (mOccupantConnectionManager != null) {
+    mOccupantConnectionManager.disconnect(receiverZone);
+}
+</pre> <p>Once disconnected, the sender can no longer send <code translate="no" dir="ltr">Payload</code> to the receiver.</p> <h2 id="connection_flow">Connection flow</h2> <p>A connection flow is illustrated in <strong>Figure 2.</strong></p> <p> <img src="https://source.android.com/static/docs/automotive/images/comms-api-02.svg" alt="Connection flow" class="screenshot android-image-dark-theme-background" width="750"> <figcaption><b>Figure 2.</b> Connection flow.</figcaption> </p> <h2 id="troubleshooting">Troubleshooting</h2> <h3 id="check_the_logs">Check the logs</h3> <p>To check the corresponding logs:</p> <ol> <li>
+<p>Run this command for logging:</p> 
+<pre>adb shell setprop log.tag.CarRemoteDeviceService VERBOSE &amp;&amp; adb shell setprop log.tag.CarOccupantConnectionService VERBOSE &amp;&amp; adb logcat -s "AbstractReceiverService","CarOccupantConnectionManager","CarRemoteDeviceManager","CarRemoteDeviceService","CarOccupantConnectionService"</pre>
+</li> <li>
+<p>To dump the internal state of <code translate="no" dir="ltr">CarRemoteDeviceService</code> and <code translate="no" dir="ltr">CarOccupantConnectionService</code>:</p> 
+<pre>adb shell dumpsys car_service --services CarRemoteDeviceService &amp;&amp; adb shell dumpsys car_service --services CarOccupantConnectionService</pre>
+</li> </ol> <h3 id="null_carremotedevicemanager_and_caroccupantconnectionmanager">Null CarRemoteDeviceManager and CarOccupantConnectionManager</h3> <p>Check out these possible root causes:</p> <ol> <li><p>The car service crashed. As illustrated earlier, the two managers are intentionally reset to be <code translate="no" dir="ltr">null</code> when car service crashes. When car service is restarted, the two managers are set to non-null values.</p></li> <li>
+<p>Either <code translate="no" dir="ltr">CarRemoteDeviceService</code> or <code translate="no" dir="ltr">CarOccupantConnectionService</code> is not enabled. To determine if one or the other is enabled, run:</p> 
+<pre>adb shell dumpsys car_service --services CarFeatureController</pre> <ul> <li>
+<p>Look for <code translate="no" dir="ltr">mDefaultEnabledFeaturesFromConfig</code>, which should contain <code translate="no" dir="ltr">car_remote_device_service</code> and <code translate="no" dir="ltr">car_occupant_connection_service</code>. For example:</p> 
+<pre>mDefaultEnabledFeaturesFromConfig:[car_evs_service, car_navigation_service, car_occupant_connection_service, car_remote_device_service, car_telemetry_service, cluster_home_service, com.android.car.user.CarUserNoticeService, diagnostic, storage_monitoring, vehicle_map_service]
+</pre>
+</li> <li>
+<p>By default, these two services are disabled. When a device supports multi-display, you MUST overlay this configuration file. You can enable the two services in a configuration file:</p> 
+<pre>// packages/services/Car/service/res/values/config.xml
+&lt;string-array translatable="false" name="config_allowed_optional_car_features"&gt;
+     &lt;item&gt;car_occupant_connection_service&lt;/item&gt;
+     &lt;item&gt;car_remote_device_service&lt;/item&gt;
+     … …
+&lt;/string-array&gt;
+</pre>
+</li> </ul>
+</li> </ol> <h2 id="exception_when_calling_the_api">Exception when calling the API</h2> <p>If the client app isn't using the API as intended, an exception can occur. In this case, the client app can check the message in the exception and the crash stack to resolve the issue. Examples of misusing the API are:</p> <ul> <li>
+<code translate="no" dir="ltr">registerStateCallback()</code> This client already registered a <code translate="no" dir="ltr">StateCallback</code>.</li> <li>
+<code translate="no" dir="ltr">unregisterStateCallback()</code> No <code translate="no" dir="ltr">StateCallback</code> was registered by this <code translate="no" dir="ltr">CarRemoteDeviceManager</code> instance.</li> <li>
+<code translate="no" dir="ltr">registerReceiver()</code> <code translate="no" dir="ltr">receiverEndpointId</code> is already registered.</li> <li>
+<code translate="no" dir="ltr">unregisterReceiver()</code> <code translate="no" dir="ltr">receiverEndpointId</code> is not registered.</li> <li>
+<code translate="no" dir="ltr">requestConnection()</code> A pending or established connection already exists.</li> <li>
+<code translate="no" dir="ltr">cancelConnection()</code> No pending connection to cancel.</li> <li>
+<code translate="no" dir="ltr">sendPayload()</code> No established connection.</li> <li>
+<code translate="no" dir="ltr">disconnect()</code> No established connection.</li> </ul> <h2 id="client1_can_send_payload_to_client2_but_not_the_other_way_around">Client1 can send Payload to client2, but not the other way around</h2> <p>The connection is one way by design. To establish two-way connection, both <code translate="no" dir="ltr">client1</code> and <code translate="no" dir="ltr">client2</code> MUST request a connection to each other and then get approval.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/displays/multi-display-comms-api" class="_attribution-link">https://source.android.com/docs/automotive/displays/multi-display-comms-api</a>
+  </p>
+</div>

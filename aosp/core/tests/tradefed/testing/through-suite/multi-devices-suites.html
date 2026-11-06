@@ -1,0 +1,86 @@
+<h1>Multi-device modules</h1>  <p>This doc provides step-by-step instructions on how to create multi-device modules and calls out current limitations when known.</p> <h2 id="the_sample">The sample</h2> <p>A CTS wifi-aware multi-device module is provided. It sends a message from one device over wifi and verifies the other device receives it.</p> <p>The source for the module is at <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/Wifi/tests/hostsidetests/multidevices/test/aware/">packages/modules/Wifi/tests/hostsidetests/multidevices/test/aware/</a>.</p> <p>We've annotated the example with as much comments as we feel are useful.</p> <h2 id="step_1_create_the_module_folder">Step 1: Create the module folder</h2> <p>It is recommended to create a folder for your multi-devices module in the suite project it belongs to. For example: <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:cts/hostsidetests/multidevices/">cts/hostsidetests/multidevices/</a>. We recommend this so all multi-devices modules remain collocated at least at first which will make it easier to discover examples.</p> <p>All files for this module should be put under their own module folder. For example: <code translate="no" dir="ltr">wifi_aware</code>.</p> <h2 id="step_2_create_the_test">Step 2: Create the test</h2> <p>This is where you implement your test logic. It is highly dependent on what is being tested.</p> <p>Create the Mobly test source, like: <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/Wifi/tests/hostsidetests/multidevices/test/aware/wifi_aware_test.py">wifi_aware_test.py</a>.</p> <h2 id="step_3_create_the_build_file_androidbp">Step 3: Create the build file: Android.bp</h2> <p>Add an Android.bp file like <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/Wifi/tests/hostsidetests/multidevices/test/Android.bp">packages/modules/Wifi/tests/hostsidetests/multidevices/test/Android.bp</a>. Define a python_test_host module, similar to:</p> 
+<pre>python_test_host {
+    name: "CtsWifiAwareTestCases",
+    main: "wifi_aware_test.py",
+    srcs: ["wifi_aware_test.py"],
+    test_suites: [
+        "cts",
+        "general-tests",
+    ],
+    test_options: {
+        unit_test: false,
+    },
+    data: [
+          // Package the snippet with the mobly test
+        ":wifi_aware_snippet",
+    ],
+}
+
+</pre> <p>Specify the snippets for the test with the data field, which will be packed with the binary and can be located and installed in the test by ATest or in Continuous execution.</p> <p>Mobly Bundled Snippets are available in Android at <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:external/mobly-bundled-snippets/">external/mobly-bundled-snippets/</a>.</p> <h3 id="optional_create_custom_snippets">Optional: Create custom snippets</h3> <p>Some multi-device modules may require custom Mobly snippets. The sample test includes a wifi-aware snippet at <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/Wifi/tests/hostsidetests/multidevices/com.google.snippet.wifi/aware/WifiAwareSnippet.java">packages/modules/Wifi/tests/hostsidetests/multidevices/com.google.snippet.wifi/aware/WifiAwareSnippet.java</a>, which is built with Mobly Snippet Lib, available in Android at: <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:external/mobly-snippet-lib/">external/mobly-snippet-lib/</a>.</p> <p>The snippet should be defined with android_test rule in Android.bp like standard instrumentation:</p> 
+<pre>android_test {
+    name: "wifi_aware_snippet",
+    sdk_version: "current",
+    srcs: [
+        "CallbackUtils.java",
+        "WifiAwareSnippet.java",
+    ],
+    manifest: "AndroidManifest.xml",
+    static_libs: [
+        "androidx.test.runner",
+        "guava",
+        "mobly-snippet-lib",
+    ],
+}
+</pre> <h2 id="step_4_create_the_module_config_androidtestxml">Step 4: Create the module config: AndroidTest.xml</h2> <p>Add an AndroidTest.xml file like <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/Wifi/tests/hostsidetests/multidevices/test/aware/AndroidTest.xml">packages/modules/Wifi/tests/hostsidetests/multidevices/test/aware/AndroidTest.xml</a>. In this test configuration, you need to specify two devices for the test, similar to:</p> 
+<pre>&lt;configuration description="Config for CTS Wifi Aware test cases"&gt;
+    &lt;option name="test-suite-tag" value="cts" /&gt;
+    &lt;option name="config-descriptor:metadata" key="component" value="wifi" /&gt;
+    &lt;option name="config-descriptor:metadata" key="parameter" value="not_instant_app" /&gt;
+    &lt;option name="config-descriptor:metadata" key="parameter" value="not_multi_abi" /&gt;
+    &lt;option name="config-descriptor:metadata" key="parameter" value="not_secondary_user" /&gt;
+
+    &lt;device name="device1"&gt;
+        &lt;!-- For coverage to work, the APK should not be uninstalled until after coverage is pulled.
+             So it's a lot easier to install APKs outside the python code.
+        --&gt;
+        &lt;target_preparer class="com.android.tradefed.targetprep.suite.SuiteApkInstaller"&gt;
+            &lt;option name="test-file-name" value="wifi_aware_snippet.apk" /&gt;
+        &lt;/target_preparer&gt;
+        &lt;target_preparer class="com.android.tradefed.targetprep.RunCommandTargetPreparer"&gt;
+            &lt;option name="run-command" value="input keyevent KEYCODE_WAKEUP" /&gt;
+            &lt;option name="run-command" value="wm dismiss-keyguard" /&gt;
+        &lt;/target_preparer&gt;
+        &lt;target_preparer class="com.android.tradefed.targetprep.PythonVirtualenvPreparer"&gt;
+          &lt;!-- Any python dependencies can be specified and will be installed with pip --&gt;
+          &lt;option name="dep-module" value="mobly" /&gt;
+        &lt;/target_preparer&gt;
+    &lt;/device&gt;
+    &lt;device name="device2"&gt;
+        &lt;target_preparer class="com.android.tradefed.targetprep.suite.SuiteApkInstaller"&gt;
+            &lt;option name="test-file-name" value="wifi_aware_snippet.apk" /&gt;
+        &lt;/target_preparer&gt;
+        &lt;target_preparer class="com.android.tradefed.targetprep.RunCommandTargetPreparer"&gt;
+            &lt;option name="run-command" value="input keyevent KEYCODE_WAKEUP" /&gt;
+            &lt;option name="run-command" value="wm dismiss-keyguard" /&gt;
+        &lt;/target_preparer&gt;
+    &lt;/device&gt;
+
+    &lt;test class="com.android.tradefed.testtype.mobly.MoblyBinaryHostTest"&gt;
+      &lt;!-- The mobly-par-file-name should match the module name --&gt;
+      &lt;option name="mobly-par-file-name" value="CtsWifiAwareTestCases" /&gt;
+      &lt;!-- Timeout limit in milliseconds for all test cases of the python binary --&gt;
+      &lt;option name="mobly-test-timeout" value="60000" /&gt;
+    &lt;/test&gt;
+&lt;/configuration&gt;
+</pre> <p>Notce that:</p> <ul> <li>This sample test has dependency on Mobly. Any dependency can be specified for <code translate="no" dir="ltr">PythonVirtualenvPreparer</code> and will be installed with pip.</li> <li>The <code translate="no" dir="ltr">mobly-par-file-name</code>for <code translate="no" dir="ltr">MoblyBinaryHostTest</code> must match the module name as in Android.bp.</li> <li>Do specify a <code translate="no" dir="ltr">mobly-test-timeout</code> for the test. It is in milliseconds and applies to the complete python binary execution (all test cases together). This is needed to avoid test cases hanging forever in case of some issues.</li> <li>Each <code translate="no" dir="ltr">device</code> tag can contain a distinct setup on each device, The Mobly config will receive them in the same order as specified in the XML.</li> </ul> <p><span style="text-decoration:underline;">Related to snippet apk installation:</span></p> <ul> <li>The initial POC has been updated to install snippet apks via target_preparer due to conversation with Coverage team: In order to ensure coverage measurements are not deleted too early, uninstalling by Harness rather than by test code in Python binaries offer better guarantees in terms of timing.</li> </ul> <h2 id="step_5_run_test_locally_atest">Step 5: Run test locally: atest</h2> <p>Currently, multi-device tests only runs on physical devices. Before running the test, verify that your test devices are in proper state. The command <code translate="no" dir="ltr">adb
+devices</code> should report the list of your connected devices. If the list contains devices not intended for testing, specify the devices for the test using -s flag.</p> <p>For wifi tests, make sure wifi is enabled for the devices (after factory reset).</p> <p>You can run the test locally with atest:</p> 
+<pre>$ atest CtsWifiAwareTestCases
+</pre> <p>You should see the number of devices used in the summary heading in atest output, something like <code translate="no" dir="ltr">Test executed with 2 device(s)</code>.</p> <h2 id="troubleshooting">Troubleshooting</h2> <p>If the test fails when running locally due to:</p> <h3 id="virtualenv_error">Virtualenv error</h3> 
+<pre>java.io.IOException: Cannot run program
+"virtualenv": error=2, No such file or directory
+</pre> <p>Please ensure <code translate="no" dir="ltr">virtualenv</code> is in your PATH. Adding "~/.local/bin" to PATH should fix it. if virtualenv isn't installed follow: https://virtualenv.pypa.io/en/latest/installation.html</p> <h3 id="expected_to_get_at_least_2_controller_objects_got_1">Expected to get at least 2 controller objects, got 1</h3> <p>Test modules are either multi-devices or single-device, there are no mixed-modules. If you attempt to run a multi-devices module without multiple devices you will see this error:</p> <p><code translate="no" dir="ltr">Expected to get at least 2 controller objects, got 1</code></p> <p>Executing the module in multi-devices mode will solve the issue.</p> <p>For CTS: You can use sharding to trigger it (For example: --shard-count 2) or <code translate="no" dir="ltr">run cts-multidevces</code>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/tradefed/testing/through-suite/multi-devices-suites" class="_attribution-link">https://source.android.com/docs/core/tests/tradefed/testing/through-suite/multi-devices-suites</a>
+  </p>
+</div>

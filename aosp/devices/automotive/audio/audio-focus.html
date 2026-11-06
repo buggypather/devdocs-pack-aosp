@@ -1,0 +1,280 @@
+<h1>Audio focus</h1>  <p>Before starting a logical stream, an app request audio focus using the same audio attributes as is used for the logical stream. The app must respect focus losses to perform as expected in the automotive use cases.</p> <p>While sending a focus request is recommended, it isn't enforced by the system. Therefore, consider focus as a means to indirectly control and avoid conflict during playback instead of as a primary audio control mechanism. The vehicle shouldn't depend on the focus system for operation of the audio subsystem.</p> <h2 id="focus_interactions">Focus interactions</h2> <p>To support AAOS, audio focus requests are handled based on predefined interactions between the request's <code translate="no" dir="ltr">CarAudioContext</code> and that of current focus holders. There are three types of interactions:</p> <ul> <li>Exclusive</li> <li>Reject</li> <li>Concurrent</li> </ul> <h3 id="exclusive_interaction">Exclusive interaction</h3> <p>This is the interaction model most commonly used with Android.</p> <p>In <em>exclusive</em> interactions, only one app is allowed to hold focus at a time. Therefore, an incoming focus request is granted focus while the existing focus holder loses focus. Since both apps play media, only one app is allowed to hold focus. As a result, the newly started app's focus request is returned with <code translate="no" dir="ltr">AUDIOFOCUS_REQUEST_GRANTED</code> while the current playing music app receives a focus change event with a loss status that corresponds to the type of request that was made.</p> <h3 id="reject_interaction">Reject interaction</h3> <p>With <em>reject</em> interactions, the incoming request is always rejected. For example, when attempting to play music while a call is in progress. In this case, if the Dialer holds audio focus for a call and a second app requests focus to play music, the music app receives <code translate="no" dir="ltr">AUDIOFOCUS_REQUEST_FAILED</code> in response to the request. Since the focus request is rejected, no focus loss is dispatched to the current focus holder.</p> <h3 id="concurrent">Concurrent interaction</h3> <p>Unique to AAOS are <em>concurrent</em> interactions. This gives apps that request audio focus in the car the ability to hold focus concurrently with other apps. For a concurrent interaction to take place, the following conditions must be met. The:</p> <ul> <li><p>Incoming focus request must ask for <a href="https://developer.android.com/reference/android/media/AudioManager#AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK">AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK</a></p></li> <li><p>Current focus holder doesn't <a href="https://developer.android.com/reference/android/media/AudioFocusRequest.Builder.html#setWillPauseWhenDucked(boolean)">setPauseWhenDucked(true)</a></p></li> <li><p>Current focus holder opts not to receive duck events</p></li> </ul> <p>If these criteria are met, then the focus request returns with <code translate="no" dir="ltr">AUDIOFOCUS_REQUEST_GRANTED</code> while the current focus holder has no change in focus. However, if the current focus holder opts to receive duck events or to pause when ducked, the current focus holder loses focus, as occurs with an exclusive interaction.</p> <h4 id="handle_concurrent_streams">Handle concurrent streams</h4> <p>While the concurrent interaction has numerous uses, be careful at the mixing and ducking at the hardware level across output devices. We strongly recommend that instances of <code translate="no" dir="ltr">CarAudioContext</code> that are allowed to play concurrently should be routed to different output devices.</p> <p>By having separate output devices for concurrent streams, this enables the HAL to duck one of the streams before mixing them, or to route the physical streams to different speakers in the vehicle. If the logical streams are mixed within Android, gains are unaltered and delivered as part of the same physical stream.</p> <p>For example, when navigation and media are delivered simultaneously, the gain for the media stream could temporarily be reduced (or, ducked) so that navigation instructions can be heard more clearly. Alternatively, the navigation stream could be routed to the driver side speakers while media continues to play throughout the rest of the cabin.</p> <h3 id="interaction">Interaction matrix</h3> <p>This table shows the interaction matrix as defined by <code translate="no" dir="ltr">CarAudioService</code>. Each row represents the current focus holder's <code translate="no" dir="ltr">CarAudioContext</code> and each column represents that of the incoming request.</p> <p>For example, when a music media app holds focus as a navigation app requests focus, the matrix indicates that the two interactions can play concurrently, assuming the other criteria for <a href="#concurrent">concurrent interactions</a> are fulfilled.</p> <p>Because of the concurrent interactions, it's possible to have more than one focus holder. In this case, an incoming focus request is compared with each of the current focus holders before determining what interaction to apply. In this case, the most conservative interaction wins. Reject, then exclusive, and finally concurrent.</p> <p class="android-image-dark-theme-background"><img src="https://source.android.com/static/docs/automotive/images/audio-focus-01.svg" alt="Audio focus interaction matrix" width="450"></p> <p><strong>Figure 1.</strong> Audio focus interaction matrix.</p> <h2 id="navigation_during_phone_calls">Navigation during phone calls</h2> <p>In Android 11, a new user setting was introduced to allow users to alter the interaction behavior between navigation and phone calls. When set, <code translate="no" dir="ltr">android.car.KEY_AUDIO_FOCUS_NAVIGATION_REJECTED_DURING_CALL</code> changes the interaction between incoming <code translate="no" dir="ltr">NAVIGATION</code> focus requests and current <code translate="no" dir="ltr">CALL</code> focus holders from <em>concurrent</em> to <em>rejects</em>. If a user prefers that navigation instructions not interrupt a call, they can enable the setting. This is persisted for the user, and can be set dynamically so that subsequent focus requests respect the new setting.</p> <h2 id="delayable_audio_focus">Delayable audio focus</h2> <p>In Android 11, AAOS added support for requesting <em>delayable</em> audio focus. This allows non-transient focus requests to be delayed when their interaction with current focus holders would normally result in them being rejected. Once a change in focus results in a state where the delayed request can gain focus, the request is granted.</p> <h3 id="rules_for_delayed_audio_focus_requests">Rules for delayed audio focus requests</h3> <ul> <li><p><strong>Non-transient requests only.</strong> A delayed request can only be made for non-transient sources in order to avoid having a transient sound play long after it's relevant.</p></li> <li><p><strong>Only one request can be delayed at a time.</strong> If a delayable request is made while there is already a delayed request, the original delayed request receives a <code translate="no" dir="ltr">AUDIOFOCUS_LOSS</code> change event and the new request receives a synchronous response of <code translate="no" dir="ltr">AUDIOFOCUS_REQUEST_DELAYED</code>.</p></li> <li><p><strong>Delayable requests must have <code translate="no" dir="ltr">OnAudioFocusChangeListener</code>.</strong> After a request is delayed, the listener is used to notify the requester when the request is eventually granted (<code translate="no" dir="ltr">AUDIOFOCUS_GAIN</code>), or if it's rejected later (<code translate="no" dir="ltr">AUDIOFOCUS_LOSS</code>).</p></li> </ul> <h3 id="request_delayable_focus">Request delayable focus</h3> <p>To build a request that can be delayed:</p> <ol> <li>
+<p>Use <code translate="no" dir="ltr">AudioFocusRequest.Builder#setAcceptsDelayedFocusGain</code>.</p> 
+<pre>mMediaWithDelayedFocusListener = new MediaWithDelayedFocusListener();
+
+mDelayedFocusRequest = new AudioFocusRequest
+     .Builder(AudioManager.AUDIOFOCUS_GAIN)
+     .setAudioAttributes(mMusicAudioAttrib)
+     .setOnAudioFocusChangeListener(mMediaWithDelayedFocusListener)
+     .setForceDucking(false)
+     .setWillPauseWhenDucked(false)
+     .setAcceptsDelayedFocusGain(true)
+     .build();
+</pre>
+</li> <li>
+<p>When making the request, handle the <code translate="no" dir="ltr">AUDIOFOCUS_REQUEST_DELAYED</code> response:</p> 
+<pre>int delayedFocusRequestResults = mAudioManager.requestAudioFocus(mDelayedFocusRequest);
+if (delayedFocusRequestResults == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+    // start audio playback
+    return;
+}
+if (delayedFocusRequestResults == AudioManager.AUDIOFOCUS_REQUEST_DELAYED) {
+     // audio playback delayed to audio focus listener
+     return;
+}
+</pre>
+</li> <li>
+<p>When the request is delayed, the focus listener handles changes in focus:</p> 
+<pre>private final class MediaWithDelayedFocusListener implements
+OnAudioFocusChangeListener {
+       @Override
+       public void onAudioFocusChange(int focusChange) {
+           synchronized (mLock) {
+               switch (focusChange) {
+                   case AudioManager.AUDIOFOCUS_GAIN:
+                       … // Start focus playback
+                   case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
+                       … // Pause media transiently
+                   case AudioManager.AUDIOFOCUS_LOSS:
+                       … // Stop media
+</pre>
+</li> </ol> <h2 id="system-enforced-fade">System enforced fade</h2> <p>Android 15 introduces system-enforced audio fade in AAOS. In Android, the audio focus isn't enforced by the system. So, while app developers are encouraged to comply with the audio focus guidelines, if an app continues to play loudly even after losing audio focus, the system can't prevent it.</p> <p>In safety-critical automotive environments, adherence to audio focus is vital for minimizing driver distraction. With this feature, the audio framework now automatically fades apps that lose audio focus, for a more controlled and predictable audio experience.</p> <p>This enhancement helps ensure that apps adhere to audio focus loss decision as defined by the <a href="#interaction">interaction matrix</a>, preventing audio playback conflicts.</p> <h3 id="enforced-audio-focus-loss-hld">High-level design</h3> <p>The following figure shows the high-level design and support for focus loss feature in the cars:</p> <p><img src="https://source.android.com/static/docs/automotive/images/car_audio_fade_feature_hld.png" alt="High-level design for system-enforced fade feature" class="android-image-dark-theme-background"> </p> <p><strong>Figure 2.</strong> High-level design for system-enforced fade feature.</p> <ul> <li>
+<strong>Targeted fading:</strong> System enforcement of fading in Android 15 is specifically designed for situations where an app loses audio focus but continues to play audio.</li> <li>
+<strong>Fade-out mechanism:</strong> When an app loses audio focus to a new requesting app: <ul> <li>The audio framework automatically fades out the losing app audio.</li> <li>Following the fade-out, the audio stream is silenced by the system.</li> <li>The app then receives an audio focus loss notification.</li> <li>Misbehaving apps are silenced until they regain the audio focus.</li> <li>The default logic is to fade in the apps that are faded out after 2 seconds. However, OEMs can configure this to any timeout value.</li> <li>The audio framework uses the OEM configs for both fade-out and fade-in operations.</li> </ul>
+</li> <li>
+<p><strong>OEM configuration file:</strong> Android 15 includes a new configuration file, <code translate="no" dir="ltr">car_audio_fade_configuration.xml</code>:</p> <ul> <li>This file allows OEMs to define criteria for when the system's audio focus enforcement is applied to a losing app.</li> <li>The audio framework enforces fade-out and silencing only if the losing app matches the OEM-defined rules in this XML file.</li> <li>This provides a mechanism for OEMs to customize the feature's behavior based on app characteristics or audio usage types.</li> </ul>
+</li> <li>
+<p><strong>Feature control with RRO:</strong> A new runtime resource overlay (RRO) feature flag, <code translate="no" dir="ltr">audioUseFadeManagerConfiguration</code>, has been introduced to enable or disable this feature:</p> <ul> <li>The feature is disabled by default.</li> <li>To activate system-enforced audio focus loss, OEMs must set this flag to <code translate="no" dir="ltr">true</code>.</li> <li>Although car audio framework expects valid fade config definitions when the flag is enabled, the absence of the such definitions does not automatically result in a fatal exception.</li> <li>All apps of fade configs must have matching fade definitions. It's a fatal error to call out a fade config (by its name) as part of car audio configuration without providing a valid definition.</li> <li>When the flag is disabled, all fade config definitions and any config references are ignored.</li> </ul>
+</li> </ul> <h3 id="fade-manager-config">Fade manager configuration</h3> <p>The Android 15 audio framework introduces a unified <code translate="no" dir="ltr">FadeManagerConfiguration</code> to provide OEMs with granular control over audio fading behavior. This framework is illustrated in Figure 3:</p> <p><img src="https://source.android.com/static/docs/automotive/images/fade_manager_configuration_bd.png" alt="Fade manager configuration" class="android-image-dark-theme-background"> </p> <p><strong>Figure 3.</strong> Fade manager configuration.</p> <p>This configuration includes:</p> <ul> <li>
+<strong>Fade transition properties:</strong> Settings for both fade-out and fade-in. <ul> <li>Can be defined with specific audio usages or attributes.</li> <li>Allows for custom duration settings.</li> <li>These settings are used to construct <a href="https://developer.android.com/reference/android/media/VolumeShaper.Configuration.html"><code translate="no" dir="ltr">VolumeShaper.Configuration</code></a>.</li> </ul>
+</li> <li>
+<strong>Fading policies:</strong> Rules governing when fading occurs. <ul> <li>A global toggle to enable or disable fading.</li> <li>A configurable list of fadeable audio usages (eligible for fade-out upon losing focus).</li> <li>Exclusion lists (unfadeable) prevent critical or designated audio sources from being faded. These lists can be based on: <ul> <li>Content types</li> <li>Audio attributes</li> <li>App UIDs (can be set during runtime only)</li> </ul>
+</li> </ul>
+</li> </ul> <h3 id="enforced-audio-focus-loss-oem-config">OEM configurations</h3> <p>In this section, we look at available OEM customizations.</p> <h4 id="car-audio-fade-config-xml">Car audio fade configuration XML file</h4> <p>Android 15 introduces a new configuration file, <code translate="no" dir="ltr">car_audio_fade_configuration.xml</code>, enabling extensive OEM customization of audio fade-out behavior during focus loss.</p> <ul> <li>This XML file allows for the definition of multiple distinct fade configurations, each requiring a unique name for cross-referencing within <code translate="no" dir="ltr">car_audio_configuration.xml</code>.</li> <li>These configurations can be flexibly applied across different audio zones and zone configs.</li> <li>Notably, each fade configuration solely accepts duration values in milliseconds, which the system then uses to internally generate the corresponding <a href="https://developer.android.com/reference/android/media/VolumeShaper.Configuration.html"><code translate="no" dir="ltr">VolumeShaper.Configuration</code></a>.</li> </ul> <p>For practical implementation guidance, consult the example configurations provided for the emulator located at <code translate="no" dir="ltr">device/generic/car/emulator/audio/car_audio_fade_configuration.xml</code>.</p> <section class="expandable"> <h4 class="showalways" id="show-car-audio-fade-configuration-example-from-emulator">Show car audio fade configuration example from emulator</h4> 
+<pre>
+&lt;carAudioFadeConfiguration version="1"&gt;
+    &lt;configs&gt;
+        &lt;config name="relaxed fading" defaultFadeOutDurationInMillis="800" defaultFadeInDurationInMillis="500"&gt;
+            &lt;fadeState value="1" /&gt;
+            &lt;fadeableUsages&gt;
+                &lt;usage value="AUDIO_USAGE_MEDIA" /&gt;
+                &lt;usage value="AUDIO_USAGE_GAME" /&gt;
+                &lt;usage value="AUDIO_USAGE_ASSISTANCE_SONIFICATION" /&gt;
+                &lt;usage value="AUDIO_USAGE_ASSISTANCE_ACCESSIBILITY" /&gt;
+                &lt;usage value="AUDIO_USAGE_ASSISTANCE_NAVIGATION_GUIDANCE" /&gt;
+                &lt;usage value="AUDIO_USAGE_ASSISTANT" /&gt;
+                &lt;usage value="AUDIO_USAGE_NOTIFICATION" /&gt;
+                &lt;usage value="AUDIO_USAGE_ANNOUNCEMENT"/&gt;
+            &lt;/fadeableUsages&gt;
+            &lt;unfadeableContentTypes&gt;
+                &lt;contentType value="AUDIO_CONTENT_TYPE_SPEECH" /&gt;
+            &lt;/unfadeableContentTypes&gt;
+            &lt;unfadeableAudioAttributes&gt;
+                &lt;audioAttributes&gt;
+                    &lt;audioAttribute usage="AUDIO_USAGE_MEDIA" tags="oem_specific_tag1" /&gt;
+                &lt;/audioAttributes&gt;
+            &lt;/unfadeableAudioAttributes&gt;
+            &lt;fadeOutConfigurations&gt;
+                &lt;fadeConfiguration fadeDurationMillis="500"&gt;
+                    &lt;audioAttributes&gt;
+                        &lt;usage value="AUDIO_USAGE_MEDIA" /&gt;
+                        &lt;usage value="AUDIO_USAGE_GAME" /&gt;
+                        &lt;audioAttribute usage="AUDIO_USAGE_ASSISTANT" tags="oem_specific_tag2" /&gt;
+                    &lt;/audioAttributes&gt;
+                &lt;/fadeConfiguration&gt;
+                &lt;fadeConfiguration fadeDurationMillis="800"&gt;
+                    &lt;audioAttributes&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANCE_SONIFICATION" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANCE_ACCESSIBILITY" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANCE_NAVIGATION_GUIDANCE" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANT" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ANNOUNCEMENT"/&gt;
+                    &lt;/audioAttributes&gt;
+                &lt;/fadeConfiguration&gt;
+            &lt;/fadeOutConfigurations&gt;
+            &lt;fadeInConfigurations&gt;
+                &lt;fadeConfiguration fadeDurationMillis="1000"&gt;
+                    &lt;audioAttributes&gt;
+                        &lt;usage value="AUDIO_USAGE_MEDIA" /&gt;
+                        &lt;usage value="AUDIO_USAGE_GAME" /&gt;
+                        &lt;audioAttribute usage="AUDIO_USAGE_ASSISTANT" tags="oem_specific_tag2" /&gt;
+                    &lt;/audioAttributes&gt;
+                &lt;/fadeConfiguration&gt;
+                &lt;fadeConfiguration fadeDurationMillis="800"&gt;
+                    &lt;audioAttributes&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANCE_SONIFICATION" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANCE_ACCESSIBILITY" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANCE_NAVIGATION_GUIDANCE" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANT" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ANNOUNCEMENT"/&gt;
+                    &lt;/audioAttributes&gt;
+                &lt;/fadeConfiguration&gt;
+            &lt;/fadeInConfigurations&gt;
+        &lt;/config&gt;
+        &lt;config name="aggressive fading"&gt;
+            &lt;fadeState value="1" /&gt;
+            &lt;fadeableUsages&gt;
+                &lt;usage value="AUDIO_USAGE_MEDIA" /&gt;
+                &lt;usage value="AUDIO_USAGE_GAME" /&gt;
+                &lt;usage value="AUDIO_USAGE_ASSISTANCE_SONIFICATION" /&gt;
+                &lt;usage value="AUDIO_USAGE_ASSISTANCE_ACCESSIBILITY" /&gt;
+                &lt;usage value="AUDIO_USAGE_ASSISTANCE_NAVIGATION_GUIDANCE" /&gt;
+                &lt;usage value="AUDIO_USAGE_ASSISTANT" /&gt;
+                &lt;usage value="AUDIO_USAGE_NOTIFICATION" /&gt;
+                &lt;usage value="AUDIO_USAGE_ANNOUNCEMENT"/&gt;
+            &lt;/fadeableUsages&gt;
+            &lt;unfadeableContentTypes&gt;
+                &lt;contentType value="AUDIO_CONTENT_TYPE_SPEECH" /&gt;
+            &lt;/unfadeableContentTypes&gt;
+            &lt;unfadeableAudioAttributes&gt;
+                &lt;audioAttributes&gt;
+                    &lt;audioAttribute usage="AUDIO_USAGE_MEDIA" tags="oem_specific_tag1" /&gt;
+                    &lt;audioAttribute usage="AUDIO_USAGE_ASSISTANT" tags="oem_projection_service" /&gt;
+                &lt;/audioAttributes&gt;
+            &lt;/unfadeableAudioAttributes&gt;
+            &lt;fadeOutConfigurations&gt;
+                &lt;fadeConfiguration fadeDurationMillis="150"&gt;
+                    &lt;audioAttributes&gt;
+                        &lt;usage value="AUDIO_USAGE_MEDIA" /&gt;
+                        &lt;usage value="AUDIO_USAGE_GAME" /&gt;
+                    &lt;/audioAttributes&gt;
+                &lt;/fadeConfiguration&gt;
+                &lt;fadeConfiguration fadeDurationMillis="400"&gt;
+                    &lt;audioAttributes&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANCE_SONIFICATION" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANCE_ACCESSIBILITY" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANCE_NAVIGATION_GUIDANCE" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANT" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ANNOUNCEMENT"/&gt;
+                    &lt;/audioAttributes&gt;
+                &lt;/fadeConfiguration&gt;
+            &lt;/fadeOutConfigurations&gt;
+            &lt;fadeInConfigurations&gt;
+                &lt;fadeConfiguration fadeDurationMillis="300"&gt;
+                    &lt;audioAttributes&gt;
+                        &lt;usage value="AUDIO_USAGE_MEDIA" /&gt;
+                        &lt;usage value="AUDIO_USAGE_GAME" /&gt;
+                    &lt;/audioAttributes&gt;
+                &lt;/fadeConfiguration&gt;
+                &lt;fadeConfiguration fadeDurationMillis="550"&gt;
+                    &lt;audioAttributes&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANCE_SONIFICATION" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANCE_ACCESSIBILITY" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANCE_NAVIGATION_GUIDANCE" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANT" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ANNOUNCEMENT"/&gt;
+                    &lt;/audioAttributes&gt;
+                &lt;/fadeConfiguration&gt;
+            &lt;/fadeInConfigurations&gt;
+        &lt;/config&gt;
+        &lt;config name="disabled fading"&gt;
+            &lt;fadeState value="0" /&gt;
+        &lt;/config&gt;
+        &lt;config name="dynamic device fading" defaultFadeOutDurationInMillis="800" defaultFadeInDurationInMillis="500"&gt;
+            &lt;fadeState value="1" /&gt;
+            &lt;fadeableUsages&gt;
+                &lt;usage value="AUDIO_USAGE_ASSISTANCE_SONIFICATION" /&gt;
+                &lt;usage value="AUDIO_USAGE_ASSISTANCE_ACCESSIBILITY" /&gt;
+                &lt;usage value="AUDIO_USAGE_ASSISTANCE_NAVIGATION_GUIDANCE" /&gt;
+                &lt;usage value="AUDIO_USAGE_ASSISTANT" /&gt;
+                &lt;usage value="AUDIO_USAGE_NOTIFICATION" /&gt;
+                &lt;usage value="AUDIO_USAGE_ANNOUNCEMENT"/&gt;
+            &lt;/fadeableUsages&gt;
+            &lt;unfadeableContentTypes&gt;
+                &lt;contentType value="AUDIO_CONTENT_TYPE_SPEECH" /&gt;
+            &lt;/unfadeableContentTypes&gt;
+            &lt;unfadeableAudioAttributes&gt;
+                &lt;audioAttributes&gt;
+                    &lt;audioAttribute usage="AUDIO_USAGE_MEDIA" tags="oem_specific_tag1" /&gt;
+                &lt;/audioAttributes&gt;
+            &lt;/unfadeableAudioAttributes&gt;
+            &lt;fadeOutConfigurations&gt;
+                &lt;fadeConfiguration fadeDurationMillis="500"&gt;
+                    &lt;audioAttributes&gt;
+                        &lt;audioAttribute usage="AUDIO_USAGE_ASSISTANT" tags="oem_specific_tag2" /&gt;
+                    &lt;/audioAttributes&gt;
+                &lt;/fadeConfiguration&gt;
+                &lt;fadeConfiguration fadeDurationMillis="800"&gt;
+                    &lt;audioAttributes&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANCE_SONIFICATION" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANCE_ACCESSIBILITY" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANCE_NAVIGATION_GUIDANCE" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANT" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ANNOUNCEMENT"/&gt;
+                    &lt;/audioAttributes&gt;
+                &lt;/fadeConfiguration&gt;
+            &lt;/fadeOutConfigurations&gt;
+            &lt;fadeInConfigurations&gt;
+                &lt;fadeConfiguration fadeDurationMillis="1000"&gt;
+                    &lt;audioAttributes&gt;
+                        &lt;audioAttribute usage="AUDIO_USAGE_ASSISTANT" tags="oem_specific_tag2" /&gt;
+                    &lt;/audioAttributes&gt;
+                &lt;/fadeConfiguration&gt;
+                &lt;fadeConfiguration fadeDurationMillis="800"&gt;
+                    &lt;audioAttributes&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANCE_SONIFICATION" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANCE_ACCESSIBILITY" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANCE_NAVIGATION_GUIDANCE" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ASSISTANT" /&gt;
+                        &lt;usage value="AUDIO_USAGE_ANNOUNCEMENT"/&gt;
+                    &lt;/audioAttributes&gt;
+                &lt;/fadeConfiguration&gt;
+            &lt;/fadeInConfigurations&gt;
+        &lt;/config&gt;
+    &lt;/configs&gt;
+&lt;/carAudioFadeConfiguration&gt;
+</pre></section> <h4 id="car-apply-fade-configs">Car audio configuration XML file</h4> <p>Android 15 introduces an updated <code translate="no" dir="ltr">car_audio_configuration.xml</code> file, now at version 4, which incorporates new <code translate="no" dir="ltr">applyFadeConfigs</code> and <code translate="no" dir="ltr">fadeConfig</code> tags. The <code translate="no" dir="ltr">applyFadeConfigs</code> tag can contain multiple <code translate="no" dir="ltr">fadeConfig</code> definitions, allowing for flexible fade configuration. Each definition:</p> <ul> <li>Must include one default <code translate="no" dir="ltr">fadeConfig</code> designated with <code translate="no" dir="ltr">isDefault = true</code>.</li> <li>Can include several transient <code translate="no" dir="ltr">fadeConfig</code> definitions. These transient configurations are applied specifically during audio focus loss interactions, and only when the audio focus <em>gaining</em> app matches the criteria defined within the transient config.</li> </ul> <p>For practical implementation guidance, consult the example configurations provided for the emulator located at <code translate="no" dir="ltr">device/generic/car/emulator/audio/car_audio_configuration.xml</code>.</p> <section class="expandable"> <h4 class="showalways" id="show-car-audio-configuration-example-from-emulator">Show car audio configuration example from emulator</h4> 
+<pre>
+&lt;carAudioConfiguration version="4"&gt;
+    &lt;zones&gt;
+        &lt;zone name="primary zone" isPrimary="true" occupantZoneId="0"&gt;
+            &lt;zoneConfigs&gt;
+                &lt;zoneConfig name="primary zone config 0" isDefault="true"&gt;
+                    &lt;volumeGroups&gt;
+                    .....
+                    &lt;/volumeGroups&gt;
+                    &lt;applyFadeConfigs&gt;
+                            &lt;fadeConfig name="relaxed fading" isDefault="true"&gt; &lt;/fadeConfig&gt;
+                            &lt;fadeConfig name="aggressive fading"&gt;
+                                    &lt;audioAttributes&gt;
+                                          &lt;usage value="AUDIO_USAGE_VOICE_COMMUNICATION" /&gt;
+                                          &lt;usage value="AUDIO_USAGE_SAFETY" /&gt;
+                                  &lt;/audioAttributes&gt;
+                            &lt;/fadeConfig&gt;
+                            &lt;fadeConfig name="disabled fading"&gt;
+                                    &lt;audioAttributes&gt;
+                                          &lt;usage value="AUDIO_USAGE_EMERGENCY" /&gt;
+                                    &lt;/audioAttributes&gt;
+                            &lt;/fadeConfig&gt;
+                    &lt;/applyFadeConfigs&gt;
+                  &lt;/zoneConfig&gt;
+            &lt;/zoneConfigs&gt;
+        &lt;/zone&gt;
+    &lt;/zones&gt;
+&lt;/carAudioConfiguration&gt;
+</pre></section> <h4 id="oem_audio_focus_service_extension">OEM audio focus service extension</h4> <p>OEMs who implement a custom car audio focus service have the flexibility to configure audio fade settings by including them within <code translate="no" dir="ltr">OemCarAudioFocusResult</code>. This can be achieved using the <code translate="no" dir="ltr">setAudioAttributesToCarAudioFadeConfigurationMap()</code> builder method:</p> 
+<pre>/** @see OemCarAudioFocusResult#getAudioAttributesToCarAudioFadeConfigurationMap() **/
+@NonNull
+public Builder setAudioAttributesToCarAudioFadeConfigurationMap(@NonNull
+        Map&lt;AudioAttributes, CarAudioFadeConfiguration&gt; attrsToCarAudioFadeConfig) {
+}
+</pre> <p>Notably, OEMs can choose to use either preconfigured boot-time fade settings or dynamically apply configurations through their custom audio focus service, offering adaptable control.</p> <h3 id="sequence-diagram">Sequence diagram</h3> <p>This sequence diagram illustrates the behavior following audio focus grant to <code translate="no" dir="ltr">App2</code> and the subsequent loss of audio focus by <code translate="no" dir="ltr">App1</code>:</p> <ul> <li>Upon the car audio service dispatching audio focus loss to <code translate="no" dir="ltr">App1</code>, the playback from <code translate="no" dir="ltr">App1</code> player undergoes a fade-out as defined by the active <code translate="no" dir="ltr">FadeManagerConfiguration</code>s. Once the fade-out operation is complete, <code translate="no" dir="ltr">App1</code> receives the standard audio focus loss callback.</li> <li>Optionally, the audio for <code translate="no" dir="ltr">App1</code> can be faded back in after a configurable duration. OEMs have the flexibility to set this duration through <code translate="no" dir="ltr">Builder#setFadeInDurationForUsage(int, long)</code> according to their specific product requirements.</li> </ul> <p><img src="https://source.android.com/static/docs/automotive/images/car_fade_feature_sequence.png" alt="Sequence diagram for car audio fade feature" class="android-image-dark-theme-background"> </p> <p><strong>Figure 4.</strong> Sequence diagram for car audio fade feature.</p> <h2 id="multi-zone_focus_management">Multi-zone focus management</h2> <p>For vehicles with multiple audio zones, audio focus is managed independently for each zone. As such, a request to one zone doesn't take into account what holds focus in other zones, nor does it cause focus holders in other zones to lose focus. With this, the main cabin's focus can be managed separately from a rear seat entertainment system, thereby not interrupting the audio playback in one zone by changes made in focus to another.</p> <p>For all apps, the <code translate="no" dir="ltr">CarAudioService</code> automatically manages focus. A focus request's audio zone is determined by its associated <code translate="no" dir="ltr">UserId</code> or <code translate="no" dir="ltr">UID</code> (for details, see <a href="../../../automotive/audio/audio-multizone-routing">Multi-zone audio routing</a>).</p> <h3 id="request_audio_from_multiple_zones_concurrently">Request audio from multiple zones concurrently</h3> <p>If an app wants to play audio in multiple zones concurrently, it must request focus for each zone by including <code translate="no" dir="ltr">AUDIOFOCUS_EXTRA_REQUEST_ZONE_ID</code> in the bundle:</p> 
+<pre>//Create attribute with bundle and AUDIOFOCUS_EXTRA_REQUEST_ZONE_ID
+Bundle bundle = new Bundle();
+bundle.putInt(CarAudioManager.AUDIOFOCUS_EXTRA_REQUEST_ZONE_ID,
+               zoneId);
+
+AudioAttributes attributesWithZone = new AudioAttributes.Builder()
+     .setUsage(AudioAttributes.USAGE_MEDIA)
+     .addBundle(bundle)
+     .build();
+
+//Create focus request using built attributesWithZone
+</pre> <p>This bundle parameter allows the requestor to override the automatic audio zone mappings to instead use the specified zone ID. Therefore, an app could issue separate requests for different audio zones.</p> <h2 id="hal_audio_focus">HAL audio focus</h2> <p>Starting in Android 11, the HAL is enabled to request focus on behalf of external streams. While optional, use of these APIs is highly encouraged to enable external sounds to be optimal participants in the Android ecosystem and to provide a seamless user experience.</p> <p>The HAL makes the final determination around which sounds should get priority. To this extent, emergency and safety critical sounds should be played regardless of whether or not the HAL is granted audio focus and should continue to be played as appropriate even if the HAL loses audio focus. The same is true for any sounds required by government regulations.</p> <p>The HAL should proactively mute Android streams as appropriate when playing emergency or safety-critical sounds to ensure they are heard clearly.</p> <h3 id="audiocontrol20">AudioControl@2.0</h3> <p>Version 2.0 of AudioControl HAL introduces these new APIs:</p> <table class="cyan"> <th>API</th> <th>Purpose</th> <tr> <td><code translate="no" dir="ltr">IAudioControl#registerFocusListener</code></td> <td>Registers an instance of <code translate="no" dir="ltr">IFocusListener</code> with the AudioControl HAL. This listener enables the HAL to request and abandon audio focus. The HAl provides an <code translate="no" dir="ltr">ICloseHandle</code> instance to be used by Android to unregister the listener.</td> </tr> <tr class="alt"> <td><code translate="no" dir="ltr">IAudioControl#onAudioFocusChange</code></td> <td>Notifies the HAL of changes in status to focus requests made by the HAL through the <code translate="no" dir="ltr">IFocusListener</code>, including responses to initial focus requests.</td> </tr> <tr> <td><code translate="no" dir="ltr">IFocusListener#requestAudioFocus</code></td> <td> Requests focus on behalf of the HAL for a specified usage, zone Id, and focus gain type.</td> </tr> <tr class="alt"> <td><code translate="no" dir="ltr">IFocusListener#abandonAudioFocus</code></td> <td>Abandons existing HAL focus requests for the specified usage and zone Id.</td> </tr> </table> <p>The HAL can have multiple focus requests at the same time, but is limited to one request per usage and zone Id pairing. Android assumes the HAL immediately starts playing sounds for a usage once a request has been made and continutes to do so until it abandons focus.</p> <p>Other than <code translate="no" dir="ltr">registerFocusListener</code>, these requests are <code translate="no" dir="ltr">oneway</code> to ensure that Android doesn't delay the HAL while a focus request is processed. The HAL should <strong>not</strong> wait to gain focus before playing safety-critical sounds. It's optional for the HAL to listen for and respond to changes in audio focus through <code translate="no" dir="ltr">IAudioControl#onAudioFocusChange</code>.</p> <h2 id="oem_car_audio_focus_service">OEM car audio focus service</h2> <p>In Android 14, AAOS introduced the car OEM plugin services to enable configurability for some car components. For <a href="../../../automotive/audio/car-audio-plugin">Car Audio Plugin Service</a>, the plugin service allows for OEMs to manage focus requests intercepted by the car audio service. This gives OEMs more flexibility in terms of managing focus as required by rules and regulations. As such, audio focus interaction may differ between manufacturers, and from region to region. The basic premise for audio focus still holds, that apps should still request focus for better management audio to enhance user experience. In general, certain rules still apply for audio focus request by apps:</p> <ul> <li><p>Without any standing, high priority audio focus (including a phone call, emergency alert, or safety notification) apps should be able to gain audio focus either transiently or permanently.</p></li> <li>
+<p>While a media focus is active:</p> <ul> <li><p>Apps requesting call usage focus should be able to receive the call either concurrently or exclusively.</p></li> <li><p>Apps requesting navigation usage focus should be able to receive navigation focus either concurrently or exclusively.</p></li> <li><p>Apps requesting assistant usage focus should be able to receive usage focus either concurrently or exclusively.</p></li> </ul>
+</li> <li><p>While standing high priority audio focus (including a phone call, emergency alert, or safety notification) apps are active, any incoming delayed audio focus request should be granted or delayed as needed.</p></li> </ul> <p>While these suggestions are not exhaustive, they can help apps requesting focus to obtain focus if no active high priority sounds exist. Even while high priority sounds are active, delayed focus requests should still be respected and should be able to gain focus when the high priority sound stops.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/devices/automotive/audio/audio-focus" class="_attribution-link">https://source.android.com/docs/devices/automotive/audio/audio-focus</a>
+  </p>
+</div>

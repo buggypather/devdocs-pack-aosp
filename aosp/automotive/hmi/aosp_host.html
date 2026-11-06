@@ -1,0 +1,58 @@
+<h1>Integrate the AOSP host</h1>  <p>The Android Open Source Project (AOSP) Automotive App Host is a part of the Car App Library used by third-party (3P) developers to enable apps for Android Automotive. The App Host is a system app that allows 3P car apps to render OEM-styled user interface (UI) components on its behalf. </p> <p>To run 3P apps, both the 3P app and the AOSP Automotive App Host must be installed:</p> <ul> <li>Automotive App Host provides 3P apps with a a set of UI templates and components optimized for vehicles, including capabilities like usability and safety.</li> <li>OEMs can style these UI templates and components.</li> <li>
+<strong>The result?</strong> 3P apps are visually well-integrated into the infotainment system of the OEM.</li> </ul> <p>This page explains how to generate the AOSP Automotive App Host from the Gradle project in the <code translate="no" dir="ltr">ub-automotive</code> branch and then how to integrate the AOSP Automotive App Host into car targets.</p> <h2 id="check-out-the-code">Check out the code</h2> <p>To check out the unbundled code:</p> <ol> <li>Run the following command: 
+<pre>repo init -u https://android.googlesource.com/platform/manifest -b ub-automotive-master
+repo sync -j4</pre>
+</li> <li>
+<p>To learn more about working with AOSP source code, see <a href="../../setup/download#initialize_the_repo_client">Initialize the Repo client</a>.</p> </li> <li>Install <a href="https://developer.android.com/studio">Android Studio</a>.</li> </ol> <h2 id="create-the-aosp-host-apk">Create the AOSP host APK</h2> <ol> <li>Check out <code translate="no" dir="ltr">ub-automotive</code> and then open the Gradle project under <code translate="no" dir="ltr">packages/apps/Car/Templates/Host</code>.</li> <li>To configure the project with the Android SDK, configure your project's <code translate="no" dir="ltr">local.properties</code> file. You can find the path under Android SDK Settings in Android Studio. 
+<pre>sdk.dir=${path_to_android_sdk_location}</pre> </li> <li>Create the host APK as a typical Gradle project. For example, run the <code translate="no" dir="ltr">gradle</code> command: 
+<pre>./gradlew :app:assembleDebug</pre> <p>The APK file is located in: </p>
+
+<pre>packages/apps/Car/Templates/Host/app/build/outputs/apk/debug/app-debug.apk</pre> </li> </ol> <h2 id="embed-the-aosp-host">Embed the AOSP host</h2> <ol> <li>Create a new <code translate="no" dir="ltr">Android.mk</code> file to include the following content: 
+<pre>LOCAL_PATH := $(my-dir)
+################## Start of AOSPHost target ##################
+include $(CLEAR_VARS)
+LOCAL_MODULE := CarAOSPHost
+LOCAL_LICENSE_KINDS := legacy_notice
+LOCAL_LICENSE_CONDITIONS := notice
+LOCAL_MODULE_OWNER := google
+LOCAL_SRC_FILES := AOSPHost.apk
+LOCAL_MODULE_CLASS := APPS
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_SUFFIX := $(COMMON_ANDROID_PACKAGE_SUFFIX)
+LOCAL_BUILT_MODULE_STEM := package.apk
+LOCAL_CERTIFICATE := PRESIGNED
+LOCAL_PRIVILEGED_MODULE := true
+LOCAL_PRODUCT_MODULE := true
+LOCAL_DEX_PREOPT := false
+include $(BUILD_PREBUILT)</pre> </li> <li>Rename the <code translate="no" dir="ltr">app-debug.apk</code> to <code translate="no" dir="ltr">AOSPHost.apk</code> and put the APK in the same folder as <code translate="no" dir="ltr">Android.mk</code>.</li> <li>Add the <code translate="no" dir="ltr">CarAOSPHost</code> module to your targets as <code translate="no" dir="ltr">PRODUCT_PACKAGES</code>: 
+<pre>PRODUCT_PACKAGES += \
+   CarAOSPHost \</pre> </li> </ol> <h2 id="add-the-permissions-config">Add the permissions config</h2> <ol> <li>Create a file called <code translate="no" dir="ltr">com.android.car.templates.host.xml</code> to contain the following: 
+<pre>&lt;permissions&gt;
+    &lt;!-- Rename the package to com.android.car.templates.host --&gt;
+    &lt;privapp-permissions package="com.android.car.templates.host"&gt;
+        &lt;!-- To be able to display activities in the cluster --&gt;
+        &lt;permission name="android.car.permission.CAR_DISPLAY_IN_CLUSTER" /&gt;
+
+        &lt;!-- To be able to show navigation state (turn by turn directions) in the cluster.--&gt;
+        &lt;permission name="android.car.permission.CAR_NAVIGATION_MANAGER" /&gt;
+
+        &lt;!-- To be considered a system-approved host --&gt;
+        &lt;permission name="android.car.permission.TEMPLATE_RENDERER" /&gt;
+    &lt;/privapp-permissions&gt;
+
+    &lt;!-- Declare support for templated applications. --&gt;
+    &lt;feature name="android.software.car.templates_host" /&gt;
+&lt;/permissions&gt;</pre> </li> <li>In your target, add the config file to your targets: 
+<pre>PRODUCT_COPY_FILES += \
+    &lt;the file root&gt;/com.android.car.templates.host.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/com.android.car.templates.host.xml</pre> </li> </ol> <h2 id="build-the-target">Build the target</h2> <p>When you build the target, the host is installed and permission is granted: </p>
+
+<pre>      …
+      android.car.permission.CAR_NAVIGATION_MANAGER: granted=true
+      android.car.permission.CAR_DISPLAY_IN_CLUSTER: granted=true
+      android.car.permission.TEMPLATE_RENDERER: granted=true
+      …</pre> <aside class="note"><strong>Note:</strong> The permission <code translate="no" dir="ltr">android.car.permission.TEMPLATE_RENDERER</code> is <em>only</em> available after Android API level 32.</aside> <h2 id="test-the-integration">Test the integration</h2> <p>To build and install the samples, see this GitHub project, <a href="https://github.com/android/car-samples/tree/main/car_app_library">car-samples/car_app_library</a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/hmi/aosp_host" class="_attribution-link">https://source.android.com/docs/automotive/hmi/aosp_host</a>
+  </p>
+</div>

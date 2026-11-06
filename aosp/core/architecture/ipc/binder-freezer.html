@@ -1,0 +1,122 @@
+<h1>Handle cached and frozen apps</h1>  <p>When using binder to communicate between processes, take special care when the remote process is in a cached or frozen state. Calls into cached or frozen apps can cause them to crash or consume resources unnecessarily.</p> <h2 id="cached-frozen-app-states">Cached and frozen app states</h2> <p>Android maintains apps in different states to manage system resources like memory and CPU.</p> <h3 id="cached-state">Cached state</h3> <p>When an app has no user-visible components, such as activities or services, it can be moved to the <em>cached</em> state. See <a href="https://developer.android.com/guide/components/activities/process-lifecycle">Processes and app lifecycle</a> for details. Cached apps are kept in memory in case the user switches back to them, but they aren't expected to be actively working.</p> <p>When binding from one app process to another, such as using <a href="https://developer.android.com/reference/android/content/Context#bindService(android.content.Intent,%20android.content.ServiceConnection,%20int)"><code translate="no" dir="ltr">bindService</code></a>, the process state of the server process is elevated to be at least as important as the client process (except when <a href="https://developer.android.com/reference/android/content/Context#BIND_WAIVE_PRIORITY"><code translate="no" dir="ltr">Context#BIND_WAIVE_PRIORITY</code></a> is specified). For example, if the client isn't in the cached state, neither is the server.</p> <p>Conversely, the state of a server process doesn't determine that of its clients. So a server might have binder connections to clients, most commonly in the form of callbacks, and while the remote process is in the cached state, the server isn't cached.</p> <p>When designing APIs where callbacks originate in an elevated process and are delivered to apps, consider pausing dispatch of callbacks when an app enters the cached state, and resuming when it exits this state. This prevents unnecessary work in cached app processes.</p> <p>To track when apps enter or exit the cached state, use <code translate="no" dir="ltr">ActivityManager.addOnUidImportanceListener</code>:</p> <div> <section><p class="_code-tab"><strong>Java</strong></p>
+
+<pre data-language="java">// in ActivityManager or Context
+activityManager.addOnUidImportanceListener(
+    new ActivityManager.OnUidImportanceListener() { ... },
+    IMPORTANCE_CACHED);
+</pre></section> <section><p class="_code-tab"><strong>Kotlin</strong></p>
+
+<pre data-language="kotlin">// in ActivityManager or Context
+activityManager.addOnUidImportanceListener({ uid, importance -&gt;
+  // ...
+}, IMPORTANCE_CACHED)
+</pre></section> </div> <h3 id="frozen-state">Frozen state</h3> <p>The system can <em>freeze</em> a cached app to conserve resources. When an app is frozen, it receives zero CPU time and can't do any work. For more details, see <a href="../../perf/cached-apps-freezer">Cached apps freezer</a>.</p> <p>When a process sends a synchronous (not <code translate="no" dir="ltr">oneway</code>) binder transaction to another remote process that is frozen, the system kills the remote process. This prevents the calling thread in the calling process from hanging indefinitely while waiting for the remote process to be unfrozen, which could cause thread starvation or deadlocks in the calling app.</p> <p>When a process sends an asynchronous (<code translate="no" dir="ltr">oneway</code>) binder transaction to a frozen app (commonly by notifying a callback, which is typically a <code translate="no" dir="ltr">oneway</code> method), the transaction is buffered until the remote process is unfrozen. If the buffer overflows, the recipient app process can crash. Additionally, buffered transactions might become stale by the time the app process is unfrozen and processes them.</p> <p>To avoid overwhelming apps with stale events or overflowing their buffers, you <strong>must</strong> pause dispatching callbacks while the recipient app's process is frozen.</p> <p>To track when apps are frozen or unfrozen, use <a href="https://developer.android.com/reference/android/os/IBinder#addFrozenStateChangeCallback(java.util.concurrent.Executor,%20android.os.IBinder.FrozenStateChangeCallback)"><code translate="no" dir="ltr">IBinder.addFrozenStateChangeCallback</code></a>:</p> <div> <section><p class="_code-tab"><strong>Java</strong></p>
+
+<pre data-language="java">// The binder token of the remote process
+IBinder binder = service.getBinder();
+
+// Keep track of frozen state
+AtomicBoolean remoteFrozen = new AtomicBoolean(false);
+
+// Update remoteFrozen when the remote process freezes or unfreezes
+binder.addFrozenStateChangeCallback(
+    myExecutor,
+    new IBinder.FrozenStateChangeCallback() {
+        @Override
+        public void onFrozenStateChanged(boolean isFrozen) {
+            remoteFrozen.set(isFrozen);
+        }
+    });
+
+// When dispatching callbacks to the remote process, pause dispatch if frozen:
+if (!remoteFrozen.get()) {
+    // dispatch callback to remote process
+}
+</pre></section> <section><p class="_code-tab"><strong>Kotlin</strong></p>
+
+<pre data-language="kotlin">// The binder token of the remote process
+val binder: IBinder = service.getBinder()
+
+// Keep track of frozen state
+val remoteFrozen = AtomicBoolean(false)
+
+// Update remoteFrozen when the remote process freezes or unfreezes
+binder.addFrozenStateChangeCallback(myExecutor) { isFrozen -&gt;
+    remoteFrozen.set(isFrozen)
+}
+
+// When dispatching callbacks to the remote process, pause dispatch if frozen:
+if (!remoteFrozen.get()) {
+    // dispatch callback to remote process
+}
+</pre></section> <section><p class="_code-tab"><strong>C++</strong></p>
+<p>For platform code using the C++ binder APIs:</p> 
+<pre data-language="cpp">#include &lt;binder/Binder.h&gt;
+#include &lt;binder/IBinder.h&gt;
+
+// The binder token of the remote process
+android::sp&lt;android::IBinder&gt; binder = service-&gt;getBinder();
+
+// Keep track of frozen state
+std::atomic&lt;bool&gt; remoteFrozen = false;
+
+// Define a callback class
+class MyFrozenStateCallback : public android::IBinder::FrozenStateChangeCallback {
+public:
+    explicit MyFrozenStateCallback(std::atomic&lt;bool&gt;* frozenState) : mFrozenState(frozenState) {}
+    void onFrozenStateChanged(bool isFrozen) override {
+        mFrozenState-&gt;store(isFrozen);
+    }
+private:
+    std::atomic&lt;bool&gt;* mFrozenState;
+};
+
+// Update remoteFrozen when the remote process freezes or unfreezes
+if (binder != nullptr) {
+    binder-&gt;addFrozenStateChangeCallback(android::sp&lt;android::IBinder::FrozenStateChangeCallback&gt;::make(
+        new MyFrozenStateCallback(&amp;remoteFrozen)));
+}
+
+// When dispatching callbacks to the remote process, pause dispatch if frozen:
+if (!remoteFrozen.load()) {
+    // dispatch callback to remote process
+}
+</pre></section> </div> <h2 id="use-remotecallbacklist">Use RemoteCallbackList</h2> <p>The <a href="https://developer.android.com/reference/android/os/RemoteCallbackList"><code translate="no" dir="ltr">RemoteCallbackList</code></a> class is a helper for managing lists of <code translate="no" dir="ltr">IInterface</code> callbacks that remote processes register. This class automatically handles binder death notifications and provides options for handling callbacks to frozen apps.</p> <p>When building <code translate="no" dir="ltr">RemoteCallbackList</code>, you can specify a frozen callee policy:</p> <ul> <li>
+<code translate="no" dir="ltr">FROZEN_CALLEE_POLICY_DROP</code>: Callbacks to frozen apps are silently dropped. Use this policy when events that happened while the app was cached aren't important to the app, for example, real-time sensor events.</li> <li>
+<code translate="no" dir="ltr">FROZEN_CALLEE_POLICY_ENQUEUE_MOST_RECENT</code>: If multiple callbacks are broadcast while an app is frozen, only the most recent one is enqueued and delivered when the app is unfrozen. This is useful for state-based callbacks where only the most recent state update matters, for example, a callback notifying the app of the current media volume.</li> <li>
+<code translate="no" dir="ltr">FROZEN_CALLEE_POLICY_ENQUEUE_ALL</code>: All callbacks broadcast while an app is frozen are enqueued and delivered when the app is unfrozen. Be cautious with this policy, because it can lead to buffer overflows if too many callbacks are enqueued, or to the accumulation of stale events.</li> </ul> <p>The following example shows how to create and use a <code translate="no" dir="ltr">RemoteCallbackList</code> instance that drops callbacks to frozen apps:</p> <div> <section><p class="_code-tab"><strong>Java</strong></p>
+
+<pre data-language="java">RemoteCallbackList&lt;IMyCallbackInterface&gt; callbacks =
+        new RemoteCallbackList.Builder&lt;IMyCallbackInterface&gt;(
+                        RemoteCallbackList.FROZEN_CALLEE_POLICY_DROP)
+                .setExecutor(myExecutor)
+                .build();
+
+// Registering a callback:
+callbacks.register(callback);
+
+// Broadcasting to all registered callbacks:
+callbacks.broadcast((callback) -&gt; callback.onSomeEvent(eventData));
+</pre></section> <section><p class="_code-tab"><strong>Kotlin</strong></p>
+
+<pre data-language="kotlin">val callbacks =
+    RemoteCallbackList.Builder&lt;IMyCallbackInterface&gt;(
+        RemoteCallbackList.FROZEN_CALLEE_POLICY_DROP
+    )
+        .setExecutor(myExecutor)
+        .build()
+
+// Registering a callback:
+callbacks.register(callback)
+
+// Broadcasting to all registered callbacks:
+callbacks.broadcast { callback -&gt; callback.onSomeEvent(eventData) }
+</pre></section> </div> <p>If you use <code translate="no" dir="ltr">FROZEN_CALLEE_POLICY_DROP</code>, the system invokes <code translate="no" dir="ltr">callback.onSomeEvent()</code> only if the process hosting the callback isn't frozen.</p> <h2 id="system-services-and-app-interactions">System services and app interactions</h2> <p>System services often interact with many different apps using binder. Because apps can enter cached and frozen states, system services must take special care to handle these interactions gracefully to help maintain system stability and performance.</p> <p>System services already need to handle situations where app processes are killed for various reasons. This involves stopping work on their behalf and not attempting to continue delivering callbacks to dead processes. The consideration of apps being frozen is an extension of this existing monitoring responsibility.</p> <h3 id="track-app-states">Track app states from system services</h3> <p>System services, running in <code translate="no" dir="ltr">system_server</code> or as native daemons, can also use the APIs described earlier to track the importance and frozen state of app processes:</p> <ul> <li><p><code translate="no" dir="ltr">ActivityManager.addOnUidImportanceListener</code>: System services can register a listener to track UID importance changes. When receiving a binder call or callback from an app, the service can use <a href="https://developer.android.com/reference/android/os/Binder#getCallingUid()"><code translate="no" dir="ltr">Binder.getCallingUid()</code></a> to get the UID and correlate it with the importance state tracked by the listener. This lets system services know if the calling app is in a cached state.</p></li> <li><p><a href="https://developer.android.com/reference/android/os/IBinder#addFrozenStateChangeCallback(java.util.concurrent.Executor,%20android.os.IBinder.FrozenStateChangeCallback)"><code translate="no" dir="ltr">IBinder.addFrozenStateChangeCallback</code></a>: When a system service receives a binder object from an app (for example, as part of a registration for callbacks), it should register a <a href="https://developer.android.com/reference/android/os/IBinder.FrozenStateChangeCallback"><code translate="no" dir="ltr">FrozenStateChangeCallback</code></a> on that specific <a href="https://developer.android.com/reference/android/os/IBinder"><code translate="no" dir="ltr">IBinder</code></a> instance. This directly notifies the system service when the app process hosting that binder becomes frozen or unfrozen.</p></li> </ul> <h3 id="recs-system-services">Recommendations for system services</h3> <p>We recommend that <strong>all system services that might interact with apps track the cached and frozen state</strong> of the app processes they communicate with. Failing to do so can lead to:</p> <ul> <li>
+<strong>Resource consumption:</strong> Performing work for apps that are cached and not user-visible can waste system resources.</li> <li>
+<strong>App crashes:</strong> Synchronous binder calls to frozen apps crash them. Asynchronous binder calls to frozen apps lead to a crash if their async transaction buffer overflows.</li> <li>
+<strong>Unexpected app behavior:</strong> Unfrozen apps immediately receive any buffered asynchronous binder transactions that were sent to them while they were frozen. Apps can spend an indefinite period in the freezer, so buffered transactions can be very stale.</li> </ul> <p>System services often use <a href="https://developer.android.com/reference/android/os/RemoteCallbackList"><code translate="no" dir="ltr">RemoteCallbackList</code></a> to manage remote callbacks and automatically handle dead processes. To handle frozen apps, extend the existing usage of <code translate="no" dir="ltr">RemoteCallbackList</code> by applying a frozen callee policy as described in <a href="#use-remotecallbacklist">Use RemoteCallbackList</a>.</p> <aside class="note"><strong>Note:</strong><span> This page describes features that primarily apply to interactions with <em>app</em> processes. While native processes and various system daemons also have UIDs, they aren't subject to the same cached or frozen lifecycle states as user apps.</span></aside><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/ipc/binder-freezer" class="_attribution-link">https://source.android.com/docs/core/architecture/ipc/binder-freezer</a>
+  </p>
+</div>

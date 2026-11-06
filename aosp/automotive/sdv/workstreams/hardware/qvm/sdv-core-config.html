@@ -1,0 +1,141 @@
+<h1>QVM sample configuration for SDV Core</h1>  <aside class="warning"><strong>Warning:</strong><span> This sample configuration isn't intended for production use.</span></aside>
+<pre># Copyright (C) 2026 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+system sdv-1
+
+debug
+logger debug,info,error slog
+
+cpu sched 10 runmask 4
+cpu sched 10 runmask 5
+cpu sched 10 runmask 6
+cpu sched 10 runmask 7
+
+rom 0xc0000,0x40000
+ram 4096M,2048M
+
+unsupported register ignore
+
+load /guests/android/sdv-1/kernel
+load /guests/android/sdv-1/sdv.dtb
+initrd load /guests/android/sdv-1/vramdisk
+
+# Allocate 4K RAM to the guest at an arbitrary address (chosen by a fair dice roll) for storing the
+# test DICE handover. This memory region is referred by the Device Tree by a reserved-memory node
+# tagged by "google,open-dice", so the open-dice driver can pick it up and expose it to user space.
+ram 0xD1C30000,4K
+# Load the test DICE handover to the reserved guest memory. See external/open-dice/src/android.c
+# for its format.
+# Warning: This must not be used in a production system.
+data load 0xD1C30000,/guests/android/sdv-1/test_dice_handover
+
+cmdline "printk.devkmsg=on \
+firmware_class.path=/vendor/etc/ \
+init=/init \
+kfence.sample_interval=500 \
+loop.max_part=7 \
+androidboot.hardware=sdv \
+kernel.mac80211_hwsim.radios=0 \
+kernel.snd-hda-intel.enable=0 \
+kernel.vmw_vsock_virtio_transport_common.virtio_transport_max_vsock_pkt_buf_size=16384 \
+androidboot.fstab_suffix=sdv \
+buildvariant=userdebug \
+console=ttyAMA0 \
+panic=-1 \
+quiet \
+pci=noacpi \
+reboot=k \
+audit=1 \
+androidboot.init_rc=/system/etc/init/hw/init.sdv.rc \
+androidboot.boot_devices=vdevs/1c0f1000.virtio_blk \
+androidboot.serialno=SDV1 \
+androidboot.setupwizard_mode=OPTIONAL \
+androidboot.verifiedbootstate=orange \
+androidboot.slot_suffix=_a \
+androidboot.force_normal_boot=1 \
+androidboot.microdroid.debuggable=1 \
+androidboot.virt.address=3 \
+androidboot.sdv.instance_name=instance1 \
+androidboot.sdv.keymint.rpc.hbk=799da7577efd41d5b27810c5952fcec0291cbcfd687e77ac9a6cec8370651b1d \
+androidboot.sdv.boot_mode=locked \
+androidboot.sdv.preprovisioned_vvmtruststore=img \
+androidboot.sdv.vvmfactorytrust=c779a73d0595a6814ba0414a419e99ad4026ad0feb603f2ad80ee6a9e4d1adb7 \
+androidboot.sdv.ignore_avb_state=true \
+androidboot.vbmeta.digest=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff \
+androidboot.sdv.rpc.interface=eth0 \
+androidboot.sdv.someip.enable=true \
+stack_depot_disable=on \
+cgroup_disable=pressure \
+cma=0 \
+enforcing=0"
+
+vdev pl011
+   loc 0x1c090000
+   intr gic:37
+   # Tip: comment out all hostdev entries to get an interactive shell
+   hostdev &gt;/var/log/guest/guest.out
+   hostdev &lt;/dev/ptyp6
+   name vdev_pl011
+
+vdev shmem
+   name vdev_shmem
+
+vdev virtio-entropy
+   intr gic:38
+   loc 0x1c0a0000
+
+vdev virtio-net
+   loc 0x1c0c0000
+   intr gic:40
+   peer /dev/vdevpeers/vp0
+   mac 02:00:AB:CD:EF:01
+   peerfeats 0x0382
+   name p2p_0
+
+vdev virtio-blk
+   loc 0x1c0f1000
+   intr gic:41
+   hostdev /guests/android/sdv-1/disk.img
+   dio enable
+   name virtio-blk_qvmdisk0
+
+# /dev/hvc2 (logcat)
+vdev virtio-console
+    loc 0x1c0f2000
+    intr gic:58
+    hostdev &gt;/var/run/guestlogcat/hvc2_fifo
+
+# /dev/hvc1 (androidboot.console)
+vdev virtio-console
+    loc 0x1c0f3000
+    intr gic:59
+    hostdev &gt;/dev/null
+
+# /dev/hvc0 (kernel dmesg)
+vdev virtio-console
+    loc 0x1c0f4000
+    intr gic:60
+    hostdev &gt;/dev/null
+
+vdev virtio-vsock
+   guest_cid 3
+   loc 0x1c0f6000
+   intr gic:46
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/hardware/qvm/sdv-core-config" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/hardware/qvm/sdv-core-config</a>
+  </p>
+</div>

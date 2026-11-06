@@ -1,0 +1,76 @@
+<h1>VM-level authorization policy</h1>  <p>VM-level permissions define authorization policies for communication between different VMs in the Software-Defined Vehicle (SDV) mesh network. They provide defense-in-depth security in case one VM is compromised.</p> <p>You must grant both service-level and VM-level permissions to permit cross-VM communication.</p> <h2 id="proto-schema">Proto schema</h2> <p>VM-level permissions are defined using a single <code translate="no" dir="ltr">VmAuthzPolicy</code> message in textproto format.</p> 
+<pre>message VmAuthzPolicy {
+  repeated Publisher allow_publisher = 1;
+  repeated Publisher deny_publisher = 2;
+  repeated Subscriber allow_subscriber = 3;
+  repeated Subscriber deny_subscriber = 4;
+  repeated Server allow_server = 5;
+  repeated Server deny_server = 6;
+  repeated Client allow_client = 7;
+  repeated Client deny_client = 8;
+}
+
+// Reuses the same Publisher message from AuthzPolicy, but uses "*" for
+// wildcards.
+message Publisher {
+  string message = 1;
+  repeated string topic = 2;
+}
+
+// Reuses the same Subscriber message from AuthzPolicy, but uses "*" for
+// wildcards.
+message Subscriber {
+  string message = 1;
+  repeated string topic = 2;
+}
+
+// Reuses the same Server message from AuthzPolicy, but uses "*" for
+// wildcards.
+message Server {
+  string service = 1;
+  repeated string channel = 2;
+}
+
+// Reuses the same Client message from AuthzPolicy, but uses "*" for
+// wildcards.
+message Client {
+  string service = 1;
+  repeated string channel = 2;
+}
+</pre> <h2 id="authorization-decision">Authorization decision</h2> <p>Evaluation follows a strict precedence order, where Deny overrides Allow at the same granularity. By default, all cross-VM communication is denied.</p> <h3 id="precedence_evaluation_order">Precedence evaluation order</h3> <p>The decision logic checks permissions in the following order:</p> <ol> <li>
+<strong>Granular Deny</strong>: If a specific instance (Message+Topic or Service+Channel) matches a <code translate="no" dir="ltr">deny_</code> rule, it is <strong>Explicitly denied</strong>.</li> <li>
+<strong>Granular Allow</strong>: If a specific instance matches an <code translate="no" dir="ltr">allow_</code> rule, it is <strong>Permitted</strong>.</li> <li>
+<strong>Type Deny</strong>: If a whole Message type or Service interface matches a <code translate="no" dir="ltr">deny_</code> rule (<code translate="no" dir="ltr">topic: "*"</code> or <code translate="no" dir="ltr">channel: "*"</code>), it is <strong>Explicitly denied</strong>.</li> <li>
+<strong>Type Allow</strong>: If a whole Message type or Service interface matches an <code translate="no" dir="ltr">allow_</code> rule (<code translate="no" dir="ltr">topic: "*"</code> or <code translate="no" dir="ltr">channel: "*"</code>), it is <strong>Permitted</strong>.</li> <li>
+<strong>Blanket Deny</strong>: If all message types or services are denied (<code translate="no" dir="ltr">message: "*"</code> or <code translate="no" dir="ltr">service: "*"</code>), it is <strong>Explicitly denied</strong>.</li> <li>
+<strong>Blanket Allow</strong>: If all message types or services are allowed (<code translate="no" dir="ltr">message: "*"</code> or <code translate="no" dir="ltr">service: "*"</code>), it is <strong>Permitted</strong>.</li> <li>
+<strong>Implicit Default</strong>: If no rule matches, it is <strong>Implicitly denied</strong>. The system default is to deny all.</li> </ol> <h2 id="examples">Examples</h2> <p>The following examples demonstrate how the authorization policy is evaluated.</p> <h3 id="granular_allow_overrides_type_deny">Granular allow overrides type deny</h3> 
+<pre># Deny door unlock publications by default...
+deny_publisher {
+  message: "com.sdv.security.UnlockDoors"
+  topic: "*"
+}
+
+# ...but allow it for the driver door.
+allow_publisher {
+  message: "com.sdv.security.UnlockDoors"
+  topic: "driver_door"
+}
+</pre> <h3 id="type_deny_overrides_blanket_allow">Type deny overrides blanket allow</h3> 
+<pre># Allow all client calls globally (blanket allow)...
+allow_client {
+  service: "*"
+  channel: "*"
+}
+
+# ...except for the firmware update service (system-wide deny).
+deny_client {
+  service: "com.sdv.diagnostic.FirmwareUpdate"
+  channel: "*"
+}
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/core/comms-authorization/vm-authz-policy" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/core/comms-authorization/vm-authz-policy</a>
+  </p>
+</div>

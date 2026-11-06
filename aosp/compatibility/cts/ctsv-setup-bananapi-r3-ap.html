@@ -1,0 +1,137 @@
+<h1>Set up the BananaPi-R3 access point</h1> <p>This pages describes the setup process for the BananaPi-R3 access point (AP) BPi-R3, which is used in Wi-Fi AP connection testing for Android 16 QPR2 and higher.</p> <h2 id="purchase">Purchase a BananaPi-R3 access point</h2> <p>To purchase a BananaPi-R3 access point:</p> <ol> <li>
+<p>Purchase the Banana Pi R3 AP and accessories listed in this table:</p> <table> <tr> <th>Item</th> <th>Quantity</th> </tr> <tr> <td>BPi-R3 board, similar to the <a href="https://www.bpi-shop.com/products/banana-pi-bpi-r3-router-board-with-mediatek-mt7986-chip-design-2g-ddr-ram-8g-emmc-flash-onboard.html">Banana Pi BPI-R3 Router Board with MediaTek MT7986 chip design support Wi-Fi 6 ,2G DDR RAM ,8G eMMC flash onboard</a>
+</td> <td>1</td> </tr> <tr> <td>BPi-R3 aluminum case, similar to the <a href="https://www.bpi-shop.com/products/bpi-r3-iron-case.html">BPI-R3 Iron case</a>
+</td> <td>1</td> </tr> <tr> <td>BPi-R3 aluminum heatsink (cooling fan), similar to the <a href="https://www.bpi-shop.com/products/bpi-r3-aluminum-heatsink-with-fan.html">BPI-R3 aluminum heatsink with fan</a>
+</td> <td>1</td> </tr> <tr> <td>2 and 5 GHz antenna with cable, similar to the <a href="https://www.bpi-shop.com/products/5db-antenna-for-bpi-r3.html">5DB antenna in the BPI shop</a>
+</td> <td>8</td> </tr> <tr> <td>Power adapter, similar to the <a href="https://www.bpi-shop.com/products/12v-2a-dc-power-supply.html">12V/2A DC power supply</a>
+</td> <td>1</td> </tr> </table>
+</li> <li><p>To finalize your purchase, see the <a href="https://docs.banana-pi.org/en/BPI-R3/BananaPi_BPI-R3#_easy_to_buy">Easy to buy</a> section of the Banana Pi BPI-R3 page.</p></li> </ol> <h2 id="set-up-hardware">Set up hardware</h2> <p>To set up the hardware:</p> <ol> <li>
+<p>Install the cooling fan onto the BPi-R3 board:</p> <ol> <li>
+<p>Apply 2 thermal pads to the chips. Figure 1 shows placement of the thermal pads:</p> <p><img src="https://source.android.com/static/docs/compatibility/cts/images/bpir3-1.png" alt="Placement of thermal pads on the BPi-R3 board"></p> <p><strong>Figure 1.</strong> Placement of thermal pads on the BPi-R3 board.</p>
+</li> <li>
+<p>Mount the fan and secure it with four screws from the underside of the RPi-R3 board. Figure 2 shows the location of fan mounting holes on the underside of the BPi-R3 board:</p> <p><img src="https://source.android.com/static/docs/compatibility/cts/images/bpir3-2.png" alt="Fan mounting holes on underside of the BPi-R3 board"></p> <p><strong>Figure 2.</strong> Fan mounting holes on underside of the BPi-R3 board.</p>
+</li> <li>
+<p>Connect the fan to the power source at the location labeled <strong>FAN</strong>. Figure 3 shows the fan power connector on the BPi-R3 board:</p> <p><img src="https://source.android.com/static/docs/compatibility/cts/images/bpir3-3.png" alt="Fan power connector"></p> <p><strong>Figure 3.</strong> Fan power connector.</p>
+</li> </ol>
+</li> <li>
+<p>Screw the BPi-R3 board onto the case at the four corners. Figure 4 shows the location for the four corner screws in the case:</p> <p><img src="https://source.android.com/static/docs/compatibility/cts/images/bpir3-4.png" alt="Corner screws in the case"></p> <p><strong>Figure 4.</strong> Corner screws in the case.</p>
+</li> <li>
+<p>There are two sets of four U.FL connectors, one set for 2.4 GHz and one set for 5 GHz, located on the right side of the board. The 2.4 GHz connectors are positioned above the 5 GHz connectors. Figure 5 shows the location of the U.FL connectors.</p> <p><img src="https://source.android.com/static/docs/compatibility/cts/images/bpir3-5.png" alt="U.FL connectors"></p> <p><strong>Figure 5.</strong> U.FL connectors.</p> <p>Connect the eight RF cables to the U.FL connectors: Put four 2.4 G ports on one side and four 5 G ports on the other. Figure 6 shows the location of the U.FL connectors.</p> <p><img src="https://source.android.com/static/docs/compatibility/cts/images/bpir3-6.png" alt="RF cable connections"></p> <p><strong>Figure 6.</strong> RF cable connections.</p>
+</li> <li>
+<p>Connect eight antennas to the board. Verify that the antennas are screwed tightly. Figure 7 shows connected antennas.</p> <p><img src="https://source.android.com/static/docs/compatibility/cts/images/bpir3-7.png" alt="Antenna connections"></p> <p><strong>Figure 7.</strong> Antenna connections.</p>
+</li> <li>
+<p>Install the top panel of the case. Figure 8 shows the BPi-R3 case with the top panel installed.</p> <p><img src="https://source.android.com/static/docs/compatibility/cts/images/bpir3-8.png" alt="The BPi-R3 case with the top panel installed"></p> <p><strong>Figure 8.</strong> The BPi-R3 case with the top panel installed.</p>
+</li> <li>
+<p>Connect the power and Ethernet cable to the AP. Connect the Ethernet cable to the <strong>WAN</strong> port on the AP. Figure 9 shows the locations of the power and Ethernet ports.</p> <p><img src="https://source.android.com/static/docs/compatibility/cts/images/bpir3-9.png" alt="Power and Ethernet ports"></p> <p><strong>Figure 9.</strong> Power and Ethernet ports.</p>
+</li> </ol> <h2 id="flash-openwrt-image">Flash OpenWrt image</h2> <p>Flashing the device is a two-stage process:</p> <ol> <li>Load the OpenWrt image onto an SD card.</li> <li>Flash the OpenWrt image from the SD card to the AP's on-device storage.</li> </ol> <aside class="note"><strong>Note:</strong><span> The SD card is reusable and you can use it to set up all your BPi-R3 APs.</span></aside> <h3 id="flash-image-sd">Load the OpenWrt image onto an SD card</h3> <p>This section explains how to load the OpenWrt image onto an SD card.</p> <h4 id="prerequisites-flash-image-sd">Prerequisites</h4> <p>To load the OpenWrt image onto an SD card, you need:</p> <ul> <li>An internet-accessible subnet.</li> <li>A Linux computer on this subnet. Use this computer to prepare the SD card and to connect to AP using SSH.</li> </ul> <aside class="note"><strong>Note:</strong><span> If you already have an SD card with the correct version of the OpenWrt image, skip this section and re-use that SD card for flashing all BPi-R3 APs.</span></aside> <h4 id="load-openwrt-image-sd">Load OpenWrt image onto an SD card</h4> <p>To flash the OpenWrt image to an SD card, do the following:</p> <ol> <li>
+<a href="https://github.com/google/mobly-wifi/releases/download/bpir3_setup_material_1.0/openwrt-cros-1.4.0-standard-1.0.2-mediatek-filogic-bananapi_bpi-r3-sdcard.img" class="download">Download the OpenWrt image</a>.</li> <li>Plug your SD card in to the Linux machine.</li> <li>
+<p>Wipe all existing partition tables and file system identifiers with this command:</p> 
+<pre>sudo wipefs -a /dev/sd#
+</pre>
+<aside class="note"><strong>Note:</strong><span> The commands in this section use <code translate="no" dir="ltr">/dev/sd#</code> as the SD card dev path. Replace this path with path to the SD card device on your machine.</span></aside>
+</li> <li>
+<p>Burn the SD card:</p> 
+<pre>sudo dd if=openwrt-23.05.5-cros-1.4.0-standard-1.0.2-mediatek-filogic-bananapi_bpi-r3-sdcard.img of=/dev/sd# bs=1000M &amp;&amp; sync &amp;&amp; sync &amp;&amp; sync
+</pre>
+</li> <li><p>Wait for 3 seconds and unplug the SD card.</p></li> <li>
+<p>Verify that all the bootstrap jumpers of the AP are set to high. This jumper setting is required to boot the AP from the SD card. Figure 10 shows the location of the bootstrap jumpers.</p> <p><img src="https://source.android.com/static/docs/compatibility/cts/images/bpir3-10.png" alt="Location of bootstrap jumpers"></p> <p><strong>Figure 10.</strong> Location of bootstrap jumpers.</p>
+</li> <li><p>Verify that an Ethernet cable is connected to the WAN port of the AP.</p></li> <li><p>Insert the SD card in to the AP.</p></li> <li>
+<p>Connect the power cable to the AP. A second LED indicator flashes green; wait until it stops flashing. Figure 11 shows the LED indicators:</p> <p><img src="https://source.android.com/static/docs/compatibility/cts/images/bpir3-11.png" alt="LED indicators"></p> <p><strong>Figure 11.</strong> LED indicators.</p>
+</li> </ol> <aside class="note"><strong>Note:</strong><span> The commands in this section use <code translate="no" dir="ltr">/dev/sd#</code> as the SD card dev path. Replace this path with path to the SD card device on your machine.</span></aside> <h4 id="check-sd-card-image-version">Verify the SD card image version</h4> <p>After you have loaded the OpenWrt image onto an SD card, verify the version of the image by doing the following:</p> <ol> <li><p>Identify the IP address for the AP. To identify the IP address, see <a href="#find-ip-ap">Appendix A: Find the IP address of the AP</a>.</p></li> <li><p><a href="https://github.com/google/mobly-wifi/releases/download/bpir3_setup_material_1.0/testing_rsa" class="download">Download the SSH identity testing_rsa file</a> to a Linux computer on the same subnet as the AP.</p></li> <li>
+<p>Grant the required permissions:</p> 
+<pre>chmod 600 path-to-testing_rsa-file
+</pre>
+</li> <li>
+<p>Use SSH to connect to the AP from the host computer:</p> 
+<pre>ssh -i path-to-testing_rsa-file root@IP
+</pre> <p>A screen similar to the following appears:</p> <p><img src="https://source.android.com/static/docs/compatibility/cts/images/bpir3-12.png" alt="Use SSH to connect to the AP"></p> <p><strong>Figure 12.</strong> Use SSH to connect to the AP.</p>
+</li> <li><p>Verify that the version number on the AP matches the version number highlighted on Figure 12.</p></li> </ol> <h3 id="flash-openwrt-image-sd-card">Flash OpenWrt image from SD card to BPi-R3 AP</h3> <p>Due to hardware design, flashing the OpenWrt image from SD card to the AP's eMMC is a two-stage process:</p> <ol> <li>Flash image from SD card to NAND storage.</li> <li>Flash OpenWrt from NAND to eMMC.</li> </ol> <h4 id="flash-image-nand">Flash image from SD card to NAND storage</h4> <p>To flash the OpenWrt image from the SD card to NAND storage:</p> <ol> <li><p>Insert the SD card in to the AP.</p></li> <li>
+<p>Power on the AP and wait until boot completes. Verify that the second LED indicator marked <strong>G</strong> shows a steady green light. Figure 13 shows the LED indicators:</p> <p><img src="https://source.android.com/static/docs/compatibility/cts/images/bpir3-11.png" alt="LED indicators"></p> <p><strong>Figure 13.</strong> LED indicators.</p>
+</li> <li><p>Sign in to the AP using SSH.</p></li> <li>
+<p>Run the following command to configure the next reboot to install image from SD card to the NAND flash:</p> 
+<pre>fw_setenv bootcmd "env default bootcmd ; saveenv ; run ubi_init ; bootmenu 0"
+</pre> <p>This command configures the next reboot to install image from SD card to the NAND flash.</p>
+</li> <li>
+<p>Reboot the AP:</p> 
+<pre>reboot
+</pre>
+</li> <li><p>Wait until boot completes by verifying that the second LED indicator shows a steady green light.</p></li> <li>
+<p>Verify that you can sign in to the AP using SSH.</p> <aside class="note"><strong>Note:</strong><span> The green light status changes during the startup process. After the green light first turns on, the light is steady for several seconds, then it begins to flash, and then becomes steady and no longer flashes.</span></aside>
+</li> <li><p>Unplug the AP's power cable.</p></li> <li>
+<p>Set the bootstrap jumpers to boot from NAND. Figure 14 shows the new boot stramp jumper settings:</p> <p><img src="https://source.android.com/static/docs/compatibility/cts/images/bpir3-13.png" alt="New bootstrap jumper settings"></p> <p><strong>Figure 14.</strong> New bootstrap jumper settings.</p>
+</li> <li><p>Power on the AP and wait until the AP boot completes.</p></li> <li><p>Identify the IP address for the AP. To identify the IP address, see <a href="#find-ip-ap">Appendix A: Find the IP address of the AP</a>.</p></li> <li><p>Sign in to the AP with the new IP address.</p></li> <li>
+<p>Run the following command to verify you're running an OpenWrt system installed on NAND:</p> 
+<pre>df -h
+</pre> <p>The output should show a disk file system with <code translate="no" dir="ltr">/dev/ubi0_6</code>. Figure 15 shows the output:</p> <p><img src="https://source.android.com/static/docs/compatibility/cts/images/bpir3-14.png" alt="Output of df -h command"></p> <p><strong>Figure 15.</strong> Output of df -h command.</p>
+</li> </ol> <h4 id="flash-openwrt-nand-emmc">Flash OpenWrt from NAND to eMMC</h4> <p>To flash OpenWrt from NAND to eMMC:</p> <ol> <li>
+<p>In the SSH session, run the following command:</p> 
+<pre>fw_setenv bootcmd "env default bootcmd ; saveenv ; saveenv ; run emmc_init ; bootmenu 0"
+</pre> <p>This command configures the next reboot to install image from NAND to eMMC.</p>
+</li> <li>
+<p>Reboot the AP:</p> 
+<pre>reboot
+</pre>
+</li> <li><p>Wait until boot completes by verifying that the second LED indicator shows a steady green light.</p></li> <li><p>Unplug the AP's power cable.</p></li> <li>
+<p>Unplug the SD card from the AP.</p> <aside class="note"><strong>Note:</strong><span> After the initial setup is complete, the BPi-R3 AP doesn't need the SD card. You can reuse this SD card for setting up other BPi-R3 APs.</span></aside>
+</li> <li>
+<p>Set the bootstrap jumpers to boot from eMMC. Figure 16 shows the new boot stramp jumper settings:</p> <p><img src="https://source.android.com/static/docs/compatibility/cts/images/bpir3-15.png" alt="New bootstrap jumper settings"></p> <p><strong>Figure 16.</strong> New bootstrap jumper settings.</p>
+</li> <li><p>Power on the AP and wait until the AP boot completes.</p></li> <li><p>Identify the IP address for the AP. To identify the IP address, see <a href="#find-ip-ap">Appendix: Find the IP address of the AP</a>.</p></li> <li><p>Sign in to the AP using the new IP address.</p></li> <li>
+<p>Run the following command to verify you're running an OpenWrt system installed on NAND:</p> 
+<pre>df -h
+</pre> <p>The output should show a disk file system with <code translate="no" dir="ltr">/dev/fitrw</code>. Figure 17 shows the output:</p> <p><img src="https://source.android.com/static/docs/compatibility/cts/images/bpir3-16.png" alt="Output of df -h command"></p> <p><strong>Figure 17.</strong> Output of df -h command.</p>
+</li> <li>
+<p>Run the following command:</p> 
+<pre>cat /sys/block/mmcblk0/device/type
+</pre> <p>The output should show <strong>MMC</strong> instead of <strong>SD</strong>.</p>
+</li> </ol> <p>The AP setup process is complete.</p> <h2 id="find-ip-ap">Appendix A: Find the IP address of the AP</h2> <p>To find the IP address of the AP, follow the instructions in this section.</p> <aside class="note"><strong>Note:</strong><span> If you've performed these steps previously, skip to step 5.</span></aside> <ol> <li>
+<p>Run the following command:</p> 
+<pre>ifconfig
+</pre> <p>The output looks similar to the following:</p> 
+<pre>docker0: flags=4099&lt;UP,BROADCAST,MULTICAST&gt;  mtu 1500
+      inet 172.17.0.1  netmask 255.255.0.0  broadcast 172.17.255.255
+      ether 02:42:67:38:a9:d8  txqueuelen 0  (Ethernet)
+      RX packets 0  bytes 0 (0.0 B)
+      RX errors 0  dropped 0  overruns 0  frame 0
+      TX packets 0  bytes 0 (0.0 B)
+      TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+eno1: flags=4163&lt;UP,BROADCAST,RUNNING,MULTICAST&gt;  mtu 1500
+      inet 100.103.191.133  netmask 255.255.255.0  broadcast 100.103.191.255
+      inet6 2401:fa00:44:800:f64d:30ff:fe6d:bc3f  prefixlen 64  scopeid 0x0&lt;global&gt;
+      inet6 fe80::f64d:30ff:fe6d:bc3f  prefixlen 64  scopeid 0x20&lt;link&gt;
+      ether f4:4d:30:6d:bc:3f  txqueuelen 1000  (Ethernet)
+      RX packets 31360658  bytes 39343143744 (39.3 GB)
+      RX errors 0  dropped 0  overruns 0  frame 0
+      TX packets 11023616  bytes 1258521174 (1.2 GB)
+      TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+      device interrupt 16  memory 0xdc200000-dc220000
+
+lo: flags=73&lt;UP,LOOPBACK,RUNNING&gt;  mtu 65536
+      inet 127.0.0.1  netmask 255.0.0.0
+      inet6 ::1  prefixlen 128  scopeid 0x10&lt;host&gt;
+      loop  txqueuelen 1000  (Local Loopback)
+      RX packets 19825978  bytes 1265586518 (1.2 GB)
+      RX errors 0  dropped 0  overruns 0  frame 0
+      TX packets 19825978  bytes 1265586518 (1.2 GB)
+      TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+wlp58s0: flags=4099&lt;UP,BROADCAST,MULTICAST&gt;  mtu 1500
+      ether f8:63:3f:2e:63:e6  txqueuelen 1000  (Ethernet)
+      RX packets 0  bytes 0 (0.0 B)
+      RX errors 0  dropped 0  overruns 0  frame 0
+      TX packets 0  bytes 0 (0.0 B)
+      TX errors 0  dropped 0 overruns 0  carrier 0  collisions
+</pre>
+</li> <li><p>Identify the IP address of the AP. The IP address is the value of the <code translate="no" dir="ltr">inet</code> field of the <code translate="no" dir="ltr">eno1</code> interface (<code translate="no" dir="ltr">100.103.191.133</code>).</p></li> <li><p>Identify the netmask of the <code translate="no" dir="ltr">eno1</code> interface (<code translate="no" dir="ltr">255.255.255.0</code>).</p></li> <li>
+<p>Use the following table to obtain the network prefix length from the netmask:</p> <table> <tr> <th>Netmask</th> <th>Network prefix length</th> </tr> <tr> <td>255.255.255.252</td> <td>30</td> </tr> <tr> <td>255.255.255.248</td> <td>29</td> </tr> <tr> <td>255.255.255.240</td> <td>28</td> </tr> <tr> <td>255.255.255.0</td> <td>24</td> </tr> <tr> <td>255.255.252.0</td> <td>22</td> </tr> <tr> <td>255.255.248.0</td> <td>21</td> </tr> <tr> <td>255.255.0.0</td> <td>16</td> </tr> </table> <aside class="note"><strong>Note:</strong><span> The network prefix length is the number of leading 1 bits in the netmask binary representation. For example, 255.255.255.252 in binary is 11111111.11111111.11111111.11111100 or 30 leading 1 bits.</span></aside>
+</li> <li><p>Disconnect the AP from the host's LAN interface.</p></li> <li>
+<p>Run the following command to obtain the host LAN IP addresses of devices connected to the host:</p> 
+<pre>sudo nmap -sP IP/network-prefix-length
+</pre>
+<aside class="note"><strong>Note:</strong><span> Because the AP is disconnected from the host, this command doesn't list the AP's IP address.</span></aside>
+</li> <li><p>Connect the AP to the host.</p></li> <li><p>Perform step 6 again. A new IP address, the IP address of the AP, appears.</p></li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/compatibility/cts/ctsv-setup-bananapi-r3-ap" class="_attribution-link">https://source.android.com/docs/compatibility/cts/ctsv-setup-bananapi-r3-ap</a>
+  </p>
+</div>

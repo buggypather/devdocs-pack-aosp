@@ -1,0 +1,227 @@
+<h1>Generic Kernel Image (GKI) release process</h1> <p>This page describes how GKI is released, including quarterly and out-of-band emergency releases. The goal of this page is to give OEMs a guideline on where to pick up the GKI as well as the process for out-of-band emergency fixes. OEMs can also use <a href="gki-dev">GKI development</a> to learn more about how they can work with the Android Kernel team to optimize the GKI kernel for their products.</p> <h2 id="gki-release">GKI release cadence</h2> <p>GKI is released on a quarterly cadence post KMI freeze.</p> <aside class="note"><strong>Note:</strong><span> An asterisk (*) denotes 16 KB capable. For details, see <a href="#16kb-gki-releases">16 KB GKI releases</a>.</span></aside> <table> <colgroup> <col style="width: 10%;"> <col> </colgroup> <thead> <tr> <th colspan="2">Release month</th> <th>a12-5.10</th> <th>a13-5.10</th> <th>a13-5.15</th> <th>a14-5.15</th> <th>a14-6.1</th> <th>a15-6.6*</th> <th>a16-6.12*</th> <th>a17-6.18*</th> </tr> </thead> <tbody> <tr> <th rowspan="2">Oct<br>2025</th> <th>Check-in<br>cut off</th> <td></td>
+<td>Oct 16</td>
+<td></td>
+<td>Oct 1</td>
+<td></td>
+<td>Oct 1</td>
+<td></td>
+<td></td> </tr> <tr> <th>GKI preload ready</th> <td></td>
+<td>Oct 31</td>
+<td></td>
+<td>Oct 15</td>
+<td></td>
+<td>Oct 15</td>
+<td></td>
+<td></td> </tr> <tr> <th rowspan="2">Dec<br>2025</th> <th>Check-in<br>cut off</th> <td>Dec 1</td>
+<td></td>
+<td>Dec 1</td>
+<td></td>
+<td>Dec 1</td>
+<td></td>
+<td>Dec 1</td>
+<td></td> </tr> <tr> <th>GKI preload ready</th> <td>Dec 15</td>
+<td></td>
+<td>Dec 15</td>
+<td></td>
+<td>Dec 15</td>
+<td></td>
+<td>Dec 15</td>
+<td></td> </tr> <tr> <th rowspan="2">Jan<br>2026</th> <th>Check-in<br>cut off</th> <td></td>
+<td>Jan 16</td>
+<td></td>
+<td>Jan 2</td>
+<td></td>
+<td>Jan 2</td>
+<td></td>
+<td></td> </tr> <tr> <th>GKI preload ready</th> <td></td>
+<td>Jan 31</td>
+<td></td>
+<td>Jan 15</td>
+<td></td>
+<td>Jan 15</td>
+<td></td>
+<td></td> </tr> <tr> <th rowspan="2">Feb<br>2026</th> <th>Check-in<br>cut off</th> <td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td> </tr> <tr> <th>GKI preload ready</th> <td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td> </tr> <tr> <th rowspan="2">Mar<br>2026</th> <th>Check-in<br>cut off</th> <td></td>
+<td></td>
+<td>Mar 1</td>
+<td></td>
+<td>Mar 1</td>
+<td></td>
+<td>Mar 15</td>
+<td></td> </tr> <tr> <th>GKI preload ready</th> <td></td>
+<td></td>
+<td>Mar 15</td>
+<td></td>
+<td>Mar 15</td>
+<td></td>
+<td>Mar 31</td>
+<td></td> </tr> <tr> <th rowspan="2">Apr<br>2026</th> <th>Check-in<br>cut off</th> <td>Apr 16</td>
+<td>Apr 16</td>
+<td></td>
+<td>Apr 1</td>
+<td></td>
+<td>Apr 1</td>
+<td></td>
+<td></td> </tr> <tr> <th>GKI preload ready</th> <td>Apr 30</td>
+<td>Apr 30</td>
+<td></td>
+<td>Apr 15</td>
+<td></td>
+<td>Apr 15</td>
+<td></td>
+<td></td> </tr> <tr> <th rowspan="2">May<br>2026</th> <th>Check-in<br>cut off</th> <td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td> </tr> <tr> <th>GKI preload ready</th> <td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td> </tr> <tr> <th rowspan="2">Jun<br>2026</th> <th>Check-in<br>cut off</th> <td></td>
+<td></td>
+<td>Jun 1</td>
+<td></td>
+<td>Jun 15</td>
+<td></td>
+<td>Jun 15</td>
+<td>Jun 1</td> </tr> <tr> <th>GKI preload ready</th> <td></td>
+<td></td>
+<td>Jun 15</td>
+<td></td>
+<td>Jun 30</td>
+<td></td>
+<td>Jun 30</td>
+<td>Jun 15</td> </tr> <tr> <th rowspan="2">Jul<br>2026</th> <th>Check-in<br>cut off</th> <td>Jul 16</td>
+<td>Jul 16</td>
+<td></td>
+<td>Jul 1</td>
+<td></td>
+<td>Jul 1</td>
+<td></td>
+<td></td> </tr> <tr> <th>GKI preload ready</th> <td>Jul 31</td>
+<td>Jul 31</td>
+<td></td>
+<td>Jul 15</td>
+<td></td>
+<td>Jul 15</td>
+<td></td>
+<td></td> </tr> <tr> <th rowspan="2">Aug<br>2026</th> <th>Check-in<br>cut off</th> <td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td> </tr> <tr> <th>GKI preload ready</th> <td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td> </tr> <tr> <th rowspan="2">Sep<br>2026</th> <th>Check-in<br>cut off</th> <td></td>
+<td></td>
+<td>Sep 1</td>
+<td></td>
+<td>Sep 16</td>
+<td></td>
+<td>Sep 16</td>
+<td>Sep 1</td> </tr> <tr> <th>GKI preload ready</th> <td></td>
+<td></td>
+<td>Sep 15</td>
+<td></td>
+<td>Sep 30</td>
+<td></td>
+<td>Sep 30</td>
+<td>Sep 15</td> </tr> <tr> <th rowspan="2">Oct<br>2026</th> <th>Check-in<br>cut off</th> <td>Oct 16</td>
+<td>Oct 16</td>
+<td></td>
+<td>Oct 1</td>
+<td></td>
+<td>Oct 1</td>
+<td></td>
+<td></td> </tr> <tr> <th>GKI preload ready</th> <td>Oct 31</td>
+<td>Oct 31</td>
+<td></td>
+<td>Oct 15</td>
+<td></td>
+<td>Oct 15</td>
+<td></td>
+<td></td> </tr> <tr> <th rowspan="2">Nov<br>2026</th> <th>Check-in<br>cut off</th> <td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td> </tr> <tr> <th>GKI preload ready</th> <td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td> </tr> <tr> <th rowspan="2">Dec<br>2026</th> <th>Check-in<br>cut off</th> <td></td>
+<td></td>
+<td>Dec 1</td>
+<td></td>
+<td>Dec 1</td>
+<td></td>
+<td>Dec 1</td>
+<td>Dec 1</td> </tr> <tr> <th>GKI preload ready</th> <td></td>
+<td></td>
+<td>Dec 15</td>
+<td></td>
+<td>Dec 15</td>
+<td></td>
+<td>Dec 15</td>
+<td>Dec 15</td> </tr> </tbody> </table> <h3 id="build-validity">GKI build validity for OEMs</h3> <p>OEMs can use a recently released Android GKI. OEMs can launch with GKI-certified builds as long as they are compliant with Long-Term Supported (LTS) kernel requirements in the Android Security Bulletin (ASB).</p> <h3 id="16kb-gki-releases">16 KB GKI releases</h3> <p>The GKI release team handles 16 KB GKI releases using the same quarterly release cadence, qualification testing, and <a href="gki-respin">respin process</a> as 4 KB GKI releases:</p> <ul> <li>
+<strong>Supported branches:</strong> <ul> <li>
+<code translate="no" dir="ltr">android15-6.6</code> (starting January 2026)</li> <li>
+<code translate="no" dir="ltr">android16-6.12</code> (starting March 2026)</li> <li>
+<code translate="no" dir="ltr">android17-6.18</code> (starting June 2026)</li> </ul>
+</li> <li>
+<strong>Build parity and certification:</strong> 16 KB GKI binaries use the same source tag and kernel build ID as the corresponding 4 KB GKI release. Until 2027, the <strong>16 KB release build</strong> tab on the <a href="gki-android15-6_6-release-builds"><code translate="no" dir="ltr">android15-6.6</code></a>, <a href="gki-android16-6_12-release-builds"><code translate="no" dir="ltr">android16-6.12</code></a>, and <a href="gki-android17-6_18-release-builds"><code translate="no" dir="ltr">android17-6.18</code></a> release builds pages provides uncertified 16 KB GKI release binaries. You don't need to update 4 KB and 16 KB kernels together, though we recommend doing so.</li> <li>
+<strong>On-demand respins:</strong> Request 16 KB GKI respins using the same <a href="gki-respin">respin request process and form</a> as 4 KB builds.</li> </ul> <h2 id="month-releases">Quarterly certified releases</h2> <p>GKI quarterly releases contain a tested <code translate="no" dir="ltr">boot.img</code> that includes a Google inserted certificate to attest that the binaries were built from a known source code baseline.</p> <p>Each quarter, a GKI quarterly release candidate (not certified) is selected after the check-in cutoff date. After the quarterly release candidate is selected, <strong>new changes won't be accepted into that month's release.</strong> During the closed window period, only fixes for bugs that cause test failure can be addressed. The release candidate undergoes quality assurance—as described in the <a href="#qualifications">GKI qualification section</a>—to verify that compliance tests pass on a GSI+GKI build with a reference device as well as Cuttlefish.</p> <p><img src="https://source.android.com/static/docs/core/architecture/images/gki-release-timeline.png" alt="GKI release cadence
+timeline" class="android-image-dark-theme-background"> <strong>Figure 1.</strong> GKI release timeline</p> <h2 id="qualifications">GKI qualifications</h2> <table> <thead> <tr> <th><strong>Types of GKI builds</strong></th> <th><strong>Quality enforcement</strong></th> <th><strong>Notes</strong></th> </tr> </thead> <tbody> <tr> <td>Quarterly (certified)</td> <td>Cuttlefish testing<br> <ul> <li>Boot</li> <li>VTS</li> <li>CTS</li> </ul> Reference hardware testing<br> <ul> <li>Boot</li> <li>VTS</li> <li>CTS</li> </ul> </td> <td>
+ </td> </tr> <tr> <td>Respins (certified)</td> <td>Cuttlefish testing<br> <ul> <li>Boot</li> <li>VTS</li> <li>Subset of CTS</li> </ul> Reference device testing<br> <ul> <li>Boot</li> <li>VTS</li> </ul> </td> <td>
+<ul>
+<li>Built on top of a GKI certified build.</li> <li>The build is certified after qualification.</li> </ul> </td> </tr> </tbody> </table> <h2 id="build-artifacts">Where to obtain build artifacts</h2> <p>OEMs can obtain artifacts for all the releases from <a href="https://ci.android.com">ci.android.com</a>. </p>
+<p>You can find more information on the CI, including the test results on the <a href="../../../setup/contribute/dashboard">Android Continuous Integration</a> dashboard.</p> <h2 id="faqs">FAQs</h2> <p>Here are some frequently asked questions related to the GKI release process.</p> <h4 id="is_it_possible_to_build_a_new_gki_binary_based_on_an_already_released_gki">Is it possible to build a new GKI binary based on an already released GKI?</h4> <p>Yes, this is known as a respin. The respin process is supported as long as the released GKI build (on which the respin is requested) is compliant with LTS requirements in the Android Security Bulletin (ASB).</p> <h4 id="is_it_possible_to_reproduce_gki_binaries">Is it possible to reproduce GKI binaries?</h4> <p>Yes, here's an example:</p> 
+<pre>GKI 2.0
+5.10 kernel prebuilts from build 7364300
+https://ci.android.com/builds/submitted/7364300/kernel_aarch64/latest
+</pre> <p>To reproduce the example, download <code translate="no" dir="ltr">manifest_$id.xml</code> and execute the following command:</p> 
+<pre>repo init -u https://android.googlesource.com/kernel/manifest
+mv manifest_7364300.xml .repo/manifests
+repo init -m manifest_7364300.xml --depth=1
+repo sync
+# build the GKI images
+# You may want to use LTO=thin to build faster for development
+BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh
+# (optional) build virtual platform modules
+BUILD_CONFIG=common-modules/virtual-device/build.config.virtual_device.aarch64 build/build.sh</pre> <p>You can retrieve your GKI artifact copy from <code translate="no" dir="ltr">out/.../dist</code>.</p> <h4 id="has_the_gki_binary_including_the_emergency_spin_patch_been_built_on_the_latest_codebase">Has the GKI binary (including the emergency spin patch) been built on the latest codebase?</h4> <p>No. Respins contain only the patches that are on top of the quarterly certified kernels that have been chosen. These respins contain all launch-blocking bug fixes reported until any given time by OEMs using the corresponding base quarterly release. See the following example of how this type of scenario happens.</p> <ul> <li>OEM1 and OEM2 decide to use the GKI binary release from November 2021.</li> <li>OEM1 and OEM2 find issues that require patches for support. These patches might be different or might be the same.</li> <li>The respins on top of the November 2021 binary have <em>launch-blocking</em> fixes reported by both OEM1 and OEM2 during the respin window, but nothing more.</li> <li>The issues mentioned in the second bullet are also included in subsequent GKI quarterly releases.</li> </ul> <h4 id="the_october_respin_has_all_oem_submitted_patches_but_other_oem_patches_affect_us_because_they_havent_been_specifically_tested_with_our_products_is_it_possible_to_include_only_our_patch">The October respin has all OEM submitted patches, but other OEM patches affect us, because they haven't been specifically tested with our products. Is it possible to include only our patch?</h4> <p>This isn't possible. A respin path for individual OEMs isn't scalable. Instead, the GKI team scrutinizes every single change that goes into respin builds and tests the changes with all available hardware before creating a new build. If the GKI team finds that the issue is specific to an OEM, device, or model, the GKI team can verify that the code added by the change executes only on the device, model, or SKU being affected.</p> <p>The major benefit from unified respins is that every device that's using the same release base benefits from one another, especially if the bugs they discover are generic and applicable to all users. Core kernel bugs found in carrier testing is a specific example of this concept.</p> <h4 id="are_there_situations_where_google_provides_specific_information_about_oem_patches_and_issue_scenarios_so_that_oems_can_evaluate_the_impact_and_risk_of_implementing_the_patches_with_their_products">Are there situations where Google provides specific information about OEM patches and issue scenarios, so that OEMs can evaluate the impact and risk of implementing the patches with their products?</h4> <p>Google won't ever add a change to a respin build until the GKI team understands the problem and collects all of the details. You can see this in the changelog (commit message). Google doesn't reveal what specific device it affects, but OEMs can always find the issue description and solution in the changelog.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/kernel/gki-releases" class="_attribution-link">https://source.android.com/docs/core/architecture/kernel/gki-releases</a>
+  </p>
+</div>

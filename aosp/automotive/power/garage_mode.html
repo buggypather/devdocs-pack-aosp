@@ -1,0 +1,42 @@
+<h1>Garage Mode</h1>  <p> To provide periods of idle time in vehicles, <em>Garage Mode</em> keeps the system awake so that jobs in <a href="https://developer.android.com/reference/android/app/job/JobScheduler"><code translate="no" dir="ltr">JobScheduler</code></a> constrained with <a href="https://developer.android.com/reference/android/app/job/JobInfo.Builder#setRequiresDeviceIdle(boolean)">idleness</a> can be executed. </p> <h2 id="what-is-garage-mode">What is Garage Mode?</h2> <p> On connected devices such as phones, users rely on the system to ensure devices are stable, up-to-date, and optimized. To achieve that state, the Android platform provides an <a href="https://developer.android.com/reference/android/app/job/JobInfo.Builder#setRequiresDeviceIdle(boolean)">idle time</a> window during which apps can perform tasks when the user doesn't interact with the device. A phone is considered to be <em>idle</em> when the user doesn't touch it for an extended duration (60 minutes or more) and the screen is turned off. Unlike a phone, when a car isn't being used, it's turned off, which means the car has no <a href="https://developer.android.com/reference/android/app/job/JobInfo.Builder#setRequiresDeviceIdle(boolean)">idle time</a> window. Garage Mode ensures idle time in a car. </p> <p> When a car is turned off by the user, the system enters Garage Mode. While a car is in Garage Mode, the system is powered on, the display is turned off, and idle jobs in the <code translate="no" dir="ltr">JobScheduler</code> queue are executed. To implement Garage Mode, see <a href="garage_mode#device">Device implementation guidelines</a>. </p> <h2 id="device">Device implementation guidelines</h2> <p> To activate Garage Mode, when turning off the vehicle, the Vehicle HAL (VHAL) must send <code translate="no" dir="ltr"><a href="https://developer.android.com/reference/android/car/VehiclePropertyIds.html#AP_POWER_STATE_REQ">AP_POWER_STATE_REQ</a></code> with the state <code translate="no" dir="ltr">SHUTDOWN_PREPARE</code> with the parameter set to <code translate="no" dir="ltr">SHUTDOWN_ONLY</code> or <code translate="no" dir="ltr">CAN_SLEEP</code>. </p> <p> For the state <code translate="no" dir="ltr">SHUTDOWN_PREPARE</code> to be effective, the VHAL must specify the two parameters (state and the additional parameter) for the <code translate="no" dir="ltr"><a href="https://developer.android.com/reference/android/car/VehiclePropertyIds.html#AP_POWER_STATE_REQ">AP_POWER_STATE_REQ</a></code> command. This enables the device to enter Garage Mode, which detects scheduled jobs in <a href="https://developer.android.com/reference/android/app/job/JobScheduler"><code translate="no" dir="ltr">JobScheduler</code></a> and prevents the system from proceeding to either suspend or shut down until the jobs are completed. </p> <h2 id="how-do-device-implementations-connect-to-the-android-framework">How do device implementations connect to the Android framework?</h2> <p> For Garage Mode, the framework requests the VHAL to extend the shutdown time until either the required duration is exceeded or all jobs have been executed, at which time the system shuts down. Under specific circumstances defined in the CDD, device implementations can shut down the system sooner. For details on Android compatibility requirements, see the Android <a href="../../compatibility/cdd">Compatibility Definition Document (CDD)</a>.</p> <p>If the VHAL must shut down the system before Garage Mode completes, the VHAL can issue <code translate="no" dir="ltr">SHUTDOWN_PREPARE</code> with the parameter set to <code translate="no" dir="ltr">SHUTDOWN_IMMEDIATELY</code> or <code translate="no" dir="ltr">SLEEP_IMMEDIATELY</code>. Device implementations can use this under specific circumstances <em>only</em>, typically when the resources needed to keep the system running are unavailable. For example, when battery capacity is insufficient. </p> <p><img src="https://source.android.com/static/docs/automotive/images/garage_mode.png" class="android-image-dark-theme-background" alt="Garage mode"></p> <p><b>Figure 1.</b> Garage Mode flow</p> <h2 id="how-do-app-developers-work-with-garage-mode">How do app developers work with Garage Mode?</h2> <p> Apps and services don't interact directly with Garage Mode. Instead, apps schedule jobs in <a href="https://developer.android.com/reference/android/app/job/JobScheduler"><code translate="no" dir="ltr">JobScheduler</code></a>. Those jobs constrained by <a href="https://developer.android.com/reference/android/app/job/JobInfo.Builder#setRequiresDeviceIdle(boolean)">idleness</a> are executed during Garage Mode. </p> <p>The following code shows how to schedule a job to run during Garage Mode:</p> 
+<pre>public class MyGarageModeJob extends JobService { ... }
+
+Context context = ...;
+int jobId = ...;
+
+ComponentName myGarageModeJobName = new componentName(context,
+                                                      MyGarageModeJob.class);
+
+JobInfo.Builder infoBuilder = new JobInfo.Builder(jobId, myGarageModeJobName)
+                    .setRequiresDeviceIdle(true);
+
+// Example of an optional constraint:
+infoBuilder.setRequiredNetworkType(NetworkType.NETWORK_TYPE_UNMETERED);
+
+JobScheduler jobScheduler = (JobScheduler) context
+                    .getSystemService(Context.JOB_SCHEDULER_SERVICE);
+
+jobScheduler.schedule(infoBuilder.build());</pre> <h2 id="debug">Debug Garage Mode</h2> To debug Garage Mode: <ol> <li>To enable logging categories relevant to Garage Mode: 
+<pre>
+adb shell stop
+adb shell setprop log.tag.GarageMode VERBOSE
+adb shell setprop log.tag.Finsky VERBOSE
+adb shell setprop log.tag.CAR.POWER VERBOSE
+adb shell setprop log.tag.JobScheduler.Connectivity VERBOSE
+adb shell start
+</pre> <aside class="note">Stopping and starting Android services ensures log availability from service boot.</aside> </li> <li>To review the logcat output to indicate that Garage Mode is starting: 
+<pre>GarageMode: [Controller]: CPM state changed to SHUTDOWN_PREPARE
+GarageMode: [GarageMode]: Entering GarageMode
+GarageMode: [Controller]: Sending broadcast with action: com.android.server.jobscheduler.GARAGE_MODE_ON</pre> </li> <li>To determine that logcat output to indicate Garage Mode is finished (canceled or completed): 
+<pre>[GarageMode]: GarageMode was canceled</pre> <em>or</em> 
+<pre>[GarageMode]: GarageMode completed normally</pre> <p>Garage Mode depends on the power state of the vehicle as described <a href="#how-do-device-implementations-connect-to-the-android-framework">above.</a></p> </li> <li>Review the logcat output to indicate the correct power states are entered: 
+<pre>CAR.POWER: starting shutdown prepare without Garage Mode
+GarageMode: [Controller]: CPM state changed to SHUTDOWN_PREPARE
+GarageMode: [GarageMode]: Entering GarageMode
+CAR.POWER: send shutdown prepare
+CAR.POWER: setPowerState=SHUTDOWN_PREPARE(7) param=0</pre> </li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/power/garage_mode" class="_attribution-link">https://source.android.com/docs/automotive/power/garage_mode</a>
+  </p>
+</div>

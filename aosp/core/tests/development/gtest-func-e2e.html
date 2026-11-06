@@ -1,0 +1,62 @@
+<h1>Add new GoogleTests (GTests)</h1>  <p>If you're new to Android platform development, you may find this complete example of adding a brand new GTest binary (also sometimes called a "native" test) from scratch useful to demonstrate the typical workflow involved. For additional information on the GTest framework for C++, refer to the <a href="https://github.com/google/googletest">GTest project site</a> for additional documentation.</p> <p>This guide uses the <a href="https://android.googlesource.com/platform/platform_testing/+/android17-release/tests/example/native/">Hello World GTest</a> as an example. We recommend reading through the code to get a rough understanding of it before you continue.</p> <h2 id="source-location">Decide on a source location</h2> <p>Typically your team will already have an established pattern of places to check in code, and places to add tests. Most team owns a single git repository, or share one with other teams but have a dedicated sub directory that contains component source code.</p> <p>Assuming the root location for your component source is at <code translate="no" dir="ltr">&lt;component source
+root&gt;</code>, most components have <code translate="no" dir="ltr">src</code> and <code translate="no" dir="ltr">tests</code> folders under it, and some additional files such as <code translate="no" dir="ltr">Android.mk</code> (or broken up into additional <code translate="no" dir="ltr">.bp</code> files).</p> <p>Since you are adding a brand new test, you'll probably need to create the <code translate="no" dir="ltr">tests</code> directory next to your component <code translate="no" dir="ltr">src</code>, and populate it with content.</p> <p>In some cases, your team might have further directory structures under <code translate="no" dir="ltr">tests</code> due to the need to package different suites of tests into individual binaries. And in this case, you'll need to create a new sub directory under <code translate="no" dir="ltr">tests</code>.</p> <p>To illustrate, here's a typical directory outline for components with a single <code translate="no" dir="ltr">tests</code> folder:</p> 
+<pre>\
+ &lt;component source root&gt;
+  \-- Android.bp (component makefile)
+  \-- AndroidTest.xml (test config file)
+  \-- src (component source)
+  |    \-- foo.cpp
+  |    \-- ...
+  \-- tests (test source root)
+      \-- Android.bp (test makefile)
+      \-- src (test source)
+          \-- foo_test.cpp
+          \-- ...
+</pre> <p>and here's a typical directory outline for components with multiple test source directories:</p> 
+<pre>\
+ &lt;component source root&gt;
+  \-- Android.bp (component makefile)
+  \-- AndroidTest.xml (test config file)
+  \-- src (component source)
+  |    \-- foo.cpp
+  |    \-- ...
+  \-- tests (test source root)
+      \-- Android.bp (test makefile)
+      \-- testFoo (sub test source root)
+      |   \-- Android.bp (sub test makefile)
+      |   \-- src (sub test source)
+      |       \-- test_foo.cpp
+      |       \-- ...
+      \-- testBar
+      |   \-- Android.bp
+      |   \-- src
+      |       \-- test_bar.cpp
+      |       \-- ...
+      \-- ...
+</pre> <p>Regardless of the structure, you'll end up populating the <code translate="no" dir="ltr">tests</code> directory or the newly created sub directory with files similar to what's in the <code translate="no" dir="ltr">native</code> directory in the sample gerrit change. The sections below will explain in further details of each file.</p> <h2 id="annotated">Source code</h2> <p>Refer to the <a href="https://android.googlesource.com/platform/platform_testing/+/android17-release/tests/example/native/HelloWorldTest.cpp">Hello World GTest</a> for an example.</p> <p>The source code for that example is annotated here:</p> 
+<pre>#include &lt;gtest/gtest.h&gt;
+</pre> <p>Header file include for GTest. The include file dependency is automatically resolved by using <code translate="no" dir="ltr">BUILD_NATIVE_TEST</code> in the makefile.</p> 
+<pre>#include &lt;stdio.h&gt;
+
+TEST(HelloWorldTest, PrintHelloWorld) {
+    printf("Hello, World!");
+}
+</pre> <p>GTests are written using the <code translate="no" dir="ltr">TEST</code> macro: the first parameter is the test case name, and the second is the test name. Along with test binary name, they form the following hierarchy in the result dashboard:</p> 
+<pre>&lt;test binary 1&gt;
+| \-- &lt;test case 1&gt;
+| |   \-- &lt;test 1&gt;
+| |   \-- &lt;test 2&gt;
+| |   \-- ...
+| \-- &lt;test case 2&gt;
+| |   \-- &lt;test 1&gt;
+| |   \-- ...
+| \-- ...
+&lt;test binary 2&gt;
+|
+...
+</pre> <p>For more information on writing tests with GTest, refer to <a href="https://github.com/google/googletest/blob/main/docs/primer.md">the GTest documentation</a></p> <h2 id="simple-config">Simple configuration file</h2> <p>Each new test module must have a configuration file to direct the build system with module metadata, compile-time dependencies and packaging instructions. In most cases, the Soong-based, Blueprint file option is sufficient. See <a href="blueprints">Simple Test Configuration</a> for details.</p> <h2 id="complex-config">Complex configuration file</h2> <aside class="special"><strong>Important:</strong><span> The instructions in this section are needed only for CTS tests or those that require special setup, such as disabling Bluetooth or collecting sample data. All other cases can be covered through the <a href="blueprints">Simple Test Configuration</a>. See the <a href="test-config">Complex Test Configuration</a> for more details applicable to this section.</span></aside> <p>To use Trade Federation instead, write a test configuration file for Android's test harness, <a href="../tradefed">Trade Federation</a>.</p> <p>The test configuration can specify special device setup options and default arguments to supply the test class.</p> <h2 id="local-test">Build and test locally</h2> <p>For the most common use cases, employ <a href="atest">Atest</a>.</p> <p>For more complex cases requiring heavier customization, follow the <a href="instrumentation">instrumentation instructions</a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/development/gtest-func-e2e" class="_attribution-link">https://source.android.com/docs/core/tests/development/gtest-func-e2e</a>
+  </p>
+</div>

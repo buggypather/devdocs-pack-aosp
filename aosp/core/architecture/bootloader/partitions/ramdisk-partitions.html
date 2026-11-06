@@ -1,0 +1,104 @@
+<h1>Ramdisk partitions</h1>  <aside class="note"><strong>Note:</strong><span> This page applies to Android 11 and lower. For Android 12 (API level 31) and higher, see <a href="generic-boot">Generic boot partition</a>.</span></aside> <p>In Android 10 and 11, the first stage ramdisk contains the first stage init binary (which performs early mounting as specified by fstab entries) and vendor fstab files. (As in Android 9 and lower, <code translate="no" dir="ltr">system.img</code> contains the contents of <code translate="no" dir="ltr">$TARGET_ROOT_OUT</code>.)</p> <ul> <li><p>For devices with a boot-ramdisk (non-A/B), first stage init is a static executable located at <code translate="no" dir="ltr">/init</code>. These devices mount <code translate="no" dir="ltr">system.img</code> as <code translate="no" dir="ltr">/system</code>, then perform a switch root operation to move the mount at <code translate="no" dir="ltr">/system</code> to <code translate="no" dir="ltr">/</code>. The contents of the ramdisk are freed after mounting has completed.</p></li> <li><p>For devices that use recovery as a ramdisk, first stage init is located at <code translate="no" dir="ltr">/init</code> within the recovery ramdisk. These devices first switch root to <code translate="no" dir="ltr">/first_stage_ramdisk</code> to remove the recovery components from the environment, then proceed the same as devices with a boot-ramdisk (that is, mount <code translate="no" dir="ltr">system.img</code> as <code translate="no" dir="ltr">/system</code>, switch root to move that mount to <code translate="no" dir="ltr">/</code>, and free ramdisk contents after mounting). If <code translate="no" dir="ltr">androidboot.force_normal_boot=1</code> is present in the kernel command line (or bootconfig from Android 12 and higher), devices boot normally (into Android) instead of booting into recovery mode.</p></li> </ul> <p>After first stage init finishes, it executes <code translate="no" dir="ltr">/system/bin/init</code> with the <code translate="no" dir="ltr">selinux_setup</code> argument to compile and load SELinux onto the system. Finally, init executes <code translate="no" dir="ltr">/system/bin/init</code> again with the <code translate="no" dir="ltr">second_stage</code> argument. At this point, the main phase of init runs and continues the boot process using the <code translate="no" dir="ltr">init.rc</code> scripts.</p> <aside class="note"><strong>Note:</strong><span> Android 10 replaces ramdisk contents with a first stage init executable, which is incompatible with how previous ramdisks booted the system.</span></aside> <p>The following sections detail differences in partition layouts for non-A/B devices before and after Android 10.</p> <h2 id="non-ab-partition-layouts">Partition layouts (non-A/B devices)</h2> <p>The following sections detail differences in partition layouts for non-A/B devices before and after Android 10.</p> <h3 id="non-ab-boot-img">boot.img</h3> <table> <tr> <th>Ramdisk<br><em>(Android 8.x and lower)</em>
+</th> <th>System as root<br><em>(Android 9)</em>
+</th> <th>Ramdisk<br><em>(Android 10 and 11)</em>
+</th> </tr> <tr> <td>
+<p>Contains a kernel and a <code translate="no" dir="ltr">ramdisk.img</code>.</p> 
+<pre>
+ramdisk.img
+  -/
+    - init.rc
+    - init
+    - etc -&gt; /system/etc
+    - system/ (mount point)
+    - vendor/ (mount point)
+    - odm/ (mount point)
+    ...
+    </pre> </td> <td>Contains a normal boot kernel only.</td> <td>
+<p>Contains a kernel and <code translate="no" dir="ltr">ramdisk.img</code>.</p> 
+<pre>
+ramdisk.img
+  -/
+    - init
+    - vendor fstab files
+    - system/ (mount point)
+    - vendor/ (mount point)
+    - odm/ (mount point)
+    ...
+    </pre> </td> </tr> </table> <h3 id="non-ab-recovery-img">recovery.img</h3> <p>Contains a recovery kernel and a recovery <code translate="no" dir="ltr">ramdisk.img</code></p> <h3 id="non-ab-system-img">system.img</h3> <table> <tr> <th>Ramdisk<br><em>(Android 8.x and lower)</em>
+</th> <th>System as root<br><em>(Android 9)</em>
+</th> <th>Ramdisk<br><em>(Android 10 and 11)</em>
+</th> </tr> <tr> <td>
+<p>Contains a <code translate="no" dir="ltr">system.img</code>.</p> 
+<pre>
+system.img
+  -/
+    - bin/
+    - etc
+    - vendor -&gt; /vendor
+    - ...
+   </pre> </td> <td>
+<p>Contains the merged contents of <code translate="no" dir="ltr">$TARGET_SYSTEM_OUT</code> and <code translate="no" dir="ltr">$TARGET_ROOT_OUT</code>.</p> 
+<pre>
+system.img
+  -/
+    - init.rc
+    - init
+    - etc -&gt; /system/etc
+    - system/
+      - bin/
+      - etc/
+      - vendor -&gt; /vendor
+      - ...
+    - vendor/ (mount point)
+    - odm/ (mount point)
+    ...
+    </pre> </td> <td>
+<p>Contains the merged contents of <code translate="no" dir="ltr">$TARGET_SYSTEM_OUT</code> and <code translate="no" dir="ltr">$TARGET_ROOT_OUT</code>.</p> 
+<pre>
+system.img
+  -/
+    - init.rc
+    - init -&gt; /system/bin/init
+    - etc -&gt; /system/etc
+    - system/
+      - bin/
+      - etc/
+      - vendor -&gt; /vendor
+      - ...
+    - vendor/ (mount point)
+    - odm/ (mount point)
+    ...
+    </pre> </td> </tr> </table> <h2 id="ab-partition-layouts">Partition layouts (A/B devices)</h2> <p>The following sections detail differences in partition layouts for A/B devices before and after Android 10.</p> <h3 id="ab-boot-img">boot.img</h3> <table> <tr> <th>System as root<br><em>(Android 9)</em>
+</th> <th>Ramdisk<br><em>(Android 10 and 11)</em>
+</th> </tr> <tr> <td>Contains normal boot kernel and recovery-ramdisk (<code translate="no" dir="ltr">BOARD_USES_RECOVERY_AS_BOOT := true</code>).<br><br>Recovery-ramdisk is used only to boot into recovery.</td> <td>Contains normal boot kernel and recovery-ramdisk (<code translate="no" dir="ltr">BOARD_USES_RECOVERY_AS_BOOT := true</code>). <br><br>Recovery-ramdisk is used to boot into both recovery and Android. 
+<pre>
+ramdisk.img
+  -/
+    - init -&gt; /system/bin/init
+    - first_stage_ramdisk
+       - vendor fstab files
+    - etc -&gt; /system/etc
+    - system/ (mount point)
+    - vendor/ (mount point)
+    - odm/ (mount point)
+    ...
+    </pre> </td> </tr> </table> <h3 id="ab-system-img">system.img</h3> <p>Contains the merged contents of <code translate="no" dir="ltr">$TARGET_SYSTEM_OUT</code> and <code translate="no" dir="ltr">$TARGET_ROOT_OUT</code>.</p> 
+<pre>system.img
+  -/
+    - init.rc
+    - init -&gt; /system/bin/init
+    - etc -&gt; /system/etc
+    - system/
+      - bin/
+      - etc/
+      - vendor -&gt; /vendor
+      - ...
+    - vendor/ (mount point)
+    - odm/ (mount point)
+    ...
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/bootloader/partitions/ramdisk-partitions" class="_attribution-link">https://source.android.com/docs/core/architecture/bootloader/partitions/ramdisk-partitions</a>
+  </p>
+</div>

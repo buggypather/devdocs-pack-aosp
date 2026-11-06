@@ -1,0 +1,15 @@
+<h1>Develop Tradefed</h1>  <p>This section is aimed at Tradefed developers. If you are interested in extending TF or adding new test support, this is the section for you.</p> <h2 id="open_source">Open source</h2> <p>If you plan to use the open source variant of Trade Federation, use these commands to check out and build the AOSP <code translate="no" dir="ltr">android-latest-release</code> branch of Trade Federation:</p>  
+<pre>cd &lt;sourceroot&gt;
+mkdir android-latest-release
+cd android-latest-release
+repo init -u https://android.googlesource.com/platform/manifest -b android-latest-release
+repo sync -c -j8
+source build/envsetup.sh
+lunch aosp_cf_arm64_only_phone-userdebug # or any other device target
+m -j tradefed-all
+</pre> <p>See <a href="fundamentals/machine_setup">Development Environment</a> for more details.</p> <p>All open-sourceable Trade Federation code is stored in the <a href="https://android.googlesource.com/platform/tools/tradefederation/">tools/tradefederation/</a> git project of AOSP. Please keep the <a href="../../../setup/contribute/code-style">open source guidelines</a> in mind when writing code and submitting changes.</p> <p>Alternatively, if you are creating tests/utilities that use Trade Federation but aren't working on the framework itself, consider placing your work inside one of the <a href="development/contribute-noncore">Trade Federation contrib projects</a> to speed approvals.</p> <h2 id="coding_style">Coding style</h2> <p>Trade Federation follows the <a href="https://source.android.com/source/code-style">Android coding style guidelines</a>, with the following clarifications: interface names are prefixed with 'I' e.g. ITestDevice.</p> <h2 id="develop_using_eclipse">Develop using Eclipse</h2> <p>If you are interested in using Eclipse in developing Tradefed, refer to <a href="development/eclipse">Set up Eclipse IDE</a> for tips on setting up your environment.</p> <h2 id="run_tradefeds_tests">Run Tradefed's tests</h2> <p>You made a change to Trade Federation and you are searching how to test it? see <a href="development/tf-tests">Running Trade Federation's tests</a>.</p> <h2 id="architecture">Architecture</h2> <p>If you seek a deeper understanding of the innerworkings of Tradefed, see the <a href="architecture">Architecture</a> section.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/tradefed/development" class="_attribution-link">https://source.android.com/docs/core/tests/tradefed/development</a>
+  </p>
+</div>

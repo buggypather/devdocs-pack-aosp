@@ -1,0 +1,203 @@
+<h1>SDV system test creation</h1>  <p>System tests refer to any SDV test created using the SDV Test Framework.</p> <h2 id="test-creation">Test creation</h2> <aside class="note"><strong>Note:</strong><span> The creation of the test differs depending on its type.</span></aside> <h3 id="test-location">Test location</h3> <aside class="note"><strong>Note:</strong><span> All tests written with the framework must be located in the testing repository. The exact location of the test depends on its type.</span></aside> <ul> <li><code translate="no" dir="ltr">&lt;test_repository_root&gt;/sample_tests</code></li> <li><code translate="no" dir="ltr">&lt;test_repository_root&gt;/e2e_tests</code></li> <li><code translate="no" dir="ltr">&lt;test_repository_root&gt;/long_running_tests</code></li> <li><code translate="no" dir="ltr">&lt;test_repository_root&gt;/performance_tests</code></li> <li><code translate="no" dir="ltr">&lt;test_repository_root&gt;/hardware</code></li> </ul> <h3 id="test-files">Test files</h3> <ul> <li><p><strong><code translate="no" dir="ltr">README.md</code>:</strong> All tests must include a description of the test's purpose and how to run the test.</p></li> <li><p><strong>Test file:</strong> All tests follow a similar structure:</p></li> </ul> 
+<pre>"""SDV Name Test"""
+
+from sdv_test_fw.test_execution import sdv_base_test, sdv_test_runner
+
+class SdvTypeNameTest(sdv_base_test.SdvBaseTestClass):
+
+    def setup_class(self):
+      # Setup code. Executed only once at the beginning of the test.
+      super().setup_class()
+      self.sdv_device1 = self.get_device('device1')
+      self.sdv_device2 = self.get_device('device2')
+      ...
+
+    # Remove if not needed.
+    def setup_test(self):
+      super().setup_test()
+      # Setup code. Executed before every test case.
+      # Remove override if not needed.
+
+    # Remove if not needed.
+    def teardown_test(self):
+      # Cleanup code. Executed after every test case.
+      super().teardown_test()
+
+    # Remove if not needed.
+    def teardown_class(self):
+      # Cleanup code. Executed once at the end of the test.
+      super().teardown_class()
+
+    def test_name_case1(self):
+      # Test case step
+      # Test case verification
+
+    def test_name_case2(self):
+      # Test case step
+      # Test case verification
+
+if __name__ == '__main__':
+    # Start Test Execution Using SDV Test Framework
+    sdv_test_runner.run()
+</pre> <ul> <li>
+<strong>Build file:</strong> <code translate="no" dir="ltr">Android.bp</code>. The file structure is as follows:</li> </ul> 
+<pre>python_test_host {
+    name: "SdvTypeNameTest", // Should match the name of the test class.
+    main: "sdv_type_name_test.py",
+    srcs: [
+        "sdv_type_name_test.py",
+    ],
+    data: [
+        ":sdv_test_fw_device_configs",
+    ],
+    test_options: {
+        unit_test: false,
+    },
+    defaults: [
+        "sdv_test_fw_defaults",
+    ],
+    test_config_template: ":&lt;DEFAULT_TEMPLATE_NAME&gt;",
+}
+</pre> <h3 id="naming-convention">Naming convention</h3> <p>To identify and find the different types of tests, tests must be created following a specific naming convention:</p> <ul> <li>
+<strong>Sample test:</strong> <ul> <li>
+<strong>Filename:</strong> <code translate="no" dir="ltr">sdv_sample_&lt;NAME&gt;_test.py</code>
+</li> <li>
+<strong>Class name:</strong> <code translate="no" dir="ltr">SdvSampleNameTest</code>
+</li> </ul>
+</li> <li>
+<strong>E2E test:</strong> <ul> <li>
+<strong>Filename:</strong> <code translate="no" dir="ltr">sdv_e2e_&lt;NAME&gt;_test.py</code>
+</li> <li>
+<strong>Class name:</strong> <code translate="no" dir="ltr">SdvE2ENameTest</code>
+</li> </ul>
+</li> <li>
+<strong>Long-running test:</strong> <ul> <li>
+<strong>Filename:</strong> <code translate="no" dir="ltr">sdv_long_running_&lt;NAME&gt;_test.py</code>
+</li> <li>
+<strong>Class name:</strong> <code translate="no" dir="ltr">SdvLongRunningNameTest</code>
+</li> </ul>
+</li> <li>
+<strong>Performance test:</strong> <ul> <li>
+<strong>Filename:</strong> <code translate="no" dir="ltr">sdv_performance_&lt;NAME&gt;_test.py</code>
+</li> <li>
+<strong>Class name:</strong> <code translate="no" dir="ltr">SdvPerformanceNameTest</code>
+</li> </ul>
+</li> <li>
+<strong>Hardware test:</strong> <ul> <li>
+<strong>Filename:</strong> <code translate="no" dir="ltr">sdv_hw_&lt;NAME&gt;_test.py</code>
+</li> <li>
+<strong>Class name:</strong> <code translate="no" dir="ltr">SdvHWNameTest</code>
+</li> </ul>
+</li> </ul> <h2 id="code-guidelines">Code guidelines</h2> <p>This section provides guidelines and best practices for writing SDV System Tests.</p> <h3 id="python-mobly">Python and Mobly</h3> <p>Familiarize yourself with Python style guide and Mobly best practices, and consider the following SDV-specific recommendations:</p> <ul> <li><p>Avoid using Mobly imports directly except for assertions. The SDV Test Framework builds on it with a focus on SDV.</p></li> <li><p><strong>Assertions:</strong> Use Mobly assertions directly.</p></li> </ul> <h3 id="sdv-tests">SDV tests</h3> <p>The following sections outline specific guidelines and best practices for developing tests within the SDV Test Framework.</p> <h4 id="setup-clean-up">Setup and cleanup</h4> <p>Setup and cleanup code must be outside the test cases. Teardown methods are called even if the test fails, to make proper device cleanup.</p> <p>The location for setup and teardown code depends on the test's specific needs, even if the test is interrupted:</p> <ol> <li>To run only once at the beginning and end of the entire test, use <code translate="no" dir="ltr">setup_class</code> and <code translate="no" dir="ltr">teardown_class</code>. For example, get devices, set variable values or state that does not change between test cases, configure common device properties, or set flags.</li> </ol> 
+<pre>def setup_class(self):
+  super().setup_class()
+  # setup code
+
+def teardown_class(self):
+  # teardown code
+  super().teardown_class()
+</pre> <ol> <li>To run between test cases, before and after each of them. For example, an interactive session or common service execution.</li> </ol> 
+<pre>def setup_test(self):
+  super().setup_test()
+  # setup code
+
+def teardown_test(self):
+  # teardown code
+  super().teardown_test()
+</pre> <h4 id="parameterized-test-cases">Parameterized test cases</h4> <p>Use parameterized test cases when the steps are common across different test cases to avoid code repetition.</p> 
+<pre>from absl.testing import parameterized
+
+@parameterized.named_parameters(
+  {
+      'testcase_name': 'ab',
+      'input1': 'a',
+      'input2': 'b',
+  },
+  {
+      'testcase_name': 'cd',
+      'input1': 'c',
+      'input2': 'd',
+  },
+)
+def test_name(self, input1, input2):
+  # test
+</pre> <p>The example creates two test cases <code translate="no" dir="ltr">test_name_ab</code> and <code translate="no" dir="ltr">test_name_cd</code>.</p> <h4 id="one-test-case">One test case for behavior verification</h4> <p>Test cases should be compact and focus on one specific behavior. If multiple behaviors share common preconditions or steps, consider splitting them. You can use <code translate="no" dir="ltr">setup_test</code> or parameterization to minimize the amount of repetitive code.</p> <p>Following this approach makes tests easier to read and debug because it clearly indicates which steps and conditions failed.</p> <h5 id="example">Example</h5> <aside class="note"><strong>Note:</strong><span> Bad example.</span></aside>
+<pre>def test_verify_process(self):
+  self.device.start_process()
+
+  # precondition 1
+  self.device.send_signal1()
+  # verification signal1 received
+  ...
+
+  # precondition 2
+  self.device.send_signal2()
+  # verification signal2 received
+  ...
+
+  # precondition 3
+  self.device.start_agent()
+  # verification behavior
+  ...
+
+  self.device.kill_process()
+</pre>
+<aside class="note"><strong>Note:</strong><span> Good example.</span></aside>
+<pre>def setup_test(self):
+  super().setup_test()
+  self.device.start_process()
+
+def test_signal1(self):
+  # precondition
+  self.device.send_signal1()
+  # verification signal1 received
+  ...
+
+def test_signal2(self):
+  # precondition
+  self.device.send_signal2()
+  # verification signal2 received
+  ...
+
+def test_agent(self):
+  # precondition
+  self.device.start_agent()
+  # verification behavior
+  ...
+
+def teardown_test(self):
+  self.device.kill_process()
+  super().teardown_test()
+</pre> <h4 id="deterministic-test-behavior">Deterministic test behavior</h4> <p>Avoid adding conditionals in the test that branch its behavior. If a verification needs to be split, use two different test cases instead.</p> <h4 id="no-exceptions">Don't use exceptions</h4> <p>Tests and common helpers must use assertions instead of exceptions. This facilitates debugging and follows testing patterns.</p> <h5 id="example-2">Example</h5> <aside class="note"><strong>Note:</strong><span> Bad example.</span></aside>
+<pre>result = self.some_calculations()
+if result is None:
+  raise Exception("No result")
+</pre>
+<aside class="note"><strong>Note:</strong><span> Good example.</span></aside>
+<pre>result = self.some_calculations()
+self.get_test_validator().assert_is_not_none(result)
+</pre> <h5 id="example-3">Example</h5> <aside class="note"><strong>Note:</strong><span> Bad example.</span></aside>
+<pre>if not self.device.is_subprocess_running(
+  self.EXPECTED_PROCESS
+):
+  raise Exception("Process is not running")
+</pre>
+<aside class="note"><strong>Note:</strong><span> Good example.</span></aside>
+<pre>self.get_test_validator().assert_true(
+  self.device.is_subprocess_running(self.EXPECTED_PROCESS),
+  "Process is not running"
+)
+</pre> <h4 id="dont-use-sleep">Don't use sleep</h4> <p>Avoid using <code translate="no" dir="ltr">sleep</code> because it increases test execution time and causes flakiness.</p> <p>When the test requires waiting for an event or verification to continue, use the Waiting Methods provided in the framework instead.</p> <p>Use waiting methods carefully because test execution remains blocked until the condition matches or the timeout is reached.</p> <aside class="note"><strong>Note:</strong><span> These test methods have been designed to be generic, so the test must provide the condition method.</span></aside> <p>When you need to wait for a condition to complete in a test, ask the following questions:</p> <ol> <li>
+<p>What is a reasonable timeout?</p> <p>If an event is expected within a specific timeframe, the timeout should match that expectation to make sure the test fails quickly. Reduce the timeout if necessary (the default is 30s).</p>
+</li> <li>
+<p>How expensive is the operation performed by the waiting method?</p> <p>Avoid calling expensive operations frequently. Increase the poll interval if necessary (the default is 0.5s).</p>
+</li> </ol> <h4 id="test-cases-reqs">Test cases with requirements</h4> <p>If a test has test cases with explicit requirements to work (for example, the target where it should run), you can skip them if they don't match the requirements:</p> 
+<pre>def test_with_requirement(self):
+  self.get_test_validator().skip_if(expr, reason)
+  # Test case
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/testing/sdv-system-tests-creation" class="_attribution-link">https://source.android.com/docs/automotive/sdv/testing/sdv-system-tests-creation</a>
+  </p>
+</div>

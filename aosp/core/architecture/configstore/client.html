@@ -1,0 +1,37 @@
+<h1>Client-side use</h1>  <aside class="warning"> <strong>Warning:</strong> Android 10 deprecates the ConfigStore HAL and replaces the HAL with system properties. For details, refer to <a href="../configuration">Configuring</a>. </aside> <p>You can refactor conditionally compiled code to read values dynamically from the HAL interface. For example:</p> 
+<pre>
+#ifdef TARGET_FORCE_HWC_FOR_VIRTUAL_DISPLAYS
+// some code fragment
+#endif
+</pre> <p>Framework code can then call an appropriate utility function defined in <code translate="no" dir="ltr">&lt;configstore/Utils.h&gt;</code> depending on its type.</p> <h2 id="example">ConfigStore example</h2> <p>This example shows reading <code translate="no" dir="ltr">TARGET_FORCE_HWC_FOR_VIRTUAL_DISPLAYS</code>, defined in ConfigStore HAL as <code translate="no" dir="ltr">forceHwcForVirtualDisplays()</code> with return type <code translate="no" dir="ltr">OptionalBool</code>:</p> 
+<pre>
+#include &lt;configstore/Utils.h&gt;
+using namespace android::hardware::configstore;
+using namespace android::hardware::configstore::V1_0;
+
+static bool vsyncPhaseOffsetNs = getBool&lt;ISurfaceFlingerConfigs,
+        ISurfaceFlingerConfigs::forceHwcForVirtualDisplays&gt;(false);
+</pre> <p>The utility function (<code translate="no" dir="ltr">getBool</code> in the example above) contacts the <code translate="no" dir="ltr">configstore</code> service to get the handle for the proxy of the interface function, then retrieves the value by invoking the handle via HIDL/hwbinder.</p> <h2 id="utility-functions">Utility functions</h2> <p><code translate="no" dir="ltr">&lt;configstore/Utils.h&gt;</code> (<code translate="no" dir="ltr">configstore/1.0/include/configstore/Utils.h</code>) provides utility functions for each primitive return type, including <code translate="no" dir="ltr">Optional[Bool|String|Int32|UInt32|Int64|UInt64]</code>, as listed below:</p> <table> <tr> <th>Type</th> <th>Function <em>(template parameters omitted)</em>
+</th> </tr> <tr> <td><code translate="no" dir="ltr">OptionalBool</code></td> <td><code translate="no" dir="ltr">bool getBool(const bool defValue)</code></td> </tr> <tr> <td><code translate="no" dir="ltr">OptionalInt32</code></td> <td><code translate="no" dir="ltr">int32_t getInt32(const int32_t defValue)</code></td> </tr> <tr> <td><code translate="no" dir="ltr">OptionalUInt32</code></td> <td><code translate="no" dir="ltr">uint32_t getUInt32(const uint32_t defValue)</code></td> </tr> <tr> <td><code translate="no" dir="ltr">OptionalInt64</code></td> <td><code translate="no" dir="ltr">int64_t getInt64(const int64_t defValue)</code></td> </tr> <tr> <td><code translate="no" dir="ltr">OptionalUInt64</code></td> <td><code translate="no" dir="ltr">uint64_t getUInt64(const uint64_t defValue)</code></td> </tr> <tr> <td><code translate="no" dir="ltr">OptionalString</code></td> <td><code translate="no" dir="ltr">std::string getString(const std::string &amp;defValue)</code></td> </tr> </table> <p><code translate="no" dir="ltr">defValue</code> is a default value returned when the HAL implementation doesn't specify a value for the configuration item. Each function takes two template parameters:</p> <ul> <li>
+<code translate="no" dir="ltr"><strong>I</strong></code> is the interface class name.</li> <li>
+<code translate="no" dir="ltr"><strong>Func</strong></code> is the member function pointer for getting the configuration item.</li> </ul> <p>Because the configuration value is read-only and doesn't change, the utility function internally caches the configuration value. Subsequent calls are serviced more efficiently using the cached value in the same linking unit.</p> <h2 id="utils">Use configstore-utils</h2> <p>The ConfigStore HAL is designed to be forward compatible for minor version upgrades, meaning that when the HAL is revised and some framework code uses the newly introduced items, the ConfigStore service with an older minor version in <code translate="no" dir="ltr">/vendor</code> can still be used.</p> <p>For forward compatibility, ensure that your implementation adheres to the following guidelines:</p> <ol> <li>New items use the default value when <em>only</em> the old version's service is available. Example: 
+<pre>
+service = V1_1::IConfig::getService(); // null if V1_0 is installed
+value = DEFAULT_VALUE;
+  if(service) {
+    value = service-&gt;v1_1API(DEFAULT_VALUE);
+  }
+</pre> </li> <li>The client uses the first interface that included the ConfigStore item. Example: 
+<pre>
+V1_1::IConfig::getService()-&gt;v1_0API(); // NOT ALLOWED
+
+V1_0::IConfig::getService()-&gt;v1_0API(); // OK
+</pre> </li> <li>The new version's service can be retrieved for old version's interface. In the following example, if the installed version is v1_1, the v1_1 service must be returned for <code translate="no" dir="ltr">getService()</code>: 
+<pre>
+V1_0::IConfig::getService()-&gt;v1_0API();
+</pre> <aside class="note"><strong>Note:</strong> The <a href="https://android-review.googlesource.com/c/393736/">current AOSP implementation</a> satisfies this requirement.</aside> </li> </ol> <p>When the access functions in the <code translate="no" dir="ltr">configstore-utils</code> library are used for accessing the ConfigStore item, #1 is guaranteed by the implementation and #2 is guaranteed by compiler errors. For these reasons, we strongly recommend using <code translate="no" dir="ltr">configstore-utils</code> wherever possible.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/configstore/client" class="_attribution-link">https://source.android.com/docs/core/architecture/configstore/client</a>
+  </p>
+</div>

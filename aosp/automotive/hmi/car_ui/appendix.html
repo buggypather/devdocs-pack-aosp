@@ -1,0 +1,17 @@
+<h1>Appendix A, work with RROs</h1>  <p> Runtime resource overlays (RROs) can either be pushed to the <code translate="no" dir="ltr">/vendor/overlays</code> folder (which is automatically read during boot) or can be installed by running <code translate="no" dir="ltr">adb install</code>. The latter allows faster iteration. However, this can cause the same RRO to reside in two locations (<code translate="no" dir="ltr">/vendor/overlays</code> and <code translate="no" dir="ltr">/data/app</code>). </p> <p>For pushing and rebooting, run:</p> 
+<pre>$ adb root
+$ adb remount
+$ adb shell mkdir /vendor/overlay/&lt;overlay-name&gt;
+$ adb push &lt;path-to-overlay.apk-file&gt; /vendor/overlay/&lt;overlay-name&gt;
+$ adb reboot</pre> <p> For installation, run: </p> 
+<pre>$ adb install &lt;path-to-overlay.apk-file&gt;</pre> <p> To confirm the RRO is available, run: </p> 
+<pre>$ adb shell cmd overlay list --user current
+    android
+    [ ] com.android.sample_rro
+    com.android.sample.targetapp
+    [ ] com.android.sample.targetapp_rro</pre> <p> When <code translate="no" dir="ltr">---</code> is displayed next to the newly installed RRO, this indicates that the target APK was either not found (double-check the <code translate="no" dir="ltr">targetPackage</code> declaration on your <code translate="no" dir="ltr">AndroidManifest.xml</code>) or some of the resources defined in the RRO don't match any resources in the target. </p> <h2 id="rro">Enable and disable RROs</h2> <p> To enable or disable a RRO, respectively, run the desired command: </p> <ul> <li> <p>Enable:<br> <code translate="no" dir="ltr">adb shell cmd overlay enable --user current &lt;rro-package-name&gt;</code></p> </li> <li> <p>Disable:<br> <code translate="no" dir="ltr">adb shell cmd overlay disable --user current &lt;rro-package-name&gt;</code></p> </li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/hmi/car_ui/appendix" class="_attribution-link">https://source.android.com/docs/automotive/hmi/car_ui/appendix</a>
+  </p>
+</div>

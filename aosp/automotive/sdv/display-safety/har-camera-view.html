@@ -1,0 +1,393 @@
+<h1>HAR camera view</h1>  <p>Governmental regulators implement several requirements to ensure that indirect rear visibility provides enough information to maneuver the vehicle in a precise and timely manner. This influences the driver's awareness of the surroundings.</p> <p>For rear visibility systems based on the Camera Monitoring System (CMS), the National Highway Traffic Safety Administration (NHTSA) requires that you satisfy these requirements (S6.6.2.3 referred from UNECE46):</p> <ul> <li><p><strong>S5.5.3 Response time.</strong> The rearview image meeting the requirements of S5.5.1 (Field of view) and S5.5.2 (Size), when tested in accordance with S14.2, displays within 2.0 seconds of the start of a backing event.</p></li> <li><p><strong>S5.5.4 Linger time.</strong> The rearview image meeting the requirements of S5.5.1 and S5.5.2 does not display after the backing event has ended.</p></li> <li><p><strong>S5.5.5 Deactivation.</strong> The rearview image meeting the requirements of S5.5.1 and S5.5.2 remains visible during the backing event until the driver modifies the view, or the vehicle direction selector moves from the reverse position.</p></li> <li><p><strong>S6.6.2.3.3.5 Artifacts.</strong> The operator's manual should refer to possible artifacts and their impacts on the partial occlusion of the field of view and of the objects, which might require the driver to be particularly alert and attentive.</p></li> <li><p><strong>S6.2.2.3.4.1 Frame rate.</strong> Movements of objects in front of the camera render smooth and fluid. The system's minimum frame rate is at least 30 Hz (equivalent to 30 fps). At low light conditions or while maneuvering at low speed, the system's minimum frame rate is at least 15Hz.</p></li> <li><p><strong>S6.2.2.3.4.2 Image formation time.</strong> The monitor's image formation time is less than 55 ms at a temperature of 22 degrees in Celsius ± 5 degrees in Celsius.</p></li> <li><p><strong>S6.2.2.3.4.3 System latency.</strong> A camera monitor system (CMS) has a sufficiently short latency to render the scenery nearly at the same time. The latency is lower than 200 ms at a temperature of 22 degrees in Celsius ± 5 degrees in Celsius.</p></li> </ul> <p>We introduced the Android Automotive OS (AAOS) <a href="../../camera/evs">Extended View System (EVS)</a> to comply with these requirements on bare metal AAOS. We introduced a similar service for <a href="../../virtualization">Virtualization</a> on AAOS devices with the high availability renderer (HAR), which also demonstrates compliance with these requirements.</p> <h2 id="camera-preview-pipeline">Camera preview pipeline</h2> <p>These five stages make up the camera preview pipeline:</p> <p class="android-image-dark-theme-background"><img src="https://source.android.com/static/docs/automotive/sdv/images/camera-view-01.png" alt="Camera preview pipeline stages"> </p> <p><strong>Figure 1</strong>. Camera preview pipeline stages.</p> <p><em>Camera service block</em> refers to the Camera Service platform and its abstraction layer that lets apps access and consume available cameras. The Display Service function visualizes the imagery data for users. The app implements the target user journeys with Camera Service and Display Service.</p> <p>The primary rear visibility user journey is:</p> <ol> <li><p>Driver places the direction selector (the gear) in Reverse to trigger a backing up event.</p></li> <li><p>System broadcasts the backing event. The app receives the broadcast and initializes the camera input block (Camera Service) and the renderer (Display Service).</p></li> <li><p>Camera input block initializes the Camera Service platform and returns the service handle to the app.</p></li> <li><p>Renderer initializes the view window for the camera input from step 4.</p></li> <li><p>App requests the camera input block to start sending frame buffers and events.</p></li> <li><p>App enqueues delivered frame buffers through the callbacks (asynchronous). Frame buffers are owned by the camera input block, so the app can't modify them.</p></li> <li><p>App dequeues a frame buffer (if the queue isn't empty) and composes the user view. Users can make a copy to modify the contents.</p></li> <li><p>App sends a buffer to the renderer.</p></li> <li><p>Renderer draws the contents of a received buffer on the display.</p></li> <li><p>If the backing event remains in progress, go to Step 7. When the backing event is completed, the app requests the camera input block to stop sending frame buffers and events after hiding the view from the user.</p></li> <li><p>App optionally closes a camera and releases the renderer.</p></li> </ol> <aside class="note"><strong>Note:</strong><span> This sequence assumes that the instrument cluster display doesn't permit the driver to change the view.</span></aside> <p>Figure 1 illustrates the flow. This image uses elements from the <a href="http://www.qnx.com/developers/docs/7.0.0/index.html#com.qnx.doc.camera/topic/manual/camera_arch_functions.html">QNX Camera Library</a> API to use the Camera Service platform.</p> <p width="750" class="android-image-dark-theme-background"><img src="https://source.android.com/static/docs/automotive/sdv/images/camera-view-02.png" alt="HAR primary user journey"> </p> <p><strong>Figure 2.</strong> HAR primary user journey.</p> <p>The camera input block declares three interfaces:</p> <ul> <li><p><code translate="no" dir="ltr">CameraManager</code>, declares methods to manage camera devices; for example, the app uses this interface to open (reserve) a target camera device.</p></li> <li><p><code translate="no" dir="ltr">CameraDevice</code> declares methods to control a camera device; for example, starting or stopping a data stream.</p></li> <li><p><code translate="no" dir="ltr">CameraStreamListener</code> declares a single method to receive various events from a target camera.</p></li> </ul> <h2 id="design">Design</h2> <p>This section details the system design.</p> <h3 id="user-experience">User experience</h3> <p>The driver can preview the rear camera on the instrument cluster display when they place the gear into reverse. The display stops previewing the camera when the driver moves the gear out reverse.</p> <p>Additional user journeys can be enabled. For example, the driver can preview the area not visible in the mirrors when the turn signal is activated.</p> <h3 id="start-camera">Start camera preview</h3> <p>When using cameras, the app enumerates and evaluates available cameras to find the best camera for the intended purpose. For example, for rear visibility, the app looks for the camera that shows the rear side of the vehicle from the list of available cameras.</p> <p>The app evaluates this by examining each camera's characteristics, for example, location, lens facing direction, frame rate, output resolution, and output format. If multiple cameras have the same required characteristics, the app might examine additional characteristics, such as the field of the view and the focal distance.</p> <p>This image shows a sequence for starting a camera preview with a static camera configuration:</p> <p width="600" class="android-image-dark-theme-background"><img src="https://source.android.com/static/docs/automotive/sdv/images/camera-view-03.png" alt="Start camera preview with static camera configuration"> </p> <p><strong>Figure 3.</strong> Start camera preview with static camera configuration.</p> <aside class="note"><strong>Note:</strong><span> The camera input block owns the frame buffers and lends them to the app. This implies that the camera input block implementation might need to make deep copies of delivered frame buffers if the Camera Service platform doesn't share ownership. For example, QNX's Camera Service platform makes the lifespan of forwarded frame buffers bound to the lifespan of a callback thread's context.</span></aside> <h3 id="stop-camera">Stop camera preview</h3> <p>The app stops providing rear visibility when the backing event ends. To avoid showing either a blank screen or a still image, the app hides the view from the user first and then requests that the camera input block stops sending events.</p> <p>This image shows a sequence for stopping a data stream from a target camera device:</p> <p width="600" class="android-image-dark-theme-background"><img src="https://source.android.com/static/docs/automotive/sdv/images/camera-view-04.png" alt="Stop data stream from target camera device"> </p> <p><strong>Figure 4.</strong> Stop data stream from target camera device.</p> <h3 id="handle-errors">Errors</h3> <p>A camera device can unexpectedly stop sending a new frame buffer. To detect such incidents, the camera input block might implement a timer that expires upon a new frame's arrival and send a notification when this timer expires.</p> <p>When the app receives a notification, the app notifies the user that a camera preview is no longer live and attempts to restore a camera preview by closing a camera device and opening it again. Figure 5 shows how the app handles a timeout:</p> <p width="600" class="android-image-dark-theme-background"><img src="https://source.android.com/static/docs/automotive/sdv/images/camera-view-05.png" alt="Handling a timeout"> </p> <p><strong>Figure 5.</strong> Handling a timeout (hanging data stream).</p> <p>The camera input block can report incidents other than a hanging data stream and embed more details in the buffers. OEMs can use this event metadata to handle incidents on their platform.</p> <h2 id="activities">Activities</h2> <p>The API is used by apps that run on the host and manage the instrument cluster display through the HAR (blue blocks in the diagram below).</p> <p>A system diagram is illustrated in Figure 5:</p> <p class="android-image-dark-theme-background"><img src="https://source.android.com/static/docs/automotive/sdv/images/camera-view-06.png" alt="System diagram"> </p> <p><strong>Figure 6.</strong> System diagram.</p> <h2 id="services">Services</h2> <p>API calls are expected to be running in the context of the calling process.</p> <h2 id="apis">APIs</h2> <p>The new API is intended only for apps that manage the camera previews on the instrument cluster display through the HAR. The API is available through the <a href="har-pal">platform abstraction layer</a> and links dynamically.</p> <p>The <code translate="no" dir="ltr">CameraInputBlock</code> interface declares methods to initialize the camera functionality and get the input block manager. The app uses a returned <code translate="no" dir="ltr">CameraManager</code> instance to manage camera devices.</p> <aside class="note"><strong>Note:</strong><span> In the samples that follow, all interfaces are declared in C/C++.</span></aside>
+<pre>// This class represents a camera input block for the application that manages the
+// instrument cluster display with Harry.
+public class CameraInputBlock : public InputBlock {
+    public:
+        // Clean up the resources.
+        virtual ~CameraInputBlock();
+
+        // A method inherited from InputBlock class. This method initializes
+        // CameraInputBlock instance; e.g. checking the platform camera service
+        // is live.
+        //
+        // @return CAMERA_EPERM if the platform camera service is not
+        //                      available.
+        //         CAMERA_OK otherwise.
+        virtual CameraError init() override;
+
+        // A method inherited from InputBlock class. This method release all
+        // resources held by this CameraInputBlock instance.
+        virtual void release() override;
+
+        // This method returns a CameraManager instance. The caller uses
+        // this instance to manage camera devices.
+        //
+        // @param out If this method is successful, this points to a valid
+        //            CameraManager instance.
+        // @return CAMERA_EACCESS when we fail to create CameraManager instance
+        //         to return.
+        //         CAMERA_OK otherwise.
+        virtual CameraError getCameraManager(
+            std::shared_ptr&lt;CameraManager&gt;* out) = 0;
+
+    private:
+        // Handle to manage camera devices.
+        std::shared_ptr&lt;CameraManager&gt; mMgr;
+
+        // Handle to manage camera devices that have been opened by clients.
+        std::set&lt;CameraDevice&gt; mCameras;
+};
+</pre> <p>The <code translate="no" dir="ltr">CameraManager</code> class declares methods to open (or own) cameras and releases them when the app finishes with that camera. The app can open more than one camera and consume their streams to create a wider field-of-view or multiview experience.</p> 
+<pre>// This pure virtual class declares methods to manage camera devices.
+public class CameraManager {
+    public:
+        // This method returns a list of CameraDescriptor objects representing
+        // available cameras.
+        //
+        // @param out A list of CameraDescriptor instances. This list may be
+        //            empty if the platform camera service does not list any
+        //            camera.
+        // @return CAMERA_EACCESS if we failed to build a camera list.
+        //         CAMERA_OK otherwise.
+        virtual CameraError getCameraList(
+            std::vector&lt;CameraDescriptor&gt;* out) = 0;
+
+        // Open a camera device associated with a given string identifier.
+        //
+        // @param ID A string identifier of a camera device to request.
+        // @param out A pointer to CameraDevice shared pointer object. This
+        //            is null when we fail to open a target device.
+        // @return CAMERA_ENODEV if no camera is associated with a given id.
+        //         CAMERA_EACCESS if it fails to open a target device.
+        //         CAMERA_OK otherwise.
+        virtual CameraError open(
+            std::string ID, std::shared_ptr&lt;CameraDevice&gt;* out) = 0;
+
+        // Close a camera device associated with a given string identifier.
+        // This method is assumed to be always successful.
+        //
+        // @param id A string identifier of a camera device to close.
+        virtual void close(std::string id) = 0;
+};
+</pre> <p>If apps can't detect which cameras to use, apps can choose the camera that works best in the context. <code translate="no" dir="ltr">CameraManager::getCameraList()</code> returns a list of <code translate="no" dir="ltr">CameraDescriptor</code> instances, which provides the characteristics of each camera.</p> <p>The <code translate="no" dir="ltr">CameraDevice</code> class represents a single camera device and declares methods to start and stop its data stream. If camera characteristics aren't statically known, clients get them from their descriptor and parse them.</p> <p>For example, a client can get a list of stream configurations that a target camera device offers from its metadata and choose the one with the best attributes (for example, frame rates, resolutions, and output format).</p> 
+<pre>// This class represents a single camera device.
+public class CameraDevice {
+    public:
+        // Start a data stream that attributes are matching to given
+        // configuration best.
+        // If a selected configuration is not given (null), a data stream is
+        // initiated in its default configuration and return.
+        //
+        // @param configuration Selected attributes of the imagery data stream.
+        // @param listener An object to listen to an active data stream.
+        // @param effective Actual attributes of started data stream.
+        // @return CAMERA_EINVAL if a listener object is invalid.
+        //         CAMERA_EIO if we failed to start a video stream.
+        //         CAMERA_OK otherwise.
+        virtual CameraError start(
+                std::shared_ptr&lt;CameraStreamConfiguration&gt;&amp; configuration,
+                std::shared_ptr&lt;CameraStreamListener&gt;&amp; listener,
+                std::shared_ptr&lt;CameraStreamConfiguration&gt;* effective) = 0;
+
+        // Stop a data stream.
+        virtual void stop() = 0;
+
+        // Get a camera descriptor.
+        //
+        // @param desc A set of attributes that defines this camera device.
+        // @return CAMERA_ENODATA if a descriptor is not available.
+        //         CAMERA_OK otherwise.
+        CameraError getDescriptor(std::shared_ptr&lt;CameraDescriptor&gt;* desc) = 0;
+
+        // Return a consumed buffer to the camera device. A client of active
+        // stream must return a frame buffer explicitly by calling this method.
+        virtual void doneWithFrame(std::shared_ptr&lt;FrameBuffer&gt;&amp; buffer) = 0;
+
+    private:
+        // Describe this camera device.
+        CameraDescriptor mDescriptor;
+
+        // A weak reference to a listening client.
+        std::weak_ptr&lt;CameraStreamListener&gt; mClient;
+};
+
+// This class declares attributes that characterize a camera device.
+public class CameraDescriptor {
+    public:
+        // Unique std::string object to identify a single camera device.
+        std::string mId;
+
+        // A set of stream configurations this camera device is capable of. A
+        // camera must have at least one stream configuration.
+        std::set&lt;CameraStreamConfiguration&gt; mConfigurations;
+
+        // Are more attributes needed to exist, such as locations, lens
+        // facing directions, and intrinsic/extrinsic parameters?
+};
+
+// This class declares attributes that characterize an imagery data stream.
+public class CameraStreamConfiguration {
+    public:
+        // Width of output of this stream in pixels.
+        unsigned int mWidthInPixels;
+
+        // Height of output of this stream in pixels.
+        unsigned int mHeightInPixels;
+
+        // An average number of frames per second.
+        double mFrameRate;
+
+        // A format of this stream's output. A client could calculate a
+        // byte-per-pixel (bpp) from this.
+        CameraColorFormat mFormat;
+};
+
+// This class represents a listener/callback object to listen to frames and
+// events.
+public class CameraStreamListener {
+    public:
+        // A listener method to receive various stream events including a new
+        // frame buffer.
+        //
+        // @param event CameraStreamEvent object that represents a single event
+        //              such as an arrival of a new frame buffer, camera stream
+        //              is terminated, and so forth.
+        virtual void onEvent(std::shared_ptr&lt;CameraStreamEvent&gt;* event) = 0;
+};
+</pre> <p><code translate="no" dir="ltr">CameraDevice::start()</code> takes three arguments:</p> <ul> <li><p>Stream configuration chosen by the caller.</p></li> <li><p>Listener to receive stream events.</p></li> <li><p>Pointer to an effective stream configuration. We strongly recommend that the caller examine this value to handle coming frame buffers as intended.</p></li> </ul> <p>When <code translate="no" dir="ltr">CameraDevice::start()</code> starts a data stream with the Camera Service platform, it holds a weak reference to the caller's listener object to detect the unexpected termination of the caller.</p> <p>When a client finishes with a frame buffer, a client must notify a camera device that it no longer needs the frame buffer by calling the <code translate="no" dir="ltr">CameraDevice::doneWithFrame()</code> method.</p> <p>When a stream starts, a client receives event messages. A common message is a new frame buffer. Through a registered callback function, a client receives a <code translate="no" dir="ltr">kNewFrameBuffer</code> event that contains the imagery data along with the frame buffer metadata. <code translate="no" dir="ltr">StreamEventType</code> declares more types to handle other stream events. Such as stopped or hanging data stream.</p> 
+<pre>// This class lists events possibly occurring while a data stream is active.
+enum class CameraStreamEventType {
+    // A delivery of a new frame buffer.
+    kNewFrameBuffer,
+    // A data stream has been stopped.
+    kStreamStopped,
+    // No new frame buffer arrives for a while.
+    kStreamHang,
+    // Add more.
+    ...
+};
+
+// This class represents a single instance of StreamEventType.
+public class CameraStreamEvent {
+    public:
+        // Return a type of this event.
+        //
+        // @return CameraStreamEventType enum value.
+        CameraStreamEventType getType() { return mType; }
+
+        // Return a pointer to data associated with this event.
+        //
+        // @return A shared pointer object of the buffer that contains data for
+        //         this event.
+        std::shared_ptr&lt;void&gt; getData() { return mData; }
+
+    private:
+        // Describe a type of this event.
+        CameraStreamEventType mType;
+
+        // A pointer to the data buffer.
+        std::shared_ptr&lt;void&gt; mData;
+};
+
+// This class inherits StreamEvent class and has additional fields to represent
+// the frame buffer.
+public class FrameBufferEvent : public CameraStreamEvent {
+    public:
+        // Return an identifier of this frame buffer.
+        //
+        // @return A unique integer value to identify this frame buffer.
+        int getBufferID() { return mBufferID; }
+
+        // Give access to frame buffer metadata.
+        //
+        // @return A shared pointer to the buffer that contains data besides
+        //         the imagery data.
+        std::shared_ptr&lt;void&gt; getMetadata() { return mMetadata; }
+
+    private:
+        // Unique integer to identify this buffer.
+        int mBufferID;
+
+        // A pointer to metadata of this frame buffer.
+        std::shared_ptr&lt;void&gt; mMetadata;
+};
+</pre> <p>This sample shows an implementation of the <code translate="no" dir="ltr">CameraInputBlock</code> interface and its app:</p> 
+<pre>CameraError getCameraManager(std::shared_ptr&lt;CameraManager&gt;* out) {
+    // During an instantiation, CameraManager will retrieve a list of camera
+    // devices from the platform camera service and identify their attributes.
+    *out = std::make_shared&lt;CameraManager&gt;();
+    return CAMERA_OK;
+}
+
+// This method returns a list of CameraDescriptor objects representing available
+// cameras.
+CameraError CameraManager::getCameraList(std::vector&lt;CameraDescriptor&gt;* out) {
+    if (mCameraList.size() &lt; 1) {
+        // Query a list of cameras and get their attributes.
+    }
+    *out = mCameraList;
+    return CAMERA_OK;
+}
+
+// Open a camera device associated with a given string identifier.
+CameraError CameraManager::open(std::string id, std::shared_ptr&lt;CameraDevice&gt;* out) {
+    if (!mCameraList.contains(id)) {
+        // We cannot identify any camera with a given value.
+        return CAMERA_NODEV;
+    }
+
+    // During a construction, CameraDevice will obtain a handle of a target
+    // camera device from the platform camera service.
+    std::shared_ptr&lt;CameraDevice&gt; h = std::make_shared&lt;CameraDevice&gt;(id);
+    if (!h) {
+        // We fail to open a camera device.
+        return CAMERA_EACCESS;
+    }
+
+    *out = h;
+    return CAMERA_OK;
+}
+
+// Close a camera device associated with a given string identifier. This method
+// is assumed to be always successful.
+void CameraManager::close(std::string id) {
+    if (!mCameraList.contains(id)) {
+        // We ignore calls with unknown identifiers.
+        return;
+    }
+
+    // mCameraList.remove() returns an object removed from the list.
+    std::shared_ptr&lt;CameraDevice&gt; device = mCameraList.remove(id);
+
+    // Ensure a device stops streaming.
+    device-&gt;stop();
+}
+
+// Start a data stream that attributes are matching to given configuration
+// best.
+// If a selected configuration is not given (null), a data stream will be
+// initiated in its default configuration and return.
+CameraError CameraDevice::start(
+        std::shared_ptr&lt;CameraStreamConfiguration&gt;&amp; configuration,
+        std::shared_ptr&lt;CameraStreamListener&gt;&amp; listener,
+        std::shared_ptr&lt;CameraStreamConfiguration&gt;* effective) {
+    if (!listener) {
+        return CAMERA_EINVAL;
+    }
+
+    // selectStreamConfiguration examines this camera's stream configurations
+    // and returns the one closest to the selected configuration.
+    CameraStreamConfiguration config = selectStreamConfiguration(configuration);
+
+    // mDevice refers to the camera handle for the platform camera service. We
+    // may need to translate CameraStreamConfiguration for the platform service.
+    mDevice-&gt;configure(
+        configuration.mWidth, configuration.mHeight, configuration.mFormat);
+
+    // Start a data stream with a callback object.
+    if (!mDevice-&gt;startStream(mCallback)) {
+        // We failed to start a data stream.
+        return CAMERA_EIO;
+    }
+
+    return CAMERA_OK;
+}
+
+// Stop a data stream.
+void CameraDevice::stop() {
+    if (!mDevice) {
+        // Nothing to do if we don't have a valid camera handle for the
+        // platform camera service.
+        return;
+    }
+
+    mDevice-&gt;stopStream();
+}
+
+// Get a camera descriptor.
+CameraError CameraDevice::getDescriptor(std::shared_ptr&lt;CameraDescriptor&gt;* desc) {
+    if (!mDescriptor) {
+        return CAMERA_ENODATA;
+    }
+
+    *desc = *mDescriptor;
+    return CAMERA_OK;
+}
+
+// Return a consumed buffer to the camera device. A client of active stream
+// must return a frame buffer explicitly by calling this method.
+void CameraDevice::doneWithFrame(std::shared_ptr&lt;FrameBuffer&gt;&amp; buffer) {
+    if (!mBufferRecords.contains(buffer.getId())) {
+        // Ignore a call with unknown frame buffer.
+        return;
+    }
+
+    // Simply remove from the record.
+    (void)mBufferRecords.remove(buffer.getId());
+}
+
+// This method handles gear-shift events.
+void Application::handleGearShift(GearSelection selection) {
+    switch (selection) {
+        case GEAR_SELECTION_REVERSE:
+            // Upon the reverse gear selection, we are going to start a video
+            // stream and show its preview on the instrument cluster display.
+            (void)startStream(mCameraInputBlock);
+
+            // FIXME: Exact method to control the camera preview window on the
+            // instrument display is to be determined.
+            show(mRearVisibilityWindow);
+            break;
+
+        default:
+            // Upon all other gear selection, we are going to stop a video
+            // stream (if it's running) and hide the preview.
+            stopStream(mCameraInputBlock);
+
+            // FIXME: Exact method to control the camera preview window on the
+            // instrument display is to be determined.
+            hide(mRearVisibilityWindow);
+            break;
+    }
+}
+
+bool Application::startStream(std::shared_ptr&lt;CameraInputBlock&gt; handle) {
+    return handle-&gt;start(std::bind(&amp;Application::handleStreamCallback, this);
+}
+
+void Application::stopStream(std::shared_ptr&lt;CameraInputBlock&gt; handle) {
+    handle-&gt;stop();
+}
+
+// This method handles a stream callback.
+void Application::handleStreamCallback(StreamEvent&amp; event) {
+    switch (event.getType()) {
+        case StreamEventType::kNewFrameBuffer:
+            // Handle a new frame buffer. We may just enqueue it for the
+            // future or forward to CameraInputBlock client.
+            break;
+
+        case StreamEventType::kStreamStopped:
+            // Handle as an incident if this event is not expected.
+            break;
+
+        // More cases to be added.
+    }
+}
+
+void Application::handleNewFrameBuffer(StreamEvent&amp; event) {
+    // Enqueue a new frame buffer for the further processing. A buffer
+    // must be returned explicitly by calling
+    // CameraDevice.doneWithFrame(FrameBuffer&amp;) method.
+}
+
+void Application::handleStreamEvent(StreamEvent&amp; event) {
+    // Handle a received stream event except a new frame buffer's
+    // arrival; e.g. a video stream is terminated unexpectedly.
+}
+</pre> <h2 id="performance">Performance</h2> <p>Rear visibility meets these government regulations.</p> <table> <th width="35%">Value</th> <th>Regulation</th> <tr> <td>Response time</td> <td>CFR 571.111 S5.5.3</td> </tr> <tr> <td>Frame rate</td> <td>UNECE R46 6.2.2.3.4</td> </tr> <tr> <td>Image formation time</td> <td>UNECE R46 6.2.2.3.4.2</td> </tr> <tr> <td>System latency</td> <td>UNECE R46 6.2.2.3.4.3</td> </tr> </table> <h2 id="privacy">Privacy</h2> <p>Specific to privacy:</p> <ul> <li><p>The API doesn't require implementations to collect, log, or store personally identifiable information (PII). However, because captured imagery data (or associated metadata) could contain PII, the app that uses the API must get the user's explicit consent.</p></li> <li><p>Users can't control camera devices to preview on the instrument cluster display because the cameras are involved in safety-critical roles. OEMs get user consent during setup or from the driver.</p></li> <li><p>This API doesn't support background camera clients. Therefore, the privacy indicator, which informs users that a camera device is capturing data, is out of scope.</p></li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/display-safety/har-camera-view" class="_attribution-link">https://source.android.com/docs/automotive/sdv/display-safety/har-camera-view</a>
+  </p>
+</div>

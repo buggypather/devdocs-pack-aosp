@@ -1,0 +1,14 @@
+<h1>Automated log on failure collection</h1>  <p>When debugging tests, a set of logs is always needed to get a basic picture of the failure and the device under test. Sources include: Logcat, Tradefed host log, screenshot, etc.</p> <p>In order to make it generic and painless for any test writer to get those logs, Tradefed has a built-in mechanism to help collecting them.</p> <h2 id="configuration">Configuration</h2> <p>To automatically collect some logs on failure, you can add the following option to your Tradefed command line:</p> 
+<pre>--auto-collect LOGCAT_ON_FAILURE
+or
+--auto-collect SCREENSHOT_ON_FAILURE
+</pre> <p>To see the full list of possible values, checkout <a href="https://android.googlesource.com/platform/tools/tradefederation/+/android17-release/src/com/android/tradefed/device/metric/AutoLogCollector.java">AutoLogCollector</a></p> <p>For convenience, logcat and screenshot each have a direct flag:</p> 
+<pre>--logcat-on-failure
+and
+--screenshot-on-failure
+</pre> <h2 id="note_on_suite_modules_androidtestxml">Note on suite modules (AndroidTest.xml)</h2> <p>Modules cannot direcly specify this option in the <code translate="no" dir="ltr">AndroidTest.xml</code>, but they can use a <a href="../through-suite/module-controller">module controller</a> instead.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/tradefed/testing/through-tf/log-on-failure" class="_attribution-link">https://source.android.com/docs/core/tests/tradefed/testing/through-tf/log-on-failure</a>
+  </p>
+</div>

@@ -1,0 +1,107 @@
+<h1>Add ConfigStore classes and items</h1>  <aside class="warning"> <strong>Warning:</strong> Android 10 deprecates the ConfigStore HAL and replaces the HAL with system properties. For details, refer to <a href="../configuration">Configuring</a>. </aside> <p>You can add new ConfigStore items (that is, interface methods) for an existing interface class. If the interface class isn't defined, you must add a new class before you can add a ConfigStore item for that class. This section uses the example of a <code translate="no" dir="ltr">disableInitBlank</code> configuration item for <code translate="no" dir="ltr">healthd</code> being added to the <code translate="no" dir="ltr">IChargerConfigs</code> interface class.</p> <aside class="note"><strong>Note:</strong> Before continuing, ensure that you're familiar with <a href="../hidl">general HIDL concepts</a>, <a href="../hidl-cpp">HIDL C++ development workflow</a>, <a href="../hidl/code-style">HIDL Code Style</a>, and <a href="../configstore"> ConfigStore design</a>. </aside> <h2 id="add-class">Add interface classes</h2> <p>If no interface class is defined for the interface method that you want to add, you must add the interface class before you can add the associated ConfigStore items.</p> <ol> <li>Create a HAL interface file. The ConfigStore version is 1.0, so define ConfigStore interfaces in <code translate="no" dir="ltr">hardware/interfaces/configstore/1.0</code>. For example, in <code translate="no" dir="ltr">hardware/interfaces/configstore/1.0/IChargerConfigs.hal</code>: 
+<pre>
+package android.hardware.configstore@1.0;
+
+interface IChargerConfigs {
+    // TO-BE-FILLED-BELOW
+};
+</pre>
+</li> <li>Update <code translate="no" dir="ltr">Android.bp</code> and <code translate="no" dir="ltr">Android.mk</code> for the ConfigStore shared library and header files to include the new interface HAL. For example: 
+<pre>
+hidl-gen -o hardware/interfaces/configstore/1.0/default -Lmakefile -randroid.hardware:hardware/interfaces -randroid.hidl:system/libhidl/transport android.hardware.configstore@1.0::IChargerConfigs
+hidl-gen -o hardware/interfaces/configstore/1.0/default -Landroidbp -randroid.hardware:hardware/interfaces -randroid.hidl:system/libhidl/transport android.hardware.configstore@1.0::IChargerConfigs
+</pre> These commands update <code translate="no" dir="ltr">Android.bp</code> and <code translate="no" dir="ltr">Android.mk</code> in <code translate="no" dir="ltr">hardware/interfaces/configstore/1.0</code>.</li> <li>Generate the C++ stub for implementing the server code. For example: 
+<pre>
+hidl-gen -o hardware/interfaces/configstore/1.0/default -Lc++-impl -randroid.hardware:hardware/interfaces -randroid.hidl:system/libhidl/transport android.hardware.configstore@1.0::IChargerConfigs
+</pre> This command creates two files, <code translate="no" dir="ltr">ChargerConfigs.h</code> and <code translate="no" dir="ltr">ChargerConfigs.cpp</code>, in <code translate="no" dir="ltr">hardware/interfaces/configstore/1.0/default</code>.</li> <li>Open the <code translate="no" dir="ltr">.h</code> and <code translate="no" dir="ltr">.cpp</code> implementation files and remove code related to the function <code translate="no" dir="ltr">HIDL_FETCH_<var translate="no">name</var></code> (for example, <code translate="no" dir="ltr">HIDL_FETCH_IChargerConfigs</code>). This function is needed for HIDL passthrough mode, which isn't used by ConfigStore.</li> <li>Register the implementation to the ConfigStore service. For example, in <code translate="no" dir="ltr">hardware/interfaces/configstore/1.0/default/service.cpp</code>: 
+<pre>
+#include &lt;android/hardware/configstore/1.0/IChargerConfigs.h&gt;
+#include "ChargerConfigs.h"
+
+using android::hardware::configstore::V1_0::IChargerConfigs;
+using android::hardware::configstore::V1_0::implementation::ChargerConfigs;
+
+int main() {
+    ... // other code
+    sp&lt;IChargerConfigs&gt; chargerConfigs = new ChargerConfigs;
+    status = chargerConfigs-&gt;registerAsService();
+    LOG_ALWAYS_FATAL_IF(status != OK, "Could not register IChargerConfigs");
+    ... // other code
+}
+</pre>
+</li> <li>Modify the <code translate="no" dir="ltr">Android.mk</code> file to add the implementation file (<code translate="no" dir="ltr"><var translate="no">modulename</var>Configs.cpp</code>) to <code translate="no" dir="ltr">LOCAL_SRC_FILES</code> and to map build flags into macro definitions. For example, in <code translate="no" dir="ltr">hardware/interfaces/configstore/1.0/default/Android.mk</code>: 
+<pre>
+LOCAL_SRC_FILES += ChargerConfigs.cpp
+
+ifeq ($(strip $(BOARD_CHARGER_DISABLE_INIT_BLANK)),true)
+LOCAL_CFLAGS += -DCHARGER_DISABLE_INIT_BLANK
+endif
+</pre>
+</li> <li>(Optional) Add a manifest entry. If it doesn't exist, default to the "default" instance name of ConfigStore. For example, in <code translate="no" dir="ltr">device/google/marlin/manifest.xml</code>: 
+<pre>
+    &lt;hal format="hidl"&gt;
+        &lt;name&gt;android.hardware.configstore&lt;/name&gt;
+        ...
+        &lt;interface&gt;
+            &lt;name&gt;IChargerConfigs&lt;/name&gt;
+            &lt;instance&gt;default&lt;/instance&gt;
+        &lt;/interface&gt;
+    &lt;/hal&gt;
+</pre>
+</li> <li>Add the sepolicy rule if needed (that is, if the client doesn't have permissions for making hwbinder calls to <code translate="no" dir="ltr">hal_configstore</code>). For example, in <code translate="no" dir="ltr">system/sepolicy/private/healthd.te</code>: 
+<pre>
+... // other rules
+binder_call(healthd, hal_configstore)
+</pre>
+</li> </ol> <h2 id="add-item">Add new ConfigStore items</h2> <p>To add a new ConfigStore item:</p> <ol> <li>Open the HAL file and add the required interface method for the item. (The <code translate="no" dir="ltr">.hal</code> files for ConfigStore reside in <code translate="no" dir="ltr">hardware/interfaces/configstore/1.0</code>.) For example, in <code translate="no" dir="ltr">hardware/interfaces/configstore/1.0/IChargerConfigs.hal</code>: 
+<pre>
+package android.hardware.configstore@1.0;
+
+interface IChargerConfigs {
+    ... // Other interfaces
+    disableInitBlank() generates(OptionalBool value);
+};
+</pre>
+</li> <li>Implement the method in the corresponding interface HAL implementation files (<code translate="no" dir="ltr">.h</code> and <code translate="no" dir="ltr">.cpp</code>). Place the default implementations in <code translate="no" dir="ltr">hardware/interfaces/configstore/1.0/default</code>. <aside class="note"><strong>Note:</strong> Running <code translate="no" dir="ltr">hidl-gen</code> with <code translate="no" dir="ltr">-Lc++-impl</code> generates skeleton code for the newly added interface method. However, it also overwrites implementations for all existing interface methods, so use the <code translate="no" dir="ltr">-o</code> option appropriately.</aside> For example, in <code translate="no" dir="ltr">hardware/interfaces/configstore/1.0/default/ChargerConfigs.h</code>: 
+<pre>
+struct ChargerConfigs : public IChargerConfigs {
+    ... // Other interfaces
+    Return&lt;void&gt; disableInitBlank(disableInitBlank_cb _hidl_cb) override;
+};
+</pre> And in <code translate="no" dir="ltr">hardware/interfaces/configstore/1.0/default/ChargerConfigs.cpp</code>: 
+<pre>
+Return&lt;void&gt; ChargerConfigs::disableInitBlank(disableInitBlank_cb _hidl_cb) {
+    bool value = false;
+#ifdef CHARGER_DISABLE_INIT_BLANK
+    value = true;
+#endif
+    _hidl_cb({true, value});
+    return Void();
+}
+</pre>
+</li> </ol> <h2 id="using">Use ConfigStore items</h2> <p>To use a ConfigStore item:</p> <ol> <li>Include the required header files. For example, in <code translate="no" dir="ltr">system/core/healthd/healthd.cpp</code>: 
+<pre>
+#include &lt;android/hardware/configstore/1.0/IChargerConfigs.h&gt;
+#include &lt;configstore/Utils.h&gt;
+</pre>
+</li> <li>Access the ConfigStore item using the appropriate template function in <code translate="no" dir="ltr">android.hardware.configstore-utils</code>. For example, in <code translate="no" dir="ltr">system/core/healthd/healthd.cpp</code>: 
+<pre>
+using namespace android::hardware::configstore;
+using namespace android::hardware::configstore::V1_0;
+
+static int64_t disableInitBlank = getBool&lt;
+        IChargerConfigs,
+        &amp;IChargerConfigs::disableInitBlank&gt;(false);
+</pre> In this example, the ConfigStore item <code translate="no" dir="ltr">disableInitBlank</code> is retrieved and stored to a variable (useful when the variable needs to be accessed multiple times). The value retrieved from the ConfigStore is cached inside the instantiated template function so that it can be retrieved quickly from the cached value without contacting the ConfigStore service for later calls to the instantiated template function. </li> <li>Add the dependency on ConfigStore and the <code translate="no" dir="ltr">configstore-utils</code> library in <code translate="no" dir="ltr">Android.mk</code> or <code translate="no" dir="ltr">Android.bp</code>. For example, in <code translate="no" dir="ltr">system/core/healthd/Android.mk</code>: 
+<pre>
+LOCAL_SHARED_LIBRARIES := \
+    android.hardware.configstore@1.0 \
+    android.hardware.configstore-utils \
+    ... (other libraries) \
+</pre>
+</li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/configstore/add-class-item" class="_attribution-link">https://source.android.com/docs/core/architecture/configstore/add-class-item</a>
+  </p>
+</div>

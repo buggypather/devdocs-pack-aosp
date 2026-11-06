@@ -1,0 +1,34 @@
+<h1>Create an AppCard</h1> <p>To create an AppCard, an app must create a provider in the manifest that extends <code translate="no" dir="ltr">AppCardContentProvider</code>. The <code translate="no" dir="ltr">AppCardContentProvider</code> abstracts away underlying details to facilitate the creation of AppCards.</p> <h2 id="manifest">Manifest declaration</h2> <p>To create an AppCard, an app must create a provider in the manifest to extend <code translate="no" dir="ltr">AppCardContentProvider</code>.</p> 
+<pre>&lt;provider android:name=".SimpleAppCardContentProvider"
+            android:authorities="com.example.appcard.sample.media"
+            android:permission="@string/host_permission"
+            android:exported="true"
+            android:enabled="true"&gt;
+            &lt;intent-filter&gt;
+                &lt;action android:name="com.android.car.appcard.APP_CARD_PROVIDER" /&gt;
+            &lt;/intent-filter&gt;
+&lt;/provider&gt;
+</pre> <p><strong>Only one provider can be defined per package</strong> and with these properties:</p> <ul> <li><code translate="no" dir="ltr">android:exported="true"</code></li> <li><code translate="no" dir="ltr">android:enabled="true"</code></li> <li>
+<p><code translate="no" dir="ltr">android:permission="@string/host_permission"</code></p> <p>OR,</p> <ul> <li>
+<p><code translate="no" dir="ltr">android:readPermission="@string/host_permission"</code></p> <p>AND,</p> <p><code translate="no" dir="ltr">android:writePermission="@string/host_permission"</code></p>
+</li> </ul>
+</li> <li>
+<p><code translate="no" dir="ltr">@string/host_permission</code> exists in the AppCard library and defines a permission depending on the Android API version of the system.</p> <p>Using the string resource works only when building with Gradle. When using Soong, specify the explicit string with the string resource value according to the appropriate resource qualifier.</p>
+</li> <li><p>(<em>default</em>) <code translate="no" dir="ltr">android:grantUriPermissions="false"</code></p></li> <li>
+<p>(<em>default</em>) <code translate="no" dir="ltr">android:forceUriPermissions="false"</code></p> <p>To avoid unexpected results, it's required that the provider define a single authority <strong>only</strong> in <code translate="no" dir="ltr">android:authorities</code>.</p>
+</li> <li><p>Declare an action-based intent filter, <code translate="no" dir="ltr">com.android.car.appcard.APP_CARD_PROVIDER</code></p></li> </ul> <h2 id="extend-appcardcontentprovider">Extend AppCardContentProvider</h2> <p>This section describes <strong>override</strong> and <strong>protected</strong> final methods.</p> <h3 id="override">Override methods</h3> 
+<dt><code translate="no" dir="ltr">val authority: String</code></dt> <dd>Use this method to return the authority defined in the <code translate="no" dir="ltr">android:authorities</code> manifest property.</dd> 
+<dt><code translate="no" dir="ltr">fun onCreate(): Boolean</code></dt> <dd>This method must call <code translate="no" dir="ltr">super.onCreate()</code>. Use this method to set up functionality that could potentially cause a delay if set up when an AppCard is requested.</dd> 
+<dt><code translate="no" dir="ltr">val appCardIds: List</code></dt> <dd>Use this method to return the list of supported AppCard IDs. We recommend making each ID verbose since this string is used to log errors.</dd> 
+<dt><code translate="no" dir="ltr">fun onAppCardAdded(String, AppCardContext): AppCard</code></dt> <dd>This method is called when an AppCard is shown for the first time and provides the ID related to the AppCard and the <code translate="no" dir="ltr">AppCardContext</code> that provide hints as to how the AppCard is displayed. <p>Use this method to set up any functionality required by the AppCards supported as a provider. Once this function is called, the AppCard that corresponds to the given ID is considered to be <strong>active.</strong></p>
+</dd> 
+<dt><code translate="no" dir="ltr">fun onAppCardRemoved(String)</code></dt> <dd>This method is called when no remaining instances of the AppCard are shown to the user and handles all clean up. When this function is called, the AppCard that corresponds to the given ID is considered <strong>inactive.</strong>
+</dd> 
+<dt><code translate="no" dir="ltr">fun onAppCardContextChanged(String, AppCardContext)</code></dt> <dd>This method is called when the system wants to update how an AppCard is displayed and sends an updated <code translate="no" dir="ltr">AppCardContext</code>.</dd> <h3 id="protected-final">Protected final methods</h3> 
+<dt><code translate="no" dir="ltr">fun sendAppCardUpdate(AppCard)</code></dt> <dd>Invoke this method to queue an update for an active AppCard.</dd> 
+<dt><code translate="no" dir="ltr">fun sendAppCardComponentUpdate(String, Component)</code></dt> <dd>Invoke this method to queue an update for a component in an active AppCard. If the given component is tagged with <code translate="no" dir="ltr">EnforceFastUpdateRate</code>, then the update is sent immediately.</dd> <h2 id="faq">FAQ</h2> <p>Where are the sample implementations?</p> <ul> <li><a href="https://android.googlesource.com/platform/packages/apps/Car/libs/+/refs/tags/ub-automotive-master-20250418/car-app-card-lib/sample-calendar-app/">Calendar AppCard</a></li> <li><a href="https://android.googlesource.com/platform/packages/apps/Car/libs/+/refs/tags/ub-automotive-master-20250418/car-app-card-lib/sample-media-app/">Media AppCard</a></li> <li><a href="https://android.googlesource.com/platform/packages/apps/Car/libs/+/refs/tags/ub-automotive-master-20250418/car-app-card-lib/sample-weather-app/">Weather AppCard</a></li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/unbundled_apps/appcards/appcard" class="_attribution-link">https://source.android.com/docs/automotive/unbundled_apps/appcards/appcard</a>
+  </p>
+</div>

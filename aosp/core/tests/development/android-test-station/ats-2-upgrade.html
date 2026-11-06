@@ -1,0 +1,63 @@
+<h1>OmniLab Android Test Station 2.0 upgrade guide</h1>  <aside class="note"><strong>Note:</strong><span> OmniLab ATS 2.0 is available starting with build R52.202602.000. In Android 17 (API level 37) and higher, to run CTS with the dynamic download option turned on, use ATS 2.0.</span></aside> <p>OmniLab Android Test Station (ATS) is the primary tool that developers and test engineers use to automate the testing of Android devices. OmniLab ATS provides an interface to manage devices, view results, and run test suites such as Compatibility Test Suite (CTS).</p> <p>OmniLab ATS 2.0 is a major modernization of the station's engine. We migrated the underlying infrastructure to OmniLab, Google's modern, high-performance platform. This shift lets Android developers and test engineers use the same robust tools used by Google.</p> <p>We recommend that you start using OmniLab ATS 2.0. It's available through a configuration flag, letting you benefit from improved performance and stability immediately.</p> <h2 id="ats2-benefits">Key benefits of OmniLab ATS 2.0</h2> <ul> <li>
+<strong>Modernized infrastructure:</strong> Leverages the OmniLab platform for improved stability and performance.</li> <li>
+<strong>Seamless transition:</strong> No changes to the web UI or core test execution workflows.</li> <li>
+<strong>Future ready:</strong> Aligns with Google's unified testing infrastructure, enabling faster adoption of new features.</li> </ul> <h2 id="new-features">New features</h2> <p>These features streamline your test operations:</p> <ul> <li><p><strong>Bulk update of test plans:</strong> You can configure multiple test plans at once by filtering them with labels. This lets you update custom schedules, test run actions, and resources across dozens of plans in a single step, reducing manual configuration time.</p></li> <li><p><strong>Improved multi-host and cloud deployment support:</strong> ATS 2.0 optimizes test scheduling, file transfer, and file caching to make the system robust, efficient, and flexible across multiple deployment modes.</p></li> <li><p><strong>Cloud Orchestration:</strong> ATS 2.0 supports <a href="ats-cloud-orchestration">Cloud Orchestration</a> to dynamically provision, scale, and manage Cuttlefish virtual devices during test runs.</p></li> </ul> <h2 id="feature-comparison">Feature comparison: ATS 1.0 versus ATS 2.0</h2> <table> <tr>
+<th>Capability</th>
+<th>ATS 1.0</th>
+<th>ATS 2.0</th>
+</tr> <tr>
+<td col width="24%">Underlying engine</td>
+<td col width="38%">Tradefed and Tradefed cluster</td>
+<td col width="38%">OmniLab platform, the Google standard device platform</td>
+</tr> <tr>
+<td>UI</td>
+<td>MTT UI</td>
+<td>MTT UI</td>
+</tr> <tr>
+<td>Scale</td>
+<td>Local and multi-host</td>
+<td>Local and multi-host; optimized for multi-host deployment</td>
+</tr> <tr>
+<td>Retries</td>
+<td>Basic retry rules</td>
+<td>Customizable retries, advanced retry scheduling</td>
+</tr> <tr>
+<td>Virtual device support</td>
+<td>Support for local and cloud device farms</td>
+<td>Support for local and cloud device farms</td>
+</tr> <tr>
+<td>Results processing</td>
+<td>Tradefed based</td>
+<td>OmniLab ATS based (shared with the CTS console)</td>
+</tr> <tr>
+<td>API</td>
+<td>Supported</td>
+<td>Supported</td>
+</tr> </table> <h2 id="user-experience-changes">User experience changes</h2> <p>While most changes are internal, note the following behavioral updates:</p> <ul> <li>
+<p><strong>Password-protected test suites (such as Security Test Suite (STS)):</strong> In ATS 1.0, password-protected suites were extracted using Trade Federation <code translate="no" dir="ltr">setup_scripts</code> (such as running <code translate="no" dir="ltr">unzip -P ...</code>).</p> <p>In OmniLab ATS 2.0, the server natively handles test package decompression before initiating Tradefed. For password-protected suites:</p> <ul> <li>Remove the manual <code translate="no" dir="ltr">unzip -P ...</code> command from <strong>Setup Scripts</strong>. Retaining the unzipping script results in an invocation error.</li> <li>Enter the test package decryption password directly in the <strong>Password</strong> field under <strong>Test Resource Defs</strong>.</li> </ul> <p> <img src="https://source.android.com/static/docs/core/tests/images/ats2-sts-config-adaptation.png" alt="Adapting STS test configuration in ATS 2.0" class="screenshot"> </p> <p><strong>Figure 1.</strong> Adapting STS test configuration in ATS 2.0.</p>
+</li> <li>
+<p><strong>Result directory:</strong> The output directory structure on your disk for test results has been updated due to the infrastructure change. However, you can still access these files through the <strong>Test Run</strong> dashboard.</p> <p> <img src="https://source.android.com/static/docs/core/tests/images/view-output-dir.png" alt="View output files" class="screenshot"> </p> <p><strong>Figure 2.</strong> View output files list.</p>
+</li> <li>
+<p><strong>Test logs:</strong> The test log structure has changed. You can see three log sources from one invocation: Tradefed xTS test-generated logs (also in ATS 1.0), OmniLab server logs for device and test status, and Mobly test logs for V2 Mobly modules.</p> <p> <img src="https://source.android.com/static/docs/core/tests/images/ats2-log-source.png" alt="ATS 2.0 log sources" class="screenshot"> </p> <p><strong>Figure 3.</strong> ATS 2.0 log sources: Tradefed xTS, OmniLab server, and Mobly test logs.</p> <p>If you run CTS with the dynamic download option turned on, OmniLab ATS automatically triggers MCTS tests in addition to CTS tests, and MCTS logs are also available in the Tradefed log section.</p> <p> <img src="https://source.android.com/static/docs/core/tests/images/ats2-dynamic-download.png" alt="MCTS test in test list" class="screenshot"> </p> <p><strong>Figure 4.</strong> MCTS test triggered by XTS dynamic download.</p> <p> <img src="https://source.android.com/static/docs/core/tests/images/ats2-tf-logs.png" alt="MCTS logs in Tradefed log section" class="screenshot"> </p> <p><strong>Figure 5.</strong> MCTS logs in Tradefed log section, in addition to CTS logs.</p>
+</li> </ul> <h2 id="upgrade-process">Upgrade process</h2> <p>The upgrade is a flag-based software switch, so no reinstallation or hardware changes are required.</p> <p>To enable the new OmniLab ATS 2.0:</p> <ol> <li>
+<p>Stop your current instance:</p> 
+<pre>mtt stop</pre>
+</li> <li>
+<p>Start OmniLab ATS with the <code translate="no" dir="ltr">force_ats_version 2</code> flag:</p> 
+<pre>mtt start --force_ats_version 2</pre> <p>If you aren't using the latest build version, add <code translate="no" dir="ltr">--force_update</code> to fetch it:</p> 
+<pre>mtt start --force_ats_version 2 --force_update</pre>
+</li> <li>
+<p>Optional: If you encounter issues with ATS 2.0, you can temporarily revert to ATS 1.0 by removing <code translate="no" dir="ltr">--force_ats_version 2</code> or explicitly using <code translate="no" dir="ltr">--force_ats_version 1</code>:</p> 
+<pre>mtt start --force_ats_version 1</pre>
+</li> </ol> <h2 id="transition-timeline">Transition timeline</h2> <p>We're phasing out OmniLab ATS 1.0 in stages in 2026. Plan your migration accordingly:</p> <ul> <li>
+<strong>2026 Q1:</strong> ATS 2.0 is available to all developers and partners as an option.</li> <li>
+<strong>2026 Q2:</strong> ATS 2.0 becomes the default for an increasing number of developers and partners.</li> <li>
+<strong>2026 Q3:</strong> ATS 2.0 becomes the standard version for all developers and partners.</li> <li>
+<strong>2026 Q4:</strong> The legacy ATS 1.0 is retired and removed from production builds.</li> </ul> <h2 id="support">Support</h2> <p>If you encounter any issues during your upgrade, use these resources:</p> <ul> <li>
+<strong>Usage support:</strong> Visit <a href="ats-user-guide">OmniLab Android Test Station</a> for setup guides and troubleshooting.</li> <li>
+<strong>Report issues:</strong> See <a href="ats-user-guide#bug_reports">Bug reports</a>.</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/development/android-test-station/ats-2-upgrade" class="_attribution-link">https://source.android.com/docs/core/tests/development/android-test-station/ats-2-upgrade</a>
+  </p>
+</div>

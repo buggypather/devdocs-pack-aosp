@@ -1,0 +1,245 @@
+<h1>Update Manager</h1>  <p>The Update Manager carries out updates for its VM. The Update Manager coordinates with the client, which is supplied by the system integrator. The client provides the update payload and coordinates the overall vehicle update. The update consists of these steps:</p> <ol> <li>
+<strong>READY:</strong> No update is in progress.</li> <li>
+<strong>PREPARE:</strong> The Update Manager writes the update to the disk, but it doesn't make it active.</li> <li>
+<strong>ACTIVATE:</strong> The Update Manager makes the prepared update active so that it takes effect after a reboot.</li> <li>
+<strong>COMMIT:</strong> The Update Manager makes the update permanent.</li> </ol> <p><img src="https://source.android.com/static/docs/automotive/sdv/images/sdv_update_manager_simplified_states.png" alt="A simplified state machine illustrating the workflow of the Update Manager" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> High-level operation of the Update Manager.</p> <p>The Update Manager supports system updates and service bundle updates, which are described on this page.</p> <h3 id="system-updates">System updates</h3> <p>The Android OS uses two sets of partitions called <em>slots</em>, with only one slot active at a time. A system update writes a new set of partitions to the inactive slot, and the system switches the active slot on the next reboot. For more information about building system updates, see <a href="../workstreams/core/system-updates">A/B system updates</a>.</p> <h3 id="service-bundle-updates">Service bundle updates</h3> <p>In AAOS SDV, service bundles package services together within APEXes. Service bundle updates stage new APEX files in temporary sessions. The system activates these updated bundles after a system reboot. For more information about building service bundle APEXes, see <a href="../workstreams/core/service-bundle-updates">Service bundle updates</a>.</p> <h3 id="state-machine">State machine</h3> <p>Requests from the client and events from system services drive the Update Manager state machine. The Update Manager is designed to be resilient, recovering its state and resuming the update process even after unexpected reboots or crashes.</p> <p><img src="https://source.android.com/static/docs/automotive/sdv/images/sdv_update_manager_state_machine.png" alt="A state machine illustrating the workflow of the Update Manager" class="android-image-dark-theme-background"> </p> <p><strong>Figure 2.</strong> Update Manager state machine.</p> <h2 id="api">API</h2> <p>The Update Manager provides an API that drives the update process through the state machine. The API uses VSIDL, which supports clients residing in any VM supporting SDV Comms and provides request failure notification.</p> <h3 id="security-access">Security and access</h3> <p>The system restricts API access using authorization policies. Only the authorized client can make calls to the Update Manager.</p> <h3 id="status-updates">Status updates</h3> <p>Because update operations can be long-running, the Update Manager provides asynchronous status updates. Clients must monitor the state by subscribing to status updates.</p> <h4 id="subscription-management">Subscription management</h4> <ul> <li>
+<p><strong>Subscribing:</strong> Clients subscribe to status updates by calling the <code translate="no" dir="ltr">SubscribeToStatusUpdates()</code> method:</p> 
+<pre>rpc SubscribeToStatusUpdates(SubscribeToStatusUpdatesRequest)
+    returns (SubscribeToStatusUpdatesResponse) {}
+
+message SubscribeToStatusUpdatesRequest {}
+
+message SubscribeToStatusUpdatesResponse {}
+</pre> <p>Before calling <code translate="no" dir="ltr">SubscribeToStatusUpdates()</code>, the client must start an RPC interface that implements <a href="#updatemanagerlistenerservice"><code translate="no" dir="ltr">UpdateManagerListenerService</code></a>.</p>
+</li> <li>
+<p><strong>Unsubscribing:</strong> Clients can stop receiving status updates by calling <code translate="no" dir="ltr">UnsubscribeFromStatusUpdates()</code>:</p> 
+<pre>rpc UnsubscribeFromStatusUpdates(UnsubscribeFromStatusUpdatesRequest)
+    returns (UnsubscribeFromStatusUpdatesResponse) {}
+
+message UnsubscribeFromStatusUpdatesRequest {}
+
+message UnsubscribeFromStatusUpdatesResponse {}
+</pre>
+</li> </ul> <h4 id="updatemanagerlistenerservice">UpdateManagerListenerService</h4> <p>Clients that call <code translate="no" dir="ltr">SubscribeToStatusUpdates()</code> on <code translate="no" dir="ltr">UpdateManagerService</code> must implement the following service to receive status updates:</p> 
+<pre>service UpdateManagerListenerService {
+  /* Called when there is a status update from the Update Manager. */
+  rpc OnStatusUpdate(OnStatusUpdateRequest) returns (OnStatusUpdateResponse) {}
+}
+
+message OnStatusUpdateRequest {
+  oneof status_update {
+    UpdateManagerStatus update_manager_status = 1;
+    UpdateProgress update_progress = 2;
+  }
+}
+
+message OnStatusUpdateResponse {}
+</pre> <p><code translate="no" dir="ltr">OnStatusUpdateRequest</code> delivers one of two possible messages using the <code translate="no" dir="ltr">status_update</code> field:</p> <ol> <li>
+<code translate="no" dir="ltr">UpdateManagerStatus</code>: Sent when the Update Manager's state changes.</li> <li>
+<code translate="no" dir="ltr">UpdateProgress</code>: Sent to indicate the update progress during the <code translate="no" dir="ltr">PREPARE</code> and <code translate="no" dir="ltr">ACTIVATE_PRE_REBOOT</code> states because the process can take a significant amount of time.</li> </ol> <h4 id="status-errors">Status and error messages</h4> <p>The status messages include details about the state and any failures:</p> <ul> <li>
+<p><strong><code translate="no" dir="ltr">UpdateManagerStatus</code>:</strong> Reports the current phase of the update and any reason for failure:</p> 
+<pre>message UpdateManagerStatus {
+  /* The current state of the update */
+  UpdateState update_state = 1;
+  /* The reason for the failure, if the update failed */
+  FailureReason failure_reason = 2;
+}
+
+enum UpdateState {
+  /* The Update Manager is ready to accept a new update. */
+  READY = 0;
+  /* An update is being prepared. */
+  PREPARE = 1;
+  /* The update failed during the prepare step. Roll back the update to start a
+   *   new update. */
+  PREPARE_FAILURE = 2;
+  /* The update was prepared successfully. */
+  PREPARE_COMPLETE = 3;
+  /* A rollback has started from the prepare step. When complete, transitions
+   *   to READY. */
+  PREPARE_ROLLBACK = 4;
+  /* The prepared update is being activated. */
+  ACTIVATE_PRE_REBOOT = 5;
+  /* The update failed during the activate step before the reboot. Roll back the
+   *   update to start a new update. */
+  ACTIVATE_PRE_REBOOT_FAILURE = 6;
+  /* The update was activated successfully. Reboot to complete activation. */
+  ACTIVATE_PRE_REBOOT_COMPLETE = 7;
+  /* A rollback has started from the activate pre-reboot step. When complete,
+   *   transitions to READY. */
+  ACTIVATE_PRE_REBOOT_ROLLBACK = 8;
+  /* An update was successfully activated after the reboot. The update needs to
+   *   be committed or rolled back to be completed. */
+  ACTIVATE_POST_REBOOT_COMPLETE = 9;
+  /* A rollback has started from the activate post-reboot step. */
+  ACTIVATE_POST_REBOOT_ROLLBACK = 10;
+  /* The rollback was completed successfully. Reboot to complete the
+   *   rollback. */
+  ACTIVATE_POST_REBOOT_ROLLBACK_COMPLETE = 11;
+  /* The update is being committed. When complete, transitions to READY */
+  COMMIT = 12;
+  /* The prepare request is being cancelled */
+  PREPARE_CANCEL = 13;
+  /* The system update has started suspending */
+  PREPARE_SUSPEND = 14;
+  /* The system update has finished suspending */
+  PREPARE_SUSPEND_COMPLETE = 15;
+}
+
+message FailureReason {
+  /* The original error that triggered the failure */
+  ErrorCode error_code = 1;
+  /* Binder error message for most ErrorCodes. */
+  string error_message = 2;
+}
+
+enum ErrorCode {
+  Unspecified = 0;
+  /* Error from UpdateEngine service */
+  UpdateEngineError = 1;
+  // Error from the ApexService
+  ApexServiceError = 2;
+  // Error from the BootControlService
+  BootControlServiceError = 3;
+  // Error from the VoldService
+  VoldServiceError = 4;
+}
+</pre>
+</li> <li>
+<p><strong><code translate="no" dir="ltr">UpdateProgress</code>:</strong> Reports the current status from <a href="https://android.googlesource.com/platform/system/update_engine/">Update Engine</a> during system updates:</p> 
+<pre>message UpdateProgress {
+  /* Matches the enum UpdateStatus from the UpdateEngine service. */
+  int32 status_code = 1;
+
+  /* A value ranging from 0.0 to 1.0, 1.0 representing the process is complete. */
+  float percentage = 2;
+}
+
+</pre>
+</li> </ul> <h4 id="immediate-status">Get immediate status</h4> <p>You can retrieve the current state and payload at any time by calling <code translate="no" dir="ltr">GetStatus()</code>. The <code translate="no" dir="ltr">SystemUpdatePayload</code> and <code translate="no" dir="ltr">ServiceBundleUpdatePayload</code> messages are described in <a href="#prepare">Prepare</a>.</p> 
+<pre>rpc GetStatus(GetStatusRequest) returns (GetStatusResponse) {}
+
+message GetStatusRequest {}
+
+message GetStatusResponse {
+  /* The status of the Update Manager */
+  UpdateManagerStatus update_manager_status = 1;
+  /* The current update payload, if one has been set through the Prepare() request */
+  oneof payload {
+    SystemUpdatePayload system_update_payload = 2;
+    ServiceBundleUpdatePayload service_bundle_update_payload = 3;
+  }
+}
+</pre> <h3 id="prepare">Prepare</h3> <p>The <code translate="no" dir="ltr">Prepare</code> request starts the update process by staging the payload, but the system waits to activate the update:</p> 
+<pre>rpc Prepare(PrepareRequest) returns (PrepareResponse) {}
+
+message PrepareRequest {
+  oneof payload {
+    SystemUpdatePayload system_update_payload = 1;
+    ServiceBundleUpdatePayload service_bundle_update_payload = 2;
+  }
+}
+
+message PrepareResponse {}
+</pre> <p>If the request is valid, the state transitions to <code translate="no" dir="ltr">PREPARE</code>, and the Update Manager starts the update.</p> <p>The type of the payload determines the update type.</p> <h4 id="sys-update">System update payload</h4> <p>A system update uses the <code translate="no" dir="ltr">SystemUpdatePayload</code> data, which requires a path to an over-the-air (OTA) update image. The other parameters are parsed from the image, but you can specify them to override the parsed values.</p> 
+<pre>message SystemUpdatePayload {
+  /* Absolute path to the update image (e.g., /updates/ota_update.zip) */
+  string payload = 1;
+
+  /* Offset (in bytes) into the payload where the payload binary starts. */
+  optional int64 payload_offset = 2;
+
+  /* The amount of data (in bytes) to read from "payload" as the update payload. */
+  optional int64 payload_size = 3;
+
+  /* The header key value pairs to apply with the payload. */
+  map&lt;string, string&gt; header_key_value_pairs = 4;
+}
+
+</pre> <p>The Update Manager processes the OTA image (provided by the client in the <code translate="no" dir="ltr">/data/ota_package</code> directory) to run post-install steps, but it doesn't switch the active boot slot. It then transitions to the <code translate="no" dir="ltr">PREPARE_COMPLETE</code> state on success or the <code translate="no" dir="ltr">PREPARE_FAILURE</code> state on failure.</p> <h5 id="system-update-suspension">System update suspension</h5> <p>You can pause the update process for system updates only. This request is valid only when in the <code translate="no" dir="ltr">PREPARE</code> state.</p> <ul> <li>
+<p><strong>Suspend:</strong> Pauses the update, transitioning the state through <code translate="no" dir="ltr">PREPARE_SUSPEND</code>.</p> 
+<pre>rpc Suspend(SuspendRequest) returns (SuspendResponse) {}
+
+message SuspendRequest {}
+
+message SuspendResponse {}
+</pre> <p>On success, the state transitions to <code translate="no" dir="ltr">PREPARE_SUSPEND_COMPLETE</code>. On failure, the state transitions to <code translate="no" dir="ltr">PREPARE_FAILURE</code>.</p>
+</li> <li>
+<p><strong>Resume:</strong> Continues the paused update. This is valid only in the <code translate="no" dir="ltr">PREPARE_SUSPEND_COMPLETE</code> state.</p> 
+<pre>rpc Resume(ResumeRequest) returns (ResumeResponse) {}
+
+message ResumeRequest {}
+
+message ResumeResponse {}
+</pre> <p>The state transitions back to the <code translate="no" dir="ltr">PREPARE</code> state.</p>
+</li> </ul> <h4 id="service-bundle-update-payload">Service bundle update payload</h4> <p>A service bundle update uses the <code translate="no" dir="ltr">ServiceBundleUpdatePayload</code>, which contains the paths to the APEX files and sets the activation attempt limit.</p> 
+<pre>message ServiceBundleUpdatePayload {
+  /* Absolute path to an .apex file. Multiple .apex files can be included. */
+  repeated string apex_path = 1;
+
+  /* Number of boots to attempt activation before aborting. Must be &gt; 0. */
+  int32 boot_attempts = 2;
+}
+
+</pre> <p>The Update Manager verifies that the APEX files are signed correctly and stages them in a session. On success, the state transitions to <code translate="no" dir="ltr">PREPARE_COMPLETE</code>. On failure, the state transitions to <code translate="no" dir="ltr">PREPARE_FAILURE</code>.</p> <h3 id="activate">Activate</h3> <p>The <code translate="no" dir="ltr">Activate</code> request activates the prepared update on the next reboot.</p> 
+<pre>rpc Activate(ActivateRequest) returns (ActivateResponse) {}
+
+message ActivateRequest {}
+
+message ActivateResponse {}
+</pre> <h4 id="pre-reboot">Pre-reboot</h4> <p>The Update Manager transitions to the <code translate="no" dir="ltr">ACTIVATE_PRE_REBOOT</code> state while activating the update. The Update Manager also creates a <a href="../../../core/ota/user-data-checkpoint">user data checkpoint</a> that takes effect when the system is rebooted.</p> <p>The activation actions differ depending on the update type:</p> <ul> <li>
+<strong>System update:</strong> The system runs post-install steps and sets the boot slot to switch on the next reboot.</li> <li>
+<strong>Service bundle update:</strong> The system marks the staged APEX session as ready for activation.</li> </ul> <p>If the system activates the update successfully, the state transitions to <code translate="no" dir="ltr">ACTIVATE_PRE_REBOOT_COMPLETE</code>, which indicates that the VM is ready for reboot. Otherwise, the state transitions to <code translate="no" dir="ltr">ACTIVATE_PRE_REBOOT_FAILURE</code>.</p> <h4 id="post-reboot-verify">Post-reboot</h4> <p>After the reboot, the system starts in checkpoint mode. In this mode, the system doesn't commit any changes to the user data partition to permanent storage. If the system doesn't commit the update successfully, it reverts these changes to the initial state.</p> <h5 id="boot-limit">Boot limit</h5> <p>The system reverts the changes to the user data partition in either of these conditions:</p> <ul> <li>The client sends an explicit <code translate="no" dir="ltr">Rollback()</code> request and reboots the system.</li> <li>The system boots too many times without the client calling <code translate="no" dir="ltr">Commit()</code> or <code translate="no" dir="ltr">Rollback()</code>. The boot limit differs for each update type: <ul> <li>
+<strong>System update:</strong> The <code translate="no" dir="ltr">BootControl</code> implementation sets this. For example, the default limit in the implementation used by Cuttlefish devices is <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/interfaces/boot/1.1/default/boot_control/libboot_control.cpp;drc=01d460b408b9b771d58e5e53ef1229bdd57649e7;l=42">seven boots</a>.</li> <li>
+<strong>Service bundle update:</strong> The <code translate="no" dir="ltr">boot_attempts</code> field of the <code translate="no" dir="ltr">ServiceBundleUpdatePayload</code> provided by the client sets this when the <code translate="no" dir="ltr">Prepare()</code> request is made.</li> </ul>
+</li> </ul> <h5 id="verification">Verification</h5> <p>The system then verifies the update:</p> <ul> <li>
+<strong>System update:</strong> <a href="#boot-limit">dm-verity</a> checks the updated slot for corruption.</li> <li>
+<strong>Service bundle update:</strong> <code translate="no" dir="ltr">apexd</code> checks each APEX's signature and mounts the APEX's image to the file system.</li> </ul> <p>If verification succeeds, the state transitions to <code translate="no" dir="ltr">ACTIVATE_POST_REBOOT_COMPLETE</code>. The Update Manager waits for either <code translate="no" dir="ltr">Commit()</code> or <code translate="no" dir="ltr">Rollback()</code>.</p> <p>If verification fails, the system reboots. When the system reaches the <a href="#boot-limit">boot limit</a>, the system reverts to the original state:</p> <ul> <li>
+<strong>System update:</strong> The system reverts to the original slot.</li> <li>
+<strong>Service bundle update:</strong> The updated APEXes are dropped, and the original APEXes are reactivated.</li> </ul> <p>If verification fails for any update type, the state transitions to <code translate="no" dir="ltr">ACTIVATE_PRE_REBOOT_FAILURE</code> after the original state is restored.</p> <h3 id="rollback">Rollback</h3> <p>The <code translate="no" dir="ltr">Rollback</code> request starts returning the system to its pre-update state.</p> 
+<pre>rpc Rollback(RollbackRequest) returns (RollbackResponse) {}
+
+message RollbackRequest {}
+
+message RollbackResponse {}
+</pre> <p>You can make the <code translate="no" dir="ltr">Rollback()</code> request during many states. Depending on the initial state, the system takes different actions, and different states follow:</p> <table> <tr> <th>State when rollback is issued</th> <th>State transition</th> <th>System action</th>
+</tr> <tr> <td>(System update only) <code translate="no" dir="ltr">PREPARE</code>, <code translate="no" dir="ltr">PREPARE_SUSPEND_COMPLETE</code>
+</td> <td>&amp;rightarrow; <code translate="no" dir="ltr">PREPARE_CANCEL</code> &amp;rightarrow; <code translate="no" dir="ltr">PREPARE_ROLLBACK</code> &amp;rightarrow; <code translate="no" dir="ltr">READY</code>
+</td> <td>
+<b>System update:</b> Cancels the system update.</td>
+</tr> <tr> <td>
+<code translate="no" dir="ltr">PREPARE_FAILURE</code>, <code translate="no" dir="ltr">PREPARE_COMPLETE</code>
+</td> <td>&amp;rightarrow; <code translate="no" dir="ltr">PREPARE_ROLLBACK</code> &amp;rightarrow; <code translate="no" dir="ltr">READY</code>
+</td> <td>
+<b>System update:</b> Cancels the system update.<br><br><b>Service bundle update:</b> Aborts staged APEX session.</td>
+</tr> <tr> <td>
+<code translate="no" dir="ltr">ACTIVATE_PRE_REBOOT_COMPLETE</code>, <code translate="no" dir="ltr">ACTIVATE_PRE_REBOOT_FAILURE</code>
+</td> <td>&amp;rightarrow; <code translate="no" dir="ltr">ACTIVATE_PRE_REBOOT_ROLLBACK</code> &amp;rightarrow; <code translate="no" dir="ltr">READY</code>
+</td> <td>Disables the user data checkpoint.<br><br><b>System update:</b> Cancels boot slot switch.<br><br><b>Service bundle update:</b> Removes staged APEX.</td>
+</tr> <tr> <td><code translate="no" dir="ltr">ACTIVATE_POST_REBOOT_COMPLETE</code></td> <td>&amp;rightarrow; <code translate="no" dir="ltr">ACTIVATE_POST_REBOOT_ROLLBACK</code> &amp;rightarrow; <code translate="no" dir="ltr">ACTIVATE_POST_REBOOT_ROLLBACK_COMPLETE</code>
+</td> <td>Disables the user data checkpoint.<br><br><b>System update:</b> Switches the boot slot back.<br><br><b>Service bundle update:</b> Reverts the active APEX sessions.<br><br> A final reboot is required for the rollback to take effect, after which the state transitions to <code translate="no" dir="ltr">READY</code>. </td> </tr> </table> <h3 id="commit">Commit</h3> <p>This request indicates that the update completed successfully and applies all changes permanently.</p> 
+<pre>rpc Commit(CommitRequest) returns (CommitResponse) {}
+
+message CommitRequest {}
+
+message CommitResponse {}
+</pre> <p>The state transitions to <code translate="no" dir="ltr">COMMIT</code> while performing the commit actions:</p> <ul> <li>
+<strong>System update:</strong> The Update Manager marks the boot as successful, which prevents future rollback and selects this slot on subsequent boots.</li> <li>
+<strong>Service bundle update:</strong> The Update Manager marks the staged APEX session as successful, closing the update session and making the bundles permanently active.</li> </ul> <p>After the system commits the update, the Update Manager commits the user data checkpoint. The system commits all new user data written during this boot to permanent storage. The Update Manager transitions back to <code translate="no" dir="ltr">READY</code>, indicating that the update is complete.</p> <h3 id="uninstall-apexes">Uninstall APEXes</h3> <p>The <code translate="no" dir="ltr">UninstallApex</code> request removes the <code translate="no" dir="ltr">/data</code> version of service bundles. You can call <code translate="no" dir="ltr">UninstallApex</code> during any state, but the VM must reboot for the uninstall to take effect. Therefore, avoid calling <code translate="no" dir="ltr">UninstallApex</code> while an update is in progress. <code translate="no" dir="ltr">UninstallApex</code> doesn't remove preinstalled APEXes, wipe APEX data, or remove inactive APEX versions.</p> 
+<pre>rpc UninstallApex(UninstallApexRequest) returns (UninstallApexResponse) {}
+
+message UninstallApexRequest {
+  message ApexInfo {
+    string module_name = 1;
+    int64 version_code = 2;
+  }
+  repeated ApexInfo apexes = 1;
+}
+
+message UninstallApexResponse {}
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/core-areas/sdv-update-manager" class="_attribution-link">https://source.android.com/docs/automotive/sdv/core-areas/sdv-update-manager</a>
+  </p>
+</div>

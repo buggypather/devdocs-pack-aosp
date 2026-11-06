@@ -1,0 +1,15 @@
+[
+  {
+    "name": "Android OS (AOSP)",
+    "slug": "aosp",
+    "type": "simple",
+    "links": {
+      "home": "https://source.android.com/docs",
+      "code": "https://android.googlesource.com/"
+    },
+    "mtime": 1793980211,
+    "db_size": 43716961,
+    "attribution": "&copy; Google LLC<br>\n      Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.",
+    "alias": null
+  }
+]

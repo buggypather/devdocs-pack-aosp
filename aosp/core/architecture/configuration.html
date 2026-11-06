@@ -1,0 +1,47 @@
+<h1>Configuration overview</h1>  <p>AOSP offers the following options for storing configuration information on a device:</p> <ul> <li>System properties</li> <li>Early boot device configuration</li> <li>Hardware abstraction layer (HAL) properties</li> <li>System config XML files</li> <li>Resource overlays (static and runtime)</li> </ul> <h2 id="system-properties">System properties</h2> <p><em>System properties</em> are string key/value pairs stored in the <code translate="no" dir="ltr">build.prop</code> global dictionary. System properties are system-wide resources that are easy to use and have a low performance overhead. When using system properties, you don't need to use interprocess communication (IPC) even if a system property is shared across multiple processes. However, system properties are similar to global variables and can be harmful when misused. The misuse of system properties can result in issues such as security vulnerabilities and apps becoming inaccessible to users. Before using system properties to store configuration information, consider the other configuration options.</p> <p>For further information on system properties, see <a href="configuration/add-system-properties">Add system properties</a></p> <aside class="note"><strong>Note:</strong><span> Previous to Android 10, AOSP used a ConfigStore HAL to store system properties. ConfigStore HAL is deprecated and should no longer be used. For information on the ConfigStore HAL, refer to <a href="configuration/archive">ConfigStore HAL</a>.</span></aside> <h2 id="init-dev-config">Early boot device configuration</h2> <p>In Android 17 and higher, the <code translate="no" dir="ltr">init_dev_config</code> service provides support for device configuration and system property initialization. This dynamic architectural mechanism runs automatically at early boot.</p> <p>When a single system or vendor image must support multiple hardware variants, configuration values can't always be hardcoded at build time. The <code translate="no" dir="ltr">init_dev_config</code> service executes during the <code translate="no" dir="ltr">early-init</code> phase, right before <code translate="no" dir="ltr">apexd-bootstrap</code>, letting vendors inspect the hardware state (for example, from bootloader arguments, early-mounted partitions, or hardware configuration tables) and dynamically initialize system properties before dependent services and libraries are initialized.</p> <h3 id="service-integration-lifecycle">Service integration and lifecycle</h3> <p>The <code translate="no" dir="ltr">init_dev_config</code> service is defined by default in the system <code translate="no" dir="ltr">init.rc</code> and executed synchronously during <code translate="no" dir="ltr">early-init</code>, before <code translate="no" dir="ltr">apexd-bootstrap</code>. Integrators don't need to declare a new <code translate="no" dir="ltr">init</code> service.</p> <p>Instead, the existing service uses property expansion on its executable path, decoupling the system service declaration from the vendor binary. Integrators specify the path to their vendor binary using the <code translate="no" dir="ltr">ro.vendor.init_dev_config.path</code> property, and configure it with the required SELinux labels and permissions.</p> <h3 id="vendor-implementation-requirements">Vendor implementation requirements</h3> <p>To integrate with <code translate="no" dir="ltr">init_dev_config</code>:</p> <ol> <li>
+<p>Configure the vendor binary path at build time using <code translate="no" dir="ltr">PRODUCT_VENDOR_PROPERTIES</code>. The provided binary path must be a valid path to a binary installed in the system:</p> 
+<pre>PRODUCT_VENDOR_PROPERTIES += \
+    ro.vendor.init_dev_config.path=/vendor/bin/init_dev_config
+</pre> <p>If this property is unset, <code translate="no" dir="ltr">init</code> skips service execution and boot continues normally.</p>
+</li> <li>
+<p>Because the service runs before <code translate="no" dir="ltr">apexd-bootstrap</code>, the full APEX-provided bionic libraries aren't yet available. In <code translate="no" dir="ltr">Android.bp</code>, set <code translate="no" dir="ltr">bootstrap: true</code>:</p> 
+<pre>rust_binary {
+    name: "init_dev_config",
+    vendor: true,
+    srcs: ["src/main.rs"],
+    rustlibs: [
+        "librustutils",
+    ],
+    bootstrap: true,
+}
+</pre>
+</li> <li>
+<p>Write the service logic to detect the hardware variant and set the appropriate system properties:</p> 
+<pre>use rustutils::system_properties;
+
+fn main() {
+    let hw_sku = read_hardware_sku();
+
+    // Dynamically initialize vendor-specific properties:
+    let display_type = match hw_sku {
+        1 =&gt; "oled",
+        _ =&gt; "lcd",
+    };
+    system_properties::write("vendor.display.panel_type", display_type)
+        .expect("Failed to set vendor display property");
+}
+</pre>
+</li> <li>
+<p>Label the vendor binary with <code translate="no" dir="ltr">init_dev_config_exec</code>:</p> 
+<pre> /vendor/bin/init_dev_config u:object_r:init_dev_config_exec:s0
+</pre>
+</li> <li>
+<p>Grant the <code translate="no" dir="ltr">init_dev_config</code> domain permission to set the required property types:</p> 
+<pre> set_prop(init_dev_config, vendor_my_sku_prop)
+</pre>
+</li> </ol> <p>For information on using <code translate="no" dir="ltr">init_dev_config</code> for APEX activation and disabling, see <a href="../ota/vendor-apex#apex-selection">Vendor APEX selection at bootup</a>.</p> <h2 id="hal-properties">HAL properties</h2> <p>When the source of truth for a configuration is from a hardware component on a device, the HAL for the hardware must provide the information for that component. Define a new HAL method in the existing HAL for accessing the configuration. For further information on developing a HAL, see <a href="aidl/aidl-hals">AIDL for HALs</a>.</p> <aside class="note"><strong>Note:</strong><span> Don’t configure the HAL to use system properties as a side-channel communication mechanism for HALs.</span></aside> <h2 id="system-config">System config XML files</h2> <p>When the configuration data is static but complicated (structured), consider using XML or other such formats for the configuration data. Ensure that the file schema remains stable. For XML files, you can use <a href="config-file-schema-api#config-build-rule"><code translate="no" dir="ltr">xsd_config</code></a> to keep the schema stable, and to take advantage of an autogenerated XML parser.</p> <h2 id="resource-overlay">Resource overlay</h2> <p>You can use resource overlays to customize a product. There are two types of resource overlays:</p> <ul> <li><p><em>Standard resource overlay</em> used to customize a product at build time. For information on standard resource overlays, see <a href="../../setup/create/new-device#use-resource-overlays">Customizing the build with resource overlays</a>.</p></li> <li><p><em>Runtime resource overlay (RRO)</em> is used to change the resource values of a target package at runtime. For example, an app installed on the system image might change its behavior based upon the value of a resource. Rather than hardcoding the resource value at build time, an RRO installed on a different partition can change the values of the app's resources at runtime. For more information on RROs, see <a href="../runtime/rros">Change the value of an app's resources at runtime</a>.</p></li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/configuration" class="_attribution-link">https://source.android.com/docs/core/architecture/configuration</a>
+  </p>
+</div>

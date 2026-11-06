@@ -1,0 +1,222 @@
+<h1>Memory Limiter</h1>  <p>Android 17 and higher includes the Memory Limiter, a system service that monitors and limits the memory usage of application processes using Linux cgroup v2. The Memory Limiter prevents individual apps from consuming disproportionate system memory, which reduces overall memory pressure and prevents aggressive low-memory kills of critical foreground and cached processes.</p> <h2 id="mechanism">Mechanism</h2> <p>The Memory Limiter integrates with the Activity Manager Service (AMS) to track process lifecycle events and state changes. The Memory Limiter enforces memory limits using the Linux kernel cgroup v2 hierarchy.</p> <p>To support the Memory Limiter, the device kernel must enable cgroup v2 and the <code translate="no" dir="ltr">memory</code> controller. The service specifically relies on the following attributes:</p> <dl> <dt><code translate="no" dir="ltr">memory.high</code></dt> <dd>A soft limit. When exceeded, the process is throttled and the kernel attempts proactive page reclaim from that process.</dd> <dt><code translate="no" dir="ltr">memory.swap.max</code></dt> <dd>Limits the maximum amount of swap space (such as ZRAM) the process can use.</dd> </dl> <h2 id="impact-on-apps">Impact on apps</h2> <p>Apps that operate within their memory limits aren't affected by the Memory Limiter.</p> <p>When an app crosses its <code translate="no" dir="ltr">memory.high</code> limit, the kernel evicts the app's clean file-backed memory and swaps out its inactive anonymous memory to keep the app within the limit. As a result of this page eviction and swap activity, the app might experience temporary execution throttling, but it continues to run.</p> <p>In extreme situations, such as an uncontrolled memory leak where the app continues allocating anonymous memory after swap space is exhausted, the app fails to allocate memory and is terminated.</p> <h2 id="process-monitoring">Process monitoring</h2> <p>The Memory Limiter applies the platform limits on this page to app processes (UID &gt;= 10000). Processes with a UID below 10000 don't receive platform limits, and neither does the package of the default on-device sandboxed inference service (<code translate="no" dir="ltr">config_defaultOnDeviceSandboxedInferenceService</code>). System apps and services can still declare tighter memory budgets, as described in <a href="system-memory-budgets">System memory budgets</a>.</p> <p>The Memory Limiter assigns memory limits based on the visibility state of the process:</p> <ul> <li><p><strong>Visible processes:</strong> Processes hosting a user-visible UI (such as the currently focused activity or an active interaction). Because displaying a UI requires a larger working set for rendering and graphics pipelines, visible processes receive a more generous memory limit.</p></li> <li><p><strong>Not visible processes:</strong> Processes performing work in the background without presenting a UI (such as background services or broadcast receivers). Because they don't render UI components, they operate under a more restrictive limit.</p></li> </ul> <p>The following table maps specific process states to platform memory limit classifications:</p> <table> <thead> <tr>
+<th>Process state</th>
+<th>Memory limit</th>
+</tr> </thead> <tbody> <tr>
+<td><code translate="no" dir="ltr">PERSISTENT</code></td>
+<td>Unrestricted</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">PERSISTENT_UI</code></td>
+<td>Unrestricted</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">TOP</code></td>
+<td>Visible</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">BOUND_TOP</code></td>
+<td>Visible</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">FOREGROUND_SERVICE</code></td>
+<td>Not visible</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">BOUND_FOREGROUND_SERVICE</code></td>
+<td>Not visible</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">IMPORTANT_FOREGROUND</code></td>
+<td>Visible</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">IMPORTANT_BACKGROUND</code></td>
+<td>Not visible</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">TRANSIENT_BACKGROUND</code></td>
+<td>Not visible</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">BACKUP</code></td>
+<td>Not visible</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">SERVICE</code></td>
+<td>Not visible</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">RECEIVER</code></td>
+<td>Not visible</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">TOP_SLEEPING</code></td>
+<td>Visible</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">HEAVY_WEIGHT</code></td>
+<td>Not visible</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">HOME</code></td>
+<td>Not visible</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">LAST_ACTIVITY</code></td>
+<td>Not visible</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">CACHED_ACTIVITY</code></td>
+<td>Cached</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">CACHED_ACTIVITY_CLIENT</code></td>
+<td>Cached</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">CACHED_RECENT</code></td>
+<td>Cached</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">CACHED_EMPTY</code></td>
+<td>Cached</td>
+</tr> </tbody> </table> <p><code translate="no" dir="ltr">PERSISTENT</code> and <code translate="no" dir="ltr">PERSISTENT_UI</code> processes don't receive a platform limit. If one of these processes declares a memory budget, its foreground budget applies, as described in <a href="#budget-buckets">Memory budget buckets</a>.</p> <p>In the cached state, processes are frozen and then maximally reclaimed.</p> <p>When a process exceeds its assigned <code translate="no" dir="ltr">memory.high</code> limit, the Memory Limiter detects the event and can trigger diagnostic actions, such as capturing a memory profile or logging an anomaly to <code translate="no" dir="ltr">statsd</code>.</p> <h2 id="budget-buckets">Memory budget buckets</h2> <p>On devices that support memory budgets, apps and system services can declare budgets that are tighter than the platform limits. Apps declare budgets in their manifest, as described in <a href="https://developer.android.com/topic/performance/memory/app-memory-budgets">Set app memory budgets</a>. For system apps and services, see <a href="system-memory-budgets">System memory budgets</a>. A budget sets <code translate="no" dir="ltr">memory.high</code> and can't exceed the platform limit for the same process state.</p> <p>When a process has a budget, the Memory Limiter maps its process state to one of four buckets. The manifest <code translate="no" dir="ltr">android:state</code> values <code translate="no" dir="ltr">foreground</code>, <code translate="no" dir="ltr">perceptible</code>, and <code translate="no" dir="ltr">background</code> select the budget for the matching bucket. Processes in the cached bucket have no active budget.</p> <table> <thead> <tr>
+<th>Process state</th>
+<th>Budget bucket</th>
+</tr> </thead> <tbody> <tr>
+<td><code translate="no" dir="ltr">PERSISTENT</code></td>
+<td>Foreground</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">PERSISTENT_UI</code></td>
+<td>Foreground</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">TOP</code></td>
+<td>Foreground</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">BOUND_TOP</code></td>
+<td>Foreground</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">TOP_SLEEPING</code></td>
+<td>Foreground</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">FOREGROUND_SERVICE</code></td>
+<td>Perceptible</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">BOUND_FOREGROUND_SERVICE</code></td>
+<td>Perceptible</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">IMPORTANT_FOREGROUND</code></td>
+<td>Perceptible</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">IMPORTANT_BACKGROUND</code></td>
+<td>Perceptible</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">TRANSIENT_BACKGROUND</code></td>
+<td>Background</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">BACKUP</code></td>
+<td>Background</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">SERVICE</code></td>
+<td>Background</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">RECEIVER</code></td>
+<td>Background</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">HEAVY_WEIGHT</code></td>
+<td>Background</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">HOME</code></td>
+<td>Background</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">LAST_ACTIVITY</code></td>
+<td>Background</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">CACHED_ACTIVITY</code></td>
+<td>Cached</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">CACHED_ACTIVITY_CLIENT</code></td>
+<td>Cached</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">CACHED_RECENT</code></td>
+<td>Cached</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">CACHED_EMPTY</code></td>
+<td>Cached</td>
+</tr> </tbody> </table> <h2 id="configuration">Configuration</h2> <p>In Android 17 and higher, the Memory Limiter is configured using the standard platform configuration file on the system partition at <code translate="no" dir="ltr">/system/etc/memory-limiter-config.xml</code>.</p> <h3 id="xml-format">XML format</h3> <p>The configuration file follows the schema defined in <code translate="no" dir="ltr">memory-limiter-config.xsd</code>. The file defines multiple limit sets ordered by available memory; the service selects the highest matching limit set based on the device's available RAM. All memory values are specified in mebibytes (MiB).</p> 
+<pre>&lt;MemoryLimiterConfig&gt;
+  &lt;version&gt;1&lt;/version&gt;
+  &lt;configList&gt;
+    &lt;!-- RAM boundaries account for MemTotal excluding carve-outs. --&gt;
+    &lt;limitSet&gt;
+      &lt;!-- Limits for 16GB RAM device [14336, 18432): 10G/5G/5G/5G --&gt;
+      &lt;minimumRequiredMemTotal&gt;14336&lt;/minimumRequiredMemTotal&gt;
+      &lt;maximumAllowedMemTotal&gt;18432&lt;/maximumAllowedMemTotal&gt;
+      &lt;memVisible&gt;10240&lt;/memVisible&gt;
+      &lt;memNotVisible&gt;5120&lt;/memNotVisible&gt;
+      &lt;swapVisible&gt;5120&lt;/swapVisible&gt;
+      &lt;swapNotVisible&gt;5120&lt;/swapNotVisible&gt;
+    &lt;/limitSet&gt;
+    &lt;limitSet&gt;
+      &lt;!-- Limits for 12GB RAM device [9216, 14336): 8G/4G/4G/4G --&gt;
+      &lt;minimumRequiredMemTotal&gt;9216&lt;/minimumRequiredMemTotal&gt;
+      &lt;maximumAllowedMemTotal&gt;14336&lt;/maximumAllowedMemTotal&gt;
+      &lt;memVisible&gt;8192&lt;/memVisible&gt;
+      &lt;memNotVisible&gt;4096&lt;/memNotVisible&gt;
+      &lt;swapVisible&gt;4096&lt;/swapVisible&gt;
+      &lt;swapNotVisible&gt;4096&lt;/swapNotVisible&gt;
+    &lt;/limitSet&gt;
+    &lt;limitSet&gt;
+      &lt;!-- Limits for 8GB RAM device [6800, 9216): 5G/3G/3G/3G --&gt;
+      &lt;minimumRequiredMemTotal&gt;6800&lt;/minimumRequiredMemTotal&gt;
+      &lt;maximumAllowedMemTotal&gt;9216&lt;/maximumAllowedMemTotal&gt;
+      &lt;memVisible&gt;5120&lt;/memVisible&gt;
+      &lt;memNotVisible&gt;3072&lt;/memNotVisible&gt;
+      &lt;swapVisible&gt;3072&lt;/swapVisible&gt;
+      &lt;swapNotVisible&gt;3072&lt;/swapNotVisible&gt;
+    &lt;/limitSet&gt;
+    &lt;limitSet&gt;
+      &lt;!-- Limits for 6GB RAM device [4800, 6800): 4G/2G/2G/2G --&gt;
+      &lt;minimumRequiredMemTotal&gt;4800&lt;/minimumRequiredMemTotal&gt;
+      &lt;maximumAllowedMemTotal&gt;6800&lt;/maximumAllowedMemTotal&gt;
+      &lt;memVisible&gt;4096&lt;/memVisible&gt;
+      &lt;memNotVisible&gt;2048&lt;/memNotVisible&gt;
+      &lt;swapVisible&gt;2048&lt;/swapVisible&gt;
+      &lt;swapNotVisible&gt;2048&lt;/swapNotVisible&gt;
+    &lt;/limitSet&gt;
+    &lt;limitSet&gt;
+      &lt;!-- Limits for 4GB RAM device [3200, 4800): 2G/1G/1G/1G --&gt;
+      &lt;minimumRequiredMemTotal&gt;3200&lt;/minimumRequiredMemTotal&gt;
+      &lt;maximumAllowedMemTotal&gt;4800&lt;/maximumAllowedMemTotal&gt;
+      &lt;memVisible&gt;2048&lt;/memVisible&gt;
+      &lt;memNotVisible&gt;1024&lt;/memNotVisible&gt;
+      &lt;swapVisible&gt;1024&lt;/swapVisible&gt;
+      &lt;swapNotVisible&gt;1024&lt;/swapNotVisible&gt;
+    &lt;/limitSet&gt;
+  &lt;/configList&gt;
+&lt;/MemoryLimiterConfig&gt;
+</pre> <dl> <dt><code translate="no" dir="ltr">version</code></dt> <dd>A positive integer identifying the configuration version. This must be <code translate="no" dir="ltr">1</code>.</dd> <dt><code translate="no" dir="ltr">minimumRequiredMemTotal</code></dt> <dd>
+<p>The minimum system <code translate="no" dir="ltr">MemTotal</code> (in MiB, inclusive floor) required for this limit set to apply. The service evaluates this against the total available memory reported by the kernel in <code translate="no" dir="ltr">/proc/meminfo</code>.</p> <p><strong>Understanding memory carve-outs and boundaries:</strong> The kernel <code translate="no" dir="ltr">MemTotal</code> value reflects the physical DRAM accessible to the operating system after hardware and firmware memory carve-outs are deducted. Carve-outs reserve RAM for specialized hardware components such as the GPU, baseband modem, camera ISP, secure execution environments, and hypervisors, typically consuming between 500 MiB and over 2 GiB of physical memory.</p> <p>Because <code translate="no" dir="ltr">MemTotal</code> is lower than the device's advertised physical DRAM, <code translate="no" dir="ltr">minimumRequiredMemTotal</code> thresholds include a margin for these carve-outs. For example, a configuration targeting 16 GB devices specifies a floor of <code translate="no" dir="ltr">14336</code> (14 GiB) rather than <code translate="no" dir="ltr">16384</code> (16 GiB), and a tier for 12 GB devices specifies a floor of <code translate="no" dir="ltr">9216</code> (9 GiB). This ensures that each device matches its intended tier regardless of board-level carve-out variations.</p>
+</dd> <dt><code translate="no" dir="ltr">maximumAllowedMemTotal</code></dt> <dd><p>The maximum system <code translate="no" dir="ltr">MemTotal</code> (in MiB, exclusive ceiling) for this limit set to apply. If <code translate="no" dir="ltr">MemTotal</code> is greater than or equal to this ceiling, the limit set doesn't apply. For devices with 18,432 MiB or more or for devices with less than 3,200 MiB, the Memory Limiter doesn't apply limits, leaving processes unconstrained.</p></dd> <dt><code translate="no" dir="ltr">memVisible</code></dt> <dd><p>The soft memory limit (<code translate="no" dir="ltr">memory.high</code>) in MiB applied to visible processes.</p></dd> <dt><code translate="no" dir="ltr">memNotVisible</code></dt> <dd><p>The soft memory limit (<code translate="no" dir="ltr">memory.high</code>) in MiB applied to not visible processes.</p></dd> <dt><code translate="no" dir="ltr">swapVisible</code></dt> <dd><p>The swap space limit (<code translate="no" dir="ltr">memory.swap.max</code>) in MiB applied to visible processes.</p></dd> <dt><code translate="no" dir="ltr">swapNotVisible</code></dt> <dd><p>The swap space limit (<code translate="no" dir="ltr">memory.swap.max</code>) in MiB applied to not visible processes.</p></dd> </dl> <h3 id="standard-platform-limits">Standard platform limits</h3> <p>In Android 17 and higher, the platform specifies standard memory and swap limits in <code translate="no" dir="ltr">/system/etc/memory-limiter-config.xml</code> across common physical RAM tiers using <code translate="no" dir="ltr">[floor, ceiling)</code> range intervals:</p> <table> <thead> <tr> <th>Target physical RAM</th> <th> MemTotal range [floor, ceiling)<br> (minimumRequiredMemTotal,<br>maximumAllowedMemTotal) </th> <th>Visible memory limit<br>(memVisible)</th> <th>Not visible memory limit<br>(memNotVisible)</th> <th>Visible swap limit<br>(swapVisible)</th> <th>Not visible swap limit<br>(swapNotVisible)</th> </tr> </thead> <tbody> <tr> <td>16 GB</td> <td>
+<code translate="no" dir="ltr">[14336, 18432)</code> MiB</td> <td>10,240 MiB (10 GiB)</td> <td>5,120 MiB (5 GiB)</td> <td>5,120 MiB (5 GiB)</td> <td>5,120 MiB (5 GiB)</td> </tr> <tr> <td>12 GB</td> <td>
+<code translate="no" dir="ltr">[9216, 14336)</code> MiB</td> <td>8,192 MiB (8 GiB)</td> <td>4,096 MiB (4 GiB)</td> <td>4,096 MiB (4 GiB)</td> <td>4,096 MiB (4 GiB)</td> </tr> <tr> <td>8 GB</td> <td>
+<code translate="no" dir="ltr">[6800, 9216)</code> MiB</td> <td>5,120 MiB (5 GiB)</td> <td>3,072 MiB (3 GiB)</td> <td>3,072 MiB (3 GiB)</td> <td>3,072 MiB (3 GiB)</td> </tr> <tr> <td>6 GB</td> <td>
+<code translate="no" dir="ltr">[4800, 6800)</code> MiB</td> <td>4,096 MiB (4 GiB)</td> <td>2,048 MiB (2 GiB)</td> <td>2,048 MiB (2 GiB)</td> <td>2,048 MiB (2 GiB)</td> </tr> <tr> <td>4 GB</td> <td>
+<code translate="no" dir="ltr">[3200, 4800)</code> MiB</td> <td>2,048 MiB (2 GiB)</td> <td>1,024 MiB (1 GiB)</td> <td>1,024 MiB (1 GiB)</td> <td>1,024 MiB (1 GiB)</td> </tr> </tbody> </table> <h3 id="memory-limit-principles">Memory limit principles</h3> <p>The Memory Limiter configuration is designed around the following platform principles:</p> <ul> <li><p><strong>Ecosystem consistency and app compatibility:</strong> Consistent memory limits across devices ensure predictable app performance throughout the Android ecosystem. Apps are developed and tested against standard memory expectations; maintaining uniform platform limits avoids unexpected throttling or premature terminations.</p></li> <li>
+<p><strong>Proportional resource allocation:</strong> The platform limits are calibrated according to physical RAM capacity:</p> <ul> <li>
+<strong>Visible processes:</strong> Allocated approximately 1/2 to 2/3 of total physical RAM to support active UI, composition, and rendering workloads.</li> <li>
+<strong>Not visible processes:</strong> Allocated approximately 1/4 to 1/3 of total physical RAM for background tasks.</li> </ul>
+</li> <li><p><strong>Universal applicability:</strong> Limits apply uniformly to all application processes on the device (UID &gt;= 10000), including preinstalled system and OEM apps. Apart from the default on-device sandboxed inference service, the Memory Limiter doesn't exempt individual apps, ensuring fair memory governance across all apps. To configure self-tuning <code translate="no" dir="ltr">memory.min</code> protection floors on critical interactive daemons and tighter, workload-calibrated <code translate="no" dir="ltr">memory.high</code> ceilings on individual system apps and services, see <a href="system-memory-budgets">System memory budgets</a>.</p></li> <li><p><strong>Absence of runtime query APIs:</strong> In Android 17 and higher, apps can't programmatically query their assigned memory limits at run time. The standard platform limits are defined with generous margins so that well-behaved apps operate without constraints during normal usage.</p></li> <li><p><strong>Kernel reclaim and swap dynamics:</strong> When an app process approaches its <code translate="no" dir="ltr">memory.high</code> limit, the Linux kernel directs memory reclaim specifically at that process cgroup. This includes dropping inactive file-backed pages and swapping cold anonymous pages to ZRAM, maintaining system fluidity without imposing global memory pressure.</p></li> </ul> <h2 id="shell-commands">Shell commands</h2> <p>The <code translate="no" dir="ltr">am memory-limiter</code> command lets developers and system integrators interact with the service at run time for development, testing, and debugging:</p> 
+<pre>am memory-limiter &lt;SUB-COMMAND&gt;</pre> <h3 id="status">status</h3> <p>The <code translate="no" dir="ltr">status</code> sub-command reports the operational status and active metrics of the Memory Limiter:</p> 
+<pre>adb shell am memory-limiter status</pre> <p>The following is example output:</p> 
+<pre>Memory limiter
+  enabled                  monitoring=true          ignored=none
+  visibleMem=1948MB        visibleSwap=974MB
+  notVisibleMem=974MB      notVisibleSwap=487MB
+  started=36               watched=36               watch-failed=0
+  events=0                 processes=36             process-hwm=36
+</pre> <p>Key fields in the output include:</p> <dl> <dt><code translate="no" dir="ltr">monitoring</code></dt> <dd>Indicates whether the Memory Limiter is actively watching processes.</dd> <dt>
+<code translate="no" dir="ltr">visibleMem</code> and <code translate="no" dir="ltr">notVisibleMem</code>
+</dt> <dd>The calculated absolute memory limits (<code translate="no" dir="ltr">memory.high</code>) currently enforced for each visibility state.</dd> <dt>
+<code translate="no" dir="ltr">visibleSwap</code> and <code translate="no" dir="ltr">notVisibleSwap</code>
+</dt> <dd>The calculated absolute swap limits (<code translate="no" dir="ltr">memory.swap.max</code>) currently enforced for each visibility state.</dd> <dt><code translate="no" dir="ltr">events</code></dt> <dd>The number of times a process has crossed its assigned limit.</dd> <dt><code translate="no" dir="ltr">processes</code></dt> <dd>The current number of monitored processes.</dd> </dl> <h3 id="ignore">ignore</h3> <p>The <code translate="no" dir="ltr">ignore</code> sub-command temporarily excludes a specific UID or all processes from memory limiting. This is useful for performance benchmarking, stress testing, or diagnosing memory behavior:</p> 
+<pre># Ignore a specific UID
+adb shell am memory-limiter ignore 10087
+# Ignore all processes (temporarily disables limiting)
+adb shell am memory-limiter ignore all
+# Resume normal limiting operation
+adb shell am memory-limiter ignore none</pre> <h3 id="manual">manual</h3> <p>The <code translate="no" dir="ltr">manual</code> sub-command overrides the calculated limits for a specific process by process ID (PID) with a custom absolute value in bytes. The value must be an integer, but can include the <code translate="no" dir="ltr">MB</code> suffix to indicate MiB or the <code translate="no" dir="ltr">GB</code> suffix to indicate GiB:</p> 
+<pre># Set a 1GiB limit for PID 1234
+adb shell am memory-limiter manual 1234 1073741824
+# Set a 1GiB limit for PID 1234
+adb shell am memory-limiter manual 1234 1024MB
+# Set a 1GiB limit for PID 1234
+adb shell am memory-limiter manual 1234 1GB
+# Remove the manual override for PID 1234
+adb shell am memory-limiter manual 1234 none</pre> <p>Manual overrides apply only for the lifetime of that specific process instance. If the process restarts, it returns to the standard limits based on its state.</p> <p>A manual override can't exceed physical system limits.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/perf/memory-limiter" class="_attribution-link">https://source.android.com/docs/core/perf/memory-limiter</a>
+  </p>
+</div>

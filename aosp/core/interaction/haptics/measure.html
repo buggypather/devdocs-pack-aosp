@@ -1,0 +1,18 @@
+<h1>Measure and record target effects</h1> <ol> <li>
+<p>Attach the accelerometer to the DUT.</p> <ul> <li><p>Use beeswax to attach the accelerometer at the location specified in the test app.</p></li> <li><p>The accelerometer connection should be rigid but also easy to remove between runs.</p></li> </ul>
+</li> <li>
+<p>Set the orientation of the accelerometer depending on the actuator type.</p> <ul> <li><p><strong>X axis linear resonant actuator (LRA):</strong> Make sure that the -&gt; on the accelerometer is aligned with the length direction of the LRA. This direction is generally equivalent to the resonating direction.</p></li> <li><p><strong>Z axis linear resonant actuator (LRA):</strong> Use the accelerometer orientation described in the X axis LRA instructions above.</p></li> <li><p><strong>Eccentric rotating mass actuator (ERM):</strong> Measure the signal and all three axes, then select the data that has the strongest signal amplitude.</p></li> </ul> <aside class="note"><strong>Note:</strong><span> If you change the measuring axis, be sure to also change the accelerometer cable attached to the CCLD signal conditioner.</span></aside>
+</li> <li>
+<p>Open the test app on the DUT and generate target effects.</p> <ul> <li>
+<p>Use a Bluetooth mouse to click the target buttons in the app. This lets you click app buttons without adding external forces, such as pressure from a finger.</p> <p><img src="https://source.android.com/static/docs/core/interaction/haptics/images/haptics_assessment_36.png" alt="Generate Target Effects" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> DUT generating target effects</p>
+</li> </ul>
+</li> <li>
+<p>Record the waveform from the test app using Audacity and export the file:</p> <ul> <li>Click <strong>Record</strong> in Audacity.</li> <li>Press each of the target buttons in the test app.</li> <li>
+<p>Export the recording as a WAV file.</p> <p><img src="https://source.android.com/static/docs/core/interaction/haptics/images/haptics_assessment_11.png" alt="Export From Audacity" class="android-image-dark-theme-background"> </p> <p><strong>Figure 2.</strong> Exporting from Audacity</p>
+</li> </ul>
+</li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/interaction/haptics/measure" class="_attribution-link">https://source.android.com/docs/core/interaction/haptics/measure</a>
+  </p>
+</div>

@@ -1,0 +1,89 @@
+<h1>Car display compatibility</h1>  <p>Car display compatibility enables phone and tablet apps to perform well on automotive devices.</p> <p>Features include:</p> <ul> <li>
+<strong>DPI scaling:</strong> Scale app UI elements based on display DPI.</li> <li>
+<strong>Safe area for app rendering:</strong> Contain app content within a safe area, avoiding obscuration by system UI elements.</li> <li>
+<strong>App classification logic:</strong> Identify apps that require Car Display Compat.</li> </ul> <h2 id="compat-features">Compatibility features</h2> <p>The platform provides several mechanisms to optimize app rendering and scaling on automotive displays.</p> <h3 id="dpi-scaling">DPI scaling</h3> <p>The DPI scaling feature enables device makers to scale the density DPI of individual apps or all apps that require Car Display Compat.</p> <p>To configure the density scaling of apps:</p> <ol> <li>
+<p>Add a config file <code translate="no" dir="ltr">/product/etc/display_compat_config.xml</code>:</p> 
+<pre>&lt;?xml version="1.0" encoding="utf-8"?&gt;
+&lt;!--
+    Each scale factor can have the following attributes
+
+    display     (required) Specifies the displayId to which this scale factor will be applied.
+    packageName (optional) Specifies the packageName to which the scale factor will be applied.
+                If omitted, the scaling will apply to all packages.
+
+    For example:
+    &lt;scale display="0" packageName="com.android.car.media.localmediaplayer"&gt;0.5&lt;/scale&gt;
+
+    This means that only package `com.android.car.media.localmediaplayer` on display `0` will be scaled.
+--&gt;
+&lt;config&gt;
+&lt;scale display="0"&gt;1.0&lt;/scale&gt;
+&lt;/config&gt;
+</pre>
+</li> <li>
+<p>To set a default scale value for all apps that require Car Display Compat, change the default scale for display 0 to <code translate="no" dir="ltr">&lt;scale display="0"&gt;1.0&lt;/scale&gt;</code>. The value is the <em>inverse scale</em> value. For example, to scale apps that require Car Display Compat to 1.5x, set the scale value to <code translate="no" dir="ltr">(1 / 1.5) =
+0.67</code>:</p> 
+<pre>&lt;config&gt;
+    &lt;scale display="0"&gt;0.67&lt;/scale&gt;
+&lt;/config&gt;
+</pre>
+</li> <li>
+<p>To set a scale value for a specific app, add a new <code translate="no" dir="ltr">scale</code> element to the config. In this example, YouTube Automotive is scaled to 1.43x (for example, <code translate="no" dir="ltr">(1 /
+1.43) = 0.7</code>).</p> 
+<pre>&lt;config&gt;
+    &lt;scale display="0"&gt;0.67&lt;/scale&gt;
+    &lt;scale display="0" packageName="com.google.android.apps.automotive.youtube"&gt;0.7&lt;/scale&gt;
+&lt;/config&gt;
+</pre>
+</li> </ol> <p>If the system was running when you changed <code translate="no" dir="ltr">/product/etc/display_compat_config.xml</code>, you must clear the cache for the new config to take effect. Use this macro to clear the cache:</p> 
+<pre>SECURE_SETTING_KEY="android.software.car.display_compatibility:settings:secure"
+USER_ID_LIST=$(adb shell cmd user list -v | grep 'id=' | cut -d'=' -f2 | cut -d',' -f1)
+for USER_ID in $USER_ID_LIST; do
+    echo "Deleting Display Compat config for user: $USER_ID"
+    adb shell settings delete secure --user $USER_ID $SECURE_SETTING_KEY
+    sleep 1
+    echo
+done
+</pre> <ol> <li>
+<p>Add the config file and feature declaration to an AAOS build, for example, in <code translate="no" dir="ltr">vendor/<var label="oem name" translate="no">OEM_NAME</var>/products/displaycompat</code>:</p>  
+<pre># File: vendor/OEM_NAME/products/displaycompat/Android.bp
+
+prebuilt_etc {
+    name: "display_compat_config",
+    filename: "display_compat_config.xml",
+    src: "display_compat_config.xml",
+    product_specific: true,
+}
+</pre>
+</li> </ol> <h3 id="safe-app-area">Safe app area</h3> <p>Phone and tablet apps often aren't designed for the large system bars found in Automotive. These apps must be restricted from drawing content beneath system bars or system overlays. Otherwise, they might render interactive elements in an area obscured from the end user.</p> <p>The safe app area is implemented using <a href="../scalableui/variant-ref#xml-child-elements">Scalable UI</a> <code translate="no" dir="ltr">SafeBounds</code>.</p> <h3 id="app-classification-logic">App classification logic</h3> <p>You can use <code translate="no" dir="ltr">CarPackageManager.requiresDisplayCompat(..)</code> to build additional functionality that enhances app compatibility. For example, you can use this functionality to add a back button or additional UI.</p> <p>App developers can opt in to car display compatibility by including metadata in the app's manifest:</p> 
+<pre>&lt;meta-data
+    android:name="android.software.car.display_compatibility"
+    android:value="true" /&gt;
+</pre> <p>The system evaluates whether an app requires car display compatibility features using the following logic (evaluated in order):</p> <ol> <li>
+<strong>Manifest metadata <code translate="no" dir="ltr">android.software.car.display_compatibility</code>:</strong> <ul> <li>If <code translate="no" dir="ltr">android:value="true"</code> → <strong>App requires compat</strong>
+</li> <li>If <code translate="no" dir="ltr">android:value="false"</code> → <strong>App doesn't require compat</strong>
+</li> <li>If metadata is missing, proceed to the next check.</li> </ul>
+</li> <li>
+<strong>Uses feature <code translate="no" dir="ltr">android.hardware.type.automotive</code>:</strong> <ul> <li>If the feature is declared (irrespective of whether <code translate="no" dir="ltr">android:required</code> is <code translate="no" dir="ltr">true</code> or <code translate="no" dir="ltr">false</code>) → <strong>App doesn't require compat</strong>
+</li> <li>If the feature is missing, proceed to the next check.</li> </ul>
+</li> <li>
+<strong>App activities:</strong> <ul> <li>If the app has no activities (such as RROs, headless apps, or services) → <strong>App doesn't require compat</strong>
+</li> <li>If the app has activities, proceed to the next check.</li> </ul>
+</li> <li>
+<strong>Application info:</strong> <ul> <li>If the app is privileged → <strong>App doesn't require compat</strong>
+</li> <li>If the app is a system app (<code translate="no" dir="ltr">FLAG_SYSTEM</code>) → <strong>App doesn't require compat</strong>
+</li> <li>Otherwise, proceed to the next check.</li> </ul>
+</li> <li>
+<strong>Signature info:</strong> <ul> <li>If the app is platform-signed (signed with the same signature as the Android framework) → <strong>App doesn't require compat</strong>
+</li> <li>Otherwise, proceed to the next check.</li> </ul>
+</li> <li>
+<strong>Fallback decision:</strong> <ul> <li>If all checks pass without opting out → <strong>App requires compat</strong>
+</li> </ul>
+</li> </ol> <p>See <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/opt/car/services/updatableServices/src/com/android/server/wm/CarDisplayCompatScaleProviderUpdatableImpl.java;l=497"><code translate="no" dir="ltr">CarDisplayCompatScaleProviderUpdatableImpl.requiresDisplayCompatNotCachedLocked</code></a>.</p> <h2 id="device_support">Device support</h2> <p>Devices that support car display compatibility must declare support using the feature declaration:</p> 
+<pre>&lt;feature name="android.software.car.display_compatibility" /&gt;
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/app_compat/car_display_compat" class="_attribution-link">https://source.android.com/docs/automotive/app_compat/car_display_compat</a>
+  </p>
+</div>

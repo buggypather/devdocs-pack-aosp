@@ -1,0 +1,56 @@
+<h1>SystemSuspend service</h1>  <p>In Android 9 and lower there is a thread in <a href="https://android.googlesource.com/platform/system/core/+/pie-dev/libsuspend/autosuspend_wakeup_count.cpp#65">libsuspend</a> responsible for initiating system suspend. Android 10 introduces an equivalent functionality in a SystemSuspend HIDL service. This service is located in the system image and is served by the Android platform. The logic from <code translate="no" dir="ltr">libsuspend</code> remains largely the same, except every userspace process blocking the system suspend needs to communicate with SystemSuspend.</p> <h2 id="libs">libsuspend and libpower</h2> <p>In Android 10, SystemSuspend service replaces <code translate="no" dir="ltr">libsuspend</code>. <code translate="no" dir="ltr">libpower</code> was reimplemented to rely on the SystemSuspend service instead of <code translate="no" dir="ltr">/sys/<strong>power</strong>/wake[un]lock</code> without changing the C API.</p> <p>This pseudocode shows how to implement <code translate="no" dir="ltr">acquire_wake_lock</code> and <code translate="no" dir="ltr">release_wake_lock</code>.</p> 
+<pre>
+static std::unordered_map&lt;std::string, sp&lt;IWakeLock&gt;&gt; gWakeLockMap;
+
+int acquire_wake_lock(int, const char* id) {
+    ...
+    if (!gWakeLockMap[id]) {
+        gWakeLockMap[id] = suspendService-&gt;acquireWakeLock(WakeLockType::PARTIAL, id);
+    }
+    ...
+    return 0;
+}
+
+int release_wake_lock(const char* id) {
+    ...
+    if (gWakeLockMap[id]) {
+        auto ret = gWakeLockMap[id]-&gt;release();
+        gWakeLockMap[id].clear();
+        return 0;
+    }
+    ...
+    return -1;
+}
+</pre> <h2 id="execution-threads">Execution threads</h2> <p>The SystemSuspend service keeps track of the number of wake locks issued with a suspend counter. It has two threads of execution:</p> <ul> <li>The <strong>main</strong> thread answers binder calls.</li> <li>The <strong>suspend</strong> thread controls system suspend.</li> </ul> <h3 id="main-thread">Main thread</h3> <p>The main thread answers requests from clients to allocate new wake locks, incrementing/decrementing the suspend counter.</p> <h3 id="suspend-thread">Suspend thread</h3> <p>The suspend thread performs the following in a loop:</p> <ol> <li>Read from <code translate="no" dir="ltr">/sys/<strong>power</strong>/wakeup_count</code>.</li> <li>Acquire the mutex. This makes sure that the suspend thread doesn't touch the suspend counter while the <strong>main</strong> thread is trying to increment or decrement it. The <strong>main</strong> thread is blocked on issuing or removing wake locks when the suspend counter has reached zero and the <strong>suspend</strong> thread is trying to run.</li> <li>Wait until the counter is equal to zero.</li> <li>Write the value read from <code translate="no" dir="ltr">/sys/<strong>power
+    </strong>/wakeup_count</code> (from step 1) to this file. If the write fails, return to the beginning of the loop</li> <li>Start the system suspend by writing <code translate="no" dir="ltr">mem</code> to <code translate="no" dir="ltr">/sys/power/<strong>state</strong></code>.</li> <li>Release the mutex.</li> </ol> <p>When a request for a wake lock successfully returns, the suspend thread is blocked.</p> <figure id="suspend-thread-loop"> <img alt src="https://source.android.com/static/docs/core/architecture/images/suspendThreadLoop.png" class="android-image-dark-theme-background"> <figcaption><b>Figure 1.</b> Suspend thread loop</figcaption> </figure> <aside class="note"><b>Note:</b> The mutex is always released at the end of the loop iteration.</aside> <h3 id="systemsuspend-api">SystemSuspend API</h3> <p>The SystemSuspend API consists of two interfaces. The HIDL interface is used by native processes to acquire wake locks and the AIDL interface is used for communication between SystemServer and SystemSuspend.</p> <h3 id="isystemsuspend">ISystemSuspend HIDL interface</h3> 
+<pre>
+enum WakeLockType : uint32_t {
+    PARTIAL,
+    FULL
+};
+
+interface IWakeLock {
+    oneway release();
+};
+
+interface ISystemSuspend {
+    acquireWakeLock(WakeLockType type, string debugName)
+        generates (IWakeLock lock);
+};
+</pre> <p>Each client that requests a wake lock receives a unique <code translate="no" dir="ltr">IWakeLock</code> instance. This is different from <code translate="no" dir="ltr">/sys/<strong>power</strong>/wake_lock</code>, which allows multiple clients to use the wake lock under the same name. If a client holding an <code translate="no" dir="ltr">IWakeLock</code> instance terminates, the binder driver and SystemSuspend service cleans it up.</p> <h3 id="isuspendcontrolservice">ISuspendControlService AIDL interface</h3> <p>ISuspendControlService is intended to be used only by SystemServer.</p> 
+<pre>
+interface ISuspendCallback {
+     void notifyWakeup(boolean success);
+}
+
+interface ISuspendControlService {
+    boolean enableAutosuspend();
+    boolean registerCallback(ISuspendCallback callback);
+    boolean forceSuspend();
+}
+</pre> <p>Leveraging the Android HIDL offers the following benefits:</p> <ul> <li>If a suspend-blocking process dies, SystemSuspend can be notified.</li> <li>The thread responsible for system suspend can be given a callback.</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/power/systemsuspend" class="_attribution-link">https://source.android.com/docs/core/power/systemsuspend</a>
+  </p>
+</div>

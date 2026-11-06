@@ -1,0 +1,207 @@
+<h1>Manifests</h1>  <p>A VINTF object aggregates data from <a href="#device-manifest-file">device manifest</a> and <a href="#framework-manifest-file">framework manifest</a> files (XML). Both manifests share a format, although not all elements apply to both (for details on the schema, see <a href="#manifest-file-schema">Manifest file schema</a>). </p> <h2 id="device-manifest-file">Device manifest</h2> <p>The device manifest (provided by the device) consists of the vendor manifest and the ODM manifest.</p> <ul> <li>The vendor manifest specifies HALs, SELinux policy versions, etc. common to an SoC. It is recommended to be placed in the Android source tree at <code translate="no" dir="ltr">device/<var translate="no">VENDOR</var>/<var translate="no">DEVICE</var>/manifest.xml</code>, but multiple fragment files can be used. For details, see <a href="#manifest-fragments">Manifest fragments</a> and <a href="resources#manifest-fragments">Generate DM from fragments</a>. </li> <li>The ODM manifest lists HALs specific to the product in the <a href="../bootloader/partitions/odm-partitions">ODM partition</a>. The VINTF object loads the ODM manifest in this order: <ol> <li>If <code translate="no" dir="ltr"><var translate="no">SKU</var></code> is defined (where <code translate="no" dir="ltr"><var translate="no">SKU</var></code> is the value of the property <code translate="no" dir="ltr">ro.boot.product.hardware.sku</code>), <code translate="no" dir="ltr">/odm/etc/vintf/manifest_<var translate="no">SKU</var>.xml</code> </li> <li><code translate="no" dir="ltr">/odm/etc/vintf/manifest.xml</code></li> <li>If <code translate="no" dir="ltr"><var translate="no">SKU</var></code> is defined, <code translate="no" dir="ltr">/odm/etc/manifest_<var translate="no">SKU</var>.xml</code>
+</li> <li><code translate="no" dir="ltr">/odm/etc/manifest.xml</code></li> </ol> </li> <li>The vendor manifest lists HALs specific to the product in the vendor partition. The VINTF object loads the vendor manifest in this order: <ol> <li>If <code translate="no" dir="ltr"><var translate="no">SKU</var></code> is defined (where <code translate="no" dir="ltr"><var translate="no">SKU</var></code> is the value of the property <code translate="no" dir="ltr">ro.boot.product.vendor.sku</code>), <code translate="no" dir="ltr">/vendor/etc/vintf/manifest_<var translate="no">SKU</var>.xml</code> </li> <li><code translate="no" dir="ltr">/vendor/etc/vintf/manifest.xml</code></li> </ol> </li> <li>The VINTF object loads the device manifest in this order: <ol> <li>If the vendor manifest exists, combine the following: <ol> <li>The vendor manifest</li> <li>Optional vendor manifest fragments</li> <li>Optional ODM manifest </li>
+<li>Optional ODM manifest fragments</li> </ol> </li>
+<li>Otherwise, if the ODM manifest exists, combine the ODM manifest with the optional ODM manifest fragments.</li> <li>
+<code translate="no" dir="ltr">/vendor/manifest.xml</code> (legacy, no fragments)</li> <li>Finally, combine manifest fragments from any vendor APEXes. Manifest fragments are loaded from the <code translate="no" dir="ltr">etc/vintf</code> directory of each APEX (e.g. <code translate="no" dir="ltr">/apex/&lt;apex name&gt;/etc/vintf</code>). </li> </ol> <p> Note that: </p> <ul> <li>On legacy devices, the legacy vendor manifest and the ODM manifest are used. The ODM manifest may completely override the legacy vendor manifest.</li> <li>On devices launched with Android 9, the ODM manifest is combined with the vendor manifest.</li> <li>When combining a list of manifests, manifests that appear later in the list may override tags in manifests that appear earlier in the list, provided that the tags in the later manifest have the attribute <code translate="no" dir="ltr">override="true"</code>. For example, the ODM manifest may override some <code translate="no" dir="ltr">&lt;hal&gt;</code> tags from the vendor manifest. See the documentation for attribute <code translate="no" dir="ltr">override</code> below.</li> </ul> </li> </ul> <p>This setup enables multiple products with the same board to share the same vendor image (which provides common HALs) yet have different ODM images (which specify product-specific HALs).</p> <p>Here's an example vendor manifest.</p> 
+<pre>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;!-- Comments, Legal notices, etc. here --&gt;
+&lt;manifest version="2.0" type="device" target-level="1"&gt;
+    &lt;hal&gt;
+        &lt;name&gt;android.hardware.camera&lt;/name&gt;
+        &lt;transport&gt;hwbinder&lt;/transport&gt;
+        &lt;version&gt;3.4&lt;/version&gt;
+        &lt;interface&gt;
+            &lt;name&gt;ICameraProvider&lt;/name&gt;
+            &lt;instance&gt;legacy/0&lt;/instance&gt;
+            &lt;instance&gt;proprietary/0&lt;/instance&gt;
+        &lt;/interface&gt;
+    &lt;/hal&gt;
+    &lt;hal&gt;
+        &lt;name&gt;android.hardware.nfc&lt;/name&gt;
+        &lt;transport&gt;hwbinder&lt;/transport&gt;
+        &lt;version&gt;1.0&lt;/version&gt;
+        &lt;version&gt;2.0&lt;/version&gt;
+        &lt;interface&gt;
+            &lt;name&gt;INfc&lt;/name&gt;
+            &lt;instance&gt;nfc_nci&lt;/instance&gt;
+        &lt;/interface&gt;
+    &lt;/hal&gt;
+    &lt;hal&gt;
+        &lt;name&gt;android.hardware.nfc&lt;/name&gt;
+        &lt;transport&gt;hwbinder&lt;/transport&gt;
+        &lt;fqname&gt;@2.0::INfc/default&lt;/fqname&gt;
+    &lt;/hal&gt;
+    &lt;hal&gt;
+        &lt;name&gt;android.hardware.drm&lt;/name&gt;
+        &lt;transport&gt;hwbinder&lt;/transport&gt;
+        &lt;version&gt;1.0&lt;/version&gt;
+        &lt;interface&gt;
+            &lt;name&gt;ICryptoFactory&lt;/name&gt;
+            &lt;instance&gt;default&lt;/instance&gt;
+        &lt;/interface&gt;
+        &lt;interface&gt;
+            &lt;name&gt;IDrmFactory&lt;/name&gt;
+            &lt;instance&gt;default&lt;/instance&gt;
+        &lt;/interface&gt;
+        &lt;fqname&gt;@1.1::ICryptoFactory/clearkey&lt;/fqname&gt;
+        &lt;fqname&gt;@1.1::IDrmFactory/clearkey&lt;/fqname&gt;
+    &lt;/hal&gt;
+    &lt;hal format="aidl"&gt;
+        &lt;name&gt;android.hardware.light&lt;/name&gt;
+        &lt;version&gt;1&lt;/version&gt;
+        &lt;fqname&gt;ILights/default&lt;/fqname&gt;
+    &lt;/hal&gt;
+    &lt;hal format="aidl"&gt;
+        &lt;name&gt;android.hardware.power&lt;/name&gt;
+        &lt;version&gt;2&lt;/version&gt;
+        &lt;interface&gt;
+            &lt;name&gt;IPower&lt;/name&gt;
+            &lt;instance&gt;default&lt;/instance&gt;
+        &lt;/interface&gt;
+    &lt;/hal&gt;
+    &lt;hal format="native"&gt;
+        &lt;name&gt;EGL&lt;/name&gt;
+        &lt;version&gt;1.1&lt;/version&gt;
+    &lt;/hal&gt;
+    &lt;hal format="native"&gt;
+        &lt;name&gt;GLES&lt;/name&gt;
+        &lt;version&gt;1.1&lt;/version&gt;
+        &lt;version&gt;2.0&lt;/version&gt;
+        &lt;version&gt;3.0&lt;/version&gt;
+    &lt;/hal&gt;
+    &lt;sepolicy&gt;
+        &lt;version&gt;25.0&lt;/version&gt;
+    &lt;/sepolicy&gt;
+&lt;/manifest&gt;</pre> <p>Here's an example ODM manifest.</p> 
+<pre>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;!-- Comments, Legal notices, etc. here --&gt;
+&lt;manifest version="1.0" type="device"&gt;
+    &lt;!-- camera 3.4 in vendor manifest is ignored --&gt;
+    &lt;hal override="true"&gt;
+        &lt;name&gt;android.hardware.camera&lt;/name&gt;
+        &lt;transport&gt;hwbinder&lt;/transport&gt;
+        &lt;version&gt;3.5&lt;/version&gt;
+        &lt;interface&gt;
+            &lt;name&gt;ICameraProvider&lt;/name&gt;
+            &lt;instance&gt;legacy/0&lt;/instance&gt;
+        &lt;/interface&gt;
+    &lt;/hal&gt;
+    &lt;!-- NFC is declared to be disabled --&gt;
+    &lt;hal override="true"&gt;
+        &lt;name&gt;android.hardware.nfc&lt;/name&gt;
+        &lt;transport&gt;hwbinder&lt;/transport&gt;
+    &lt;/hal&gt;
+    &lt;hal&gt;
+        &lt;name&gt;android.hardware.power&lt;/name&gt;
+        &lt;transport&gt;hwbinder&lt;/transport&gt;
+        &lt;version&gt;1.1&lt;/version&gt;
+        &lt;interface&gt;
+            &lt;name&gt;IPower&lt;/name&gt;
+            &lt;instance&gt;default&lt;/instance&gt;
+        &lt;/interface&gt;
+    &lt;/hal&gt;
+&lt;/manifest&gt;</pre> <p>Here's an example device manifest in an OTA package.</p> 
+<pre>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;!-- Comments, Legal notices, etc. here --&gt;
+&lt;manifest version="1.0" type="device" target-level="1"&gt;
+    &lt;!-- hals ommited --&gt;
+    &lt;kernel version="4.4.176"&gt;
+        &lt;config&gt;
+            &lt;key&gt;CONFIG_ANDROID&lt;/key&gt;
+            &lt;value&gt;y&lt;/value&gt;
+        &lt;/config&gt;
+        &lt;config&gt;
+            &lt;key&gt;CONFIG_ARM64&lt;/key&gt;
+            &lt;value&gt;y&lt;/value&gt;
+        &lt;/config&gt;
+    &lt;!-- other configs ommited --&gt;
+    &lt;/kernel&gt;
+&lt;/manifest&gt;</pre> <p>For more details, see <a href="dm">Device Manifest Development</a>.</p> <h2 id="framework-manifest-file">Framework manifest</h2> <p>The framework manifest file consists of the system manifest, the product manifest, and the system_ext manifest. </p> <ul> <li> The system manifest (provided by Google) is manually generated and lives in the Android source tree at <code translate="no" dir="ltr"><a href="https://android.googlesource.com/platform/system/libhidl/+/refs/heads/android17-release/vintfdata/manifest.xml">/system/libhidl/manifest.xml</a></code>. </li> <li> The product manifest (provided by the device) lists HALs serviced by modules installed on the product partition. </li> <li> The system_ext manifest (provided by the device) lists the following: <ul> <li>HALs serviced by modules installed on the system_ext partition;</li> <li>VNDK versions;</li> <li>System SDK version.</li> </ul> </li> </ul> <p> Similar to the device manifest, multiple fragment files can be used. For details, see <a href="#manifest-fragments">Manifest fragments</a>. </p> <p>Here's an example framework manifest.</p> 
+<pre>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;!-- Comments, Legal notices, etc. here --&gt;
+&lt;manifest version="1.0" type="framework"&gt;
+    &lt;hal&gt;
+        &lt;name&gt;android.hidl.allocator&lt;/name&gt;
+        &lt;transport&gt;hwbinder&lt;/transport&gt;
+        &lt;version&gt;1.0&lt;/version&gt;
+        &lt;interface&gt;
+            &lt;name&gt;IAllocator&lt;/name&gt;
+            &lt;instance&gt;ashmem&lt;/instance&gt;
+        &lt;/interface&gt;
+    &lt;/hal&gt;
+    &lt;hal&gt;
+        &lt;name&gt;android.hidl.memory&lt;/name&gt;
+        &lt;transport arch="32+64"&gt;passthrough&lt;/transport&gt;
+        &lt;version&gt;1.0&lt;/version&gt;
+        &lt;interface&gt;
+            &lt;name&gt;IMapper&lt;/name&gt;
+            &lt;instance&gt;ashmem&lt;/instance&gt;
+        &lt;/interface&gt;
+    &lt;/hal&gt;
+    &lt;hal&gt;
+        &lt;name&gt;android.hidl.manager&lt;/name&gt;
+        &lt;transport&gt;hwbinder&lt;/transport&gt;
+        &lt;version&gt;1.0&lt;/version&gt;
+        &lt;interface&gt;
+            &lt;name&gt;IServiceManager&lt;/name&gt;
+            &lt;instance&gt;default&lt;/instance&gt;
+        &lt;/interface&gt;
+    &lt;/hal&gt;
+    &lt;hal&gt;
+        &lt;name&gt;android.frameworks.sensorservice&lt;/name&gt;
+        &lt;transport&gt;hwbinder&lt;/transport&gt;
+        &lt;version&gt;1.0&lt;/version&gt;
+        &lt;interface&gt;
+            &lt;name&gt;ISensorManager&lt;/name&gt;
+            &lt;instance&gt;default&lt;/instance&gt;
+        &lt;/interface&gt;
+    &lt;/hal&gt;
+    &lt;hal max-level="5"&gt;
+        &lt;name&gt;android.frameworks.schedulerservice&lt;/name&gt;
+        &lt;transport&gt;hwbinder&lt;/transport&gt;
+        &lt;version&gt;1.0&lt;/version&gt;
+        &lt;interface&gt;
+            &lt;name&gt;ISchedulingPolicyService&lt;/name&gt;
+            &lt;instance&gt;default&lt;/instance&gt;
+        &lt;/interface&gt;
+    &lt;/hal&gt;
+    &lt;vendor-ndk&gt;
+        &lt;version&gt;27&lt;/version&gt;
+    &lt;/vendor-ndk&gt;
+    &lt;system-sdk&gt;
+        &lt;version&gt;27&lt;/version&gt;
+    &lt;/system-sdk&gt;
+&lt;/manifest&gt;</pre> <h2 id="manifest-fragments">Manifest fragments</h2> <p> In Android 10 and higher, you can associate a manifest entry with a HAL module in the build system. This makes it easier to conditionally include the HAL module in the build system. </p> <h3 id="manifest-fragment-example">Example</h3> <p> In your <code translate="no" dir="ltr">Android.bp</code> or <code translate="no" dir="ltr">Android.mk</code> file, add <code translate="no" dir="ltr">vintf_fragments</code> to any module that is explicitly installed on the device, like <code translate="no" dir="ltr">cc_binary</code> or <code translate="no" dir="ltr">rust_binary</code>. For example, you can modify the module with your implementation of your HAL (<code translate="no" dir="ltr">my.package.foo@1.0-service-bar</code>). </p> 
+<pre>... {
+    ...
+    vintf_fragments: ["manifest_foo.xml"],
+    ...
+}</pre> 
+<pre>LOCAL_MODULE := ...
+LOCAL_VINTF_FRAGMENTS := manifest_foo.xml</pre> <p> In a file called <code translate="no" dir="ltr">manifest_foo.xml</code>, create the manifest for this module. At build time, this manifest is added to the device. Adding an entry here is the same as adding an entry in the device's main manifest. This allows clients to use the interface and allows VTS to identify which HAL implementations are on the device. Anything that a regular manifest does, this manifest also does. </p> <p> The example below implements <code translate="no" dir="ltr">android.hardware.foo@1.0::IFoo/default</code>, which is installed to the <code translate="no" dir="ltr">vendor</code> or <code translate="no" dir="ltr">odm</code> partition. If it's installed to the <code translate="no" dir="ltr">system</code>, <code translate="no" dir="ltr">product</code>, or <code translate="no" dir="ltr">system_ext</code> partition, use type <code translate="no" dir="ltr">framework</code> instead of type <code translate="no" dir="ltr">device</code>. </p> 
+<pre>&lt;manifest version="1.0" type="device"&gt;
+    &lt;hal format="hidl"&gt;
+        &lt;name&gt;android.hardware.foo&lt;/name&gt;
+        &lt;transport&gt;hwbinder&lt;/transport&gt;
+        &lt;fqname&gt;@1.0::IFoo/default&lt;/fqname&gt;
+    &lt;/hal&gt;
+&lt;/manifest&gt;</pre> <p> If a HAL module is packaged in a <a href="../../ota/vendor-apex">vendor APEX</a>, package its associated VINTF fragments within the same APEX with <code translate="no" dir="ltr">prebuilt_etc</code> as explained in <a href="../../ota/vendor-apex#vintf_fragments">VINTF fragments</a>. </p> <h2 id="manifest-file-schema">Manifest file schema</h2> <p>This section describes the meaning of these XML tags. Some "required" tags can be missing from the source file in Android source tree and written by <code translate="no" dir="ltr"><a href="resources#assemble_vintf">assemble_vintf</a></code> at build time. Required tags must be present in the corresponding files on the device.</p> <dl> <dt><code translate="no" dir="ltr">?xml</code></dt> <dd>Optional. Only provides information to the XML parser.</dd> <dt><code translate="no" dir="ltr">manifest.version</code></dt> <dd>Required. Meta-version of <strong>this</strong> manifest. Describes the elements expected in the manifest. Unrelated to XML version.</dd> <dt><code translate="no" dir="ltr">manifest.type</code></dt> <dd>Required. Type of this manifest. It has the value <code translate="no" dir="ltr">device</code> for the device manifest file and <code translate="no" dir="ltr">framework</code> for the framework manifest file.</dd> <dt><code translate="no" dir="ltr">manifest.target-level</code></dt> <dd>Required for the device manifest. Specifies the framework compatibility matrix (FCM) version that this device manifest is targeted to be compatible with. This is also called the shipping FCM version of the device.</dd> <dt><code translate="no" dir="ltr">manifest.hal</code></dt> <dd>Optional, can repeat. A single HAL (HIDL or native, such as GL), depending on the <code translate="no" dir="ltr">format</code> attribute.</dd> <dt><code translate="no" dir="ltr">manifest.hal.format</code></dt> <dd>Optional. The value can be one of: <ul> <li>
+<code translate="no" dir="ltr">hidl</code>: HIDL HALs. This is the default. </li>
+<li>
+<code translate="no" dir="ltr">aidl</code>: <a href="../aidl/aidl-hals">AIDL HALs</a>. Only valid at manifest meta-version 2.0 and above.</li> <li>
+<code translate="no" dir="ltr">native</code>: Native HALs.</li> </ul> </dd> <dt><code translate="no" dir="ltr">manifest.hal.max-level</code></dt> <dd>Optional. Only valid on framework manifests. If set, HALs with a max level lower than the Target FCM Version in the framework manifest are disabled. </dd> <dt><code translate="no" dir="ltr">manifest.hal.override</code></dt> <dd>Optional. The value can be one of: <ul> <li>
+<code translate="no" dir="ltr">true</code>: Override other <code translate="no" dir="ltr">&lt;hal&gt;</code> elements with the same <code translate="no" dir="ltr">&lt;name&gt;</code> and major version. If no <code translate="no" dir="ltr">&lt;version&gt;</code> or <code translate="no" dir="ltr">&lt;fqname&gt;</code> are in this <code translate="no" dir="ltr">&lt;hal&gt;</code> element, then the <code translate="no" dir="ltr">&lt;hal&gt;</code> element declares this HAL to be disabled.</li> <li>
+<code translate="no" dir="ltr">false</code>: Don't override other <code translate="no" dir="ltr">&lt;hal&gt;</code> elements with the same <code translate="no" dir="ltr">&lt;name&gt;</code> and major version.</li> </ul> </dd> <dt><code translate="no" dir="ltr">manifest.hal.name</code></dt> <dd>Required. Fully qualified package name of the HAL. Multiple HAL entries can use the same name. Examples: <ul> <li>
+<code translate="no" dir="ltr">android.hardware.camera</code> (HIDL or AIDL HAL)</li> <li>
+<code translate="no" dir="ltr">GLES</code> (native HAL, requires name only)</li> </ul> </dd> <dt><code translate="no" dir="ltr">manifest.hal.transport</code></dt> <dd>Required when <code translate="no" dir="ltr">manifest.hal.format == "hidl"</code>. Must NOT be present otherwise. States what transport is used when an interface from this package is queried from the service manager. The value can be one of: <ul> <li>
+<code translate="no" dir="ltr">hwbinder</code>: Binderized mode</li> <li>
+<code translate="no" dir="ltr">passthrough</code>: Passthrough mode</li> </ul> </dd> <dd>Optional when <code translate="no" dir="ltr">manifest.hal.format == "aidl"</code>. Must NOT be present otherwise. States what transport is used when an interface is served remotely. The value must be: <ul> <li>
+<code translate="no" dir="ltr">inet</code>: Inet socket</li> </ul> The <code translate="no" dir="ltr">manifest.hal.transport.ip</code> and <code translate="no" dir="ltr">manifest.hal.transport.port</code> must be used to further specify the Inet connection information. </dd> <dt><code translate="no" dir="ltr">manifest.hal.transport.arch</code></dt> <dd>Required for <code translate="no" dir="ltr">passthrough</code> and must not be present for <code translate="no" dir="ltr">hwbinder</code>. Describes the bitness of the passthrough service being provided. The value can be one of: <ul> <li>
+<code translate="no" dir="ltr">32</code>: 32-bit mode</li> <li>
+<code translate="no" dir="ltr">64</code>: 64-bit mode</li> <li>
+<code translate="no" dir="ltr">32+64</code>: Both</li> </ul> </dd> <dt><code translate="no" dir="ltr">manifest.hal.transport.ip</code></dt> <dd>Required for <code translate="no" dir="ltr">inet</code> and must NOT be present otherwise. Describes the IP address from which the remote interface is being served. </dd> <dt><code translate="no" dir="ltr">manifest.hal.transport.port</code></dt> <dd>Required for <code translate="no" dir="ltr">inet</code> and must NOT be present otherwise. Describes the port from which the remote interface is being served. </dd> <dt><code translate="no" dir="ltr">manifest.hal.version</code></dt> <dd>Optional, can repeat. A version for the <code translate="no" dir="ltr">hal</code> tags in a manifest. <br><br> For HIDL and native HALs, the format is <code translate="no" dir="ltr"><var translate="no">MAJOR</var>.<var translate="no">MINOR</var></code>. For examples, refer to <code translate="no" dir="ltr">hardware/interfaces</code>, <code translate="no" dir="ltr">vendor/${VENDOR}/interfaces</code>, <code translate="no" dir="ltr">frameworks/hardware/interfaces</code>, or <code translate="no" dir="ltr">system/hardware/interfaces</code>. <br><br> HIDL and native HALs may use multiple version fields as long as they represent <strong>distinct major versions</strong>, with only one minor version per major version provided. For example, 3.1 and 3.2 can't coexist, but 1.0 and 3.4 can. This applies to all <code translate="no" dir="ltr">hal</code> elements with the same name, unless <code translate="no" dir="ltr">override="true"</code>. The values of <code translate="no" dir="ltr">&lt;version&gt;</code> are not associated with <code translate="no" dir="ltr">&lt;fqname&gt;</code> because a <code translate="no" dir="ltr">&lt;fqname&gt;</code> carries a version. <br><br> For AIDL HALs, <code translate="no" dir="ltr">&lt;version&gt;</code> must not be present on devices running Android 11 and below. <code translate="no" dir="ltr">&lt;version&gt;</code> must be a single integer on devices running Android 12 and above. There must at most one <code translate="no" dir="ltr">&lt;version&gt;</code> for each <code translate="no" dir="ltr">(package, interface, instance)</code> tuple. If not present, default to <code translate="no" dir="ltr">1</code>. The value of <code translate="no" dir="ltr">&lt;version&gt;</code> is associated with all <code translate="no" dir="ltr">&lt;fqname&gt;</code> in the same <code translate="no" dir="ltr">&lt;hal&gt;</code> because a <code translate="no" dir="ltr">&lt;fqname&gt;</code> does not carry a version. </dd> <dt><code translate="no" dir="ltr">manifest.hal.interface</code></dt> <dd>Required, can repeat without duplicates. State an interface in the package that has an instance name. There can be multiple <code translate="no" dir="ltr">&lt;interface&gt;</code> elements in a <code translate="no" dir="ltr">&lt;hal&gt;</code>; names must be distinct.</dd> <dt><code translate="no" dir="ltr">manifest.hal.interface.name</code></dt> <dd>Required. Name of the interface.</dd> <dt><code translate="no" dir="ltr">manifest.hal.interface.instance</code></dt> <dd>Required, can repeat. Instance name of the interface. Can have multiple instances for an interface but no duplicated <code translate="no" dir="ltr">&lt;instance&gt;</code> elements.</dd> <dt><code translate="no" dir="ltr">manifest.hal.fqname</code></dt> <dd>Optional, can repeat. An alternative way to specify an instance for the HAL with name <code translate="no" dir="ltr">manifest.hal.name</code>. <ul> <li>For HIDL HALs, the format is <code translate="no" dir="ltr">@<var translate="no">MAJOR</var>.<var translate="no">MINOR</var>::<var translate="no">INTERFACE</var>/<var translate="no">INSTANCE</var></code>. </li> <li>For AIDL HALs, the format is <code translate="no" dir="ltr"><var translate="no">INTERFACE</var>/<var translate="no">INSTANCE</var></code>. </li> </ul> </dd> <dt><code translate="no" dir="ltr">manifest.sepolicy</code></dt> <dd>Required. Contains all sepolicy-related entries.</dd> <dt><code translate="no" dir="ltr">manifest.sepolicy.version</code></dt> <dd>Required for the device manifest. Declares the SELinux version. It has the format <code translate="no" dir="ltr"><var translate="no">SDK_INT</var>.<var translate="no">PLAT_INT</var></code>.</dd> <dt><code translate="no" dir="ltr">manifest.vendor-ndk</code></dt> <dd>Required, can repeat; required for the framework manifest. Must not be present in the device manifest. Multiple <code translate="no" dir="ltr">&lt;vendor-ndk&gt;</code> entries must have different <code translate="no" dir="ltr">&lt;version&gt;</code>s. Describes a set of VNDK snapshots provided by the framework.</dd> <dt><code translate="no" dir="ltr">manifest.vendor-ndk.version</code></dt> <dd>Required. This is a positive integer representing the version of the VNDK snapshot.</dd> <dt><code translate="no" dir="ltr">manifest.vendor-ndk.library</code></dt> <dd>Optional, can repeat, without duplicates. Describes a set of VNDK libraries provided by the framework for this VNDK vendor snapshot. The value is the filename of a library, e.g. <code translate="no" dir="ltr">libjpeg.so</code>, including the prefix <code translate="no" dir="ltr">lib</code> and the suffix <code translate="no" dir="ltr">.so</code>. No path components are allowed.</dd> <dt><code translate="no" dir="ltr">manifest.system-sdk.version</code></dt> <dd>Optional, can repeat, without duplicates; used only by the framework manifest. Describes a set of system SDK versions provided by the framework to vendor apps.</dd> <dt><code translate="no" dir="ltr">manifest.kernel</code></dt> <dd>Optional. Describes static information about the kernel.</dd> <dt><code translate="no" dir="ltr">manifest.kernel.target-level</code></dt> <dd>Optional. Describes the kernel branch. Its value defaults to <code translate="no" dir="ltr">manifest.target-level</code> if not present. Must be greater than or equal to <code translate="no" dir="ltr">manifest.target-level</code>. See <a href="match-rules#kernel">kernel match rules</a> for details.</dd> </dl><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/vintf/objects" class="_attribution-link">https://source.android.com/docs/core/architecture/vintf/objects</a>
+  </p>
+</div>

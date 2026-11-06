@@ -1,0 +1,100 @@
+<h1>Car User Experience Restrictions rules</h1>  <p>Before reading this page, read <a href="guidelines">Driver distraction guidelines</a>.</p> <p>This page describes the Car User Experience (UX) Restrictions rules you can use to create multiple UX Restrictions rule configurations (for example, European Union versus Japan) and then determine which set of rules to apply at run time. For more information, see <a href="https://developer.android.com/reference/android/car/drivingstate/CarUxRestrictions">CarUxRestrictions</a>.</p> <p>The Car UX Restrictions service enables developers to define a new Car UX Restrictions configuration. Should a developer want to modify the restriction rules (such as to comply with local safety standards), the developer can use the API to define the new configuration.</p> <p>The API to set the configuration persists in the new configuration only. In other words, the configuration <em>doesn't</em> take effect immediately. Instead, the new configuration is loaded when the UX Restrictions service restarts <em>and</em> the car is in Park. The car service ensures the car is in Park before reloading the new configuration.</p> <p>In addition to the new UX Restrictions service method, APIs are provided to construct the configuration. The state of gear selection and speed is converted to one of three drivingstates:</p> <ul> <li>
+<strong>Parked.</strong> Gear in Park.</li> <li>
+<strong>Idling.</strong> Gear not in Park and speed is zero.</li> <li>
+<strong>Moving.</strong> Gear not in Park and speed isn't zero.</li> </ul> <p>To learn how apps consume a car's driving state and the corresponding UX restrictions, see <a href="consume">Consuming Car Driving State and UX Restrictions</a>.</p> <h2 id="restriction-configuration-based-on-drive-states">Restriction configuration based on drive states</h2> <p>To prevent driver distraction, Android maps the driving state to a set of UX Restriction </p>
+<td>
+<code translate="no" dir="ltr"><a href="https://www.google.com/url">/packages/services/Car/+/android17-release/car-lib/src/android/car/drivingstate/CarDrivingStateManager.java</a></code> <ul> <li>
+<strong>Parked.</strong> Unrestricted.</li> <li>
+<strong>Idling.</strong> No video and no configuration screen.</li> <li>
+<strong>Moving.</strong> Fully restricted (all restrictions are required).</li> </ul> <p>The mapping illustrated above is pre-determined and configured as an XML resource. The </p>
+</td>
+<td>
+<code translate="no" dir="ltr"><a href="https://www.google.com/url">/packages/services/Car/+/android17-release/car-lib/src/android/car/drivingstate/CarDrivingStateManager.java</a></code> then saves the rules in memory. The service then maps the current driving state to UX Restrictions and broadcasts the current restrictions to the entire system. 
+<pre>&lt;!-- No restrictions when car is parked --&gt;
+&lt;DrivingState car:state="parked"&gt;
+    &lt;Restrictions car:requiresDistractionOptimization="false"
+                  car:uxr="baseline"/&gt;
+&lt;/DrivingState&gt;
+
+&lt;!-- Restrictions when car is idling --&gt;
+&lt;DrivingState car:state="idling"&gt;
+    &lt;Restrictions car:requiresDistractionOptimization="true"
+                  car:uxr="no_video|no_config"/&gt;
+&lt;/DrivingState&gt;
+
+&lt;!-- Restrictions for speed &gt;= 0 m/s --&gt;
+&lt;DrivingState car:state="moving" car:minSpeed="0.0"&gt;
+    &lt;Restrictions car:requiresDistractionOptimization="true"
+                  car:uxr="fully_restricted"/&gt;
+&lt;/DrivingState&gt;</pre> <h3 id="mult_displays">Configurations for multiple displays</h3> <p>By default, no restrictions are applied to additional displays. To create restriction configurations for multiple displays, include the <code translate="no" dir="ltr">RestrictionMapping</code> tag with the physicalPort for that display. The appropriate restrictions are automatically applied to each display. In the following example, the displays with physical Port Ids 1 and 2 have different configurations: </p>
+
+<pre>&lt;RestrictionMapping car:physicalPort="1"&gt;
+       &lt;DrivingState car:state="moving"&gt;
+           &lt;Restrictions car:requiresDistractionOptimization="true" car:uxr="no_keyboard|no_video"/&gt;
+       &lt;/DrivingState&gt;
+   &lt;/RestrictionMapping&gt;
+
+   &lt;RestrictionMapping car:physicalPort="2"&gt;
+       &lt;DrivingState car:state="moving"&gt;
+           &lt;Restrictions car:requiresDistractionOptimization="true" car:uxr="no_video"/&gt;
+       &lt;/DrivingState&gt;
+  &lt;/RestrictionMapping&gt;</pre> <h3 id="rest_modes">Configurations for restriction modes</h3> <p>You can select any name for the mode, such as <em>teen</em>. In the following example, different restrictions are configured for <em>default</em> and <em>passenger</em> modes (previously, only <em>passenger</em> mode was supported):</p> 
+<pre>&lt;DrivingState car:state="idling"&gt;
+    &lt;Restrictions car:mode="passenger" car:requiresDistractionOptimization="false" car:uxr="baseline"/&gt;
+    &lt;Restrictions car:requiresDistractionOptimization="true" car:uxr="no_video"/&gt;
+&lt;/DrivingState&gt;
+&lt;/Restrictions&gt;</pre> You can use the API to set any string name for the mode. For instance, the <code translate="no" dir="ltr">setRestrictionMode(@NonNull String mode)</code> method in CarUxRestrictionsManager. (Previously, you would use the <code translate="no" dir="ltr">setRestrictionMode(@CarUxRestrictionsManager.UxRestrictionMode int mode)</code> method in CarUxRestrictionsManager). <h2 id="caruxrestrictionsconfiguration-apis">CarUxRestrictionsConfiguration APIs</h2> <h3 id="restrictions-with-caruxrestrictionsconfiguration">Restrictions with CarUxRestrictionsConfiguration</h3> <p>The new class <code translate="no" dir="ltr">CarUxRestrictionsConfiguration</code> is mapped 1:1 to the current XML configuration schema. <code translate="no" dir="ltr">CarUxRestrictionsConfiguration</code> can be constructed with <code translate="no" dir="ltr"><a href="https://developer.android.com/reference/android/car/drivingstate/CarUxRestrictions.Builder.html">CarUxRestrictions.Builder</a></code>, which validates the configuration upon build().</p> 
+<pre>new CarUxRestrictionsConfiguration.Builder()
+        // Explicitly set restrictions for each driving state.
+        .setUxRestrictions(CarDrivingStateEvent.DRIVING_STATE_PARKED,
+                /* requiresOptimization= */ false,
+                /* restrictions= */ UX_RESTRICTIONS_BASELINE)
+        .setUxRestrictions(CarDrivingStateEvent.DRIVING_STATE_IDLING,
+                true,
+                UX_RESTRICTIONS_NO_VIDEO|UX_RESTRICTIONS_NO_SETUP)
+        .setUxRestrictions(CarDrivingStateEvent.DRIVING_STATE_MOVING,
+                true,
+                UX_RESTRICTIONS_FULLY_RESTRICTED)
+        // Set restriction parameters.
+        .setMaxStringLength(int max)
+        .setMaxCumulativeContentItems(int max)
+        .setMaxContentDepth(int max)
+        // Build a new CarUxRestrictionsConfiguration.
+        .build();</pre> <h3 id="caruxrestrictionsmanager-api">CarUxRestrictionsManager API</h3> <p>Set <code translate="no" dir="ltr">CarUxRestrictionsConfiguration</code> for the next drive with <code translate="no" dir="ltr"><a href="https://developer.android.com/reference/android/car/drivingstate/CarUxRestrictionsManager">CarUxRestrictionsManager</a></code>. This method requires permission, <code translate="no" dir="ltr">Car.PERMISSION_CAR_UX_RESTRICTIONS_CONFIGURATION</code>.</p> 
+<pre>public synchronized boolean saveUxRestrictionsConfigurationForNextBoot(
+        CarUxRestrictionsConfiguration config);</pre> <h4 id="persist-a-new-ux-restrictions-configuration">Persist a new UX Restrictions configuration</h4> <p>When a new configuration is passed in, the UX Restrictions service returns a boolean to indicate whether the new configuration has been successfully saved. This new configuration is only used when the Integrated Head Unit (IHU) restarts and the car is parked. Internally, the UX Restrictions service contains two sets of configurations:</p> <ul> <li>
+<strong>Production.</strong> While optional, this configuration is often present. The UX Restrictions service reads this configuration when starting.</li> <li>
+<strong>Staged.</strong> Also optional, this configuration has no effect on UX Restrictions and is promoted to Production when the car service starts and when the car is parked.</li> </ul> <p><img src="https://source.android.com/static/docs/automotive/images/car_uxr_01.png" class="android-image-dark-theme-background" alt="Production configuration" width="550"></p> <p><strong>Figure 1.</strong> Production configuration</p> <h2 id="address-failures">Address failures</h2> <p>Until driving state information is received from CarPropertyManager (for example, during boot-up), UX Restrictions won't be enforced. The system performs as if the driving state is Parked.</p> <p>Should reading a saved configuration fail (for example, SettingNotFoundException results), the UX Restrictions service falls back to the hard-coded, fully restricted mode:</p> 
+<pre>// Idling/moving state is fully restricted.
+private static CarUxRestrictionsConfiguration generateDefaultConfig() {}</pre> <h2 id="driving-state-and-user-restrictions">Driving state and user restrictions</h2> <p>The following content describes the interactions displayed in the following design diagram:</p> <p><img src="https://source.android.com/static/docs/automotive/images/car_uxr_02.png" class="android-image-dark-theme-background" alt="Driving state interactions"></p> <p><strong>Figure 2.</strong> Driving state interactions</p> <h3 id="properties-used-to-derive-driving-state">Properties used to derive driving state</h3> <p>Use the following three <code translate="no" dir="ltr">VehiclePropertyIds</code> to derive the driving state:</p> <ul> <li><code translate="no" dir="ltr"><a href="https://developer.android.com/reference/android/car/VehiclePropertyIds#PERF_VEHICLE_SPEED">VehicleProperty.PERF_VEHICLE_SPEED</a></code></li> <li><code translate="no" dir="ltr"><a href="https://developer.android.com/reference/android/car/VehiclePropertyIds#GEAR_SELECTION">VehicleProperty.GEAR_SELECTION</a></code></li> <li><code translate="no" dir="ltr"><a href="https://developer.android.com/reference/android/car/VehiclePropertyIds.html#PARKING_BRAKE_ON">VehicleProperty.PARKING_BRAKE_ON</a></code></li> </ul> <h3 id="apis-available-to-apps">APIs available to apps</h3> <p>The code resides in the following locations:</p> <table> <thead> <th>Code</th> <th>Location</th> </thead> <tbody> <tr> <td> <code translate="no" dir="ltr"><a href="https://developer.android.com/reference/android/car/drivingstate/CarUxRestrictionsManager">CarUxRestrictionsManager</a></code><br> Public APIs to register for UX Restriction changes. </td> <td>
+<code translate="no" dir="ltr"><a href="https://www.google.com/url">/packages/services/Car/+/android17-release/car-lib/src/android/car/drivingstate/CarDrivingStateManager.java</a></code> </td>
+</tr> <tr> <td> <code translate="no" dir="ltr"><a href="https://developer.android.com/reference/android/car/drivingstate/CarUxRestrictions">CarUxRestrictions</a></code><br> UX restrictions definition. </td> <td>
+<code translate="no" dir="ltr"><a href="https://www.google.com/url">/packages/services/Car/+/android17-release/car-lib/src/android/car/drivingstate/CarDrivingStateManager.java</a></code> </td>
+</tr> <tr> <td> <code translate="no" dir="ltr"><a href="https://developer.android.com/reference/android/car/drivingstate/package-summary">CarDrivingStateManager</a></code> <br> System APIs to register for driving state changes. </td> <td>
+<code translate="no" dir="ltr"><a href="https://www.google.com/url">/packages/services/Car/+/android17-release/car-lib/src/android/car/drivingstate/CarDrivingStateManager.java</a></code> </td> </tr> </tbody> </table> <p>To simulate driving states, see <a href="consume#testing">Testing</a>.</p>      <div class="devsite-content-data"> <template class="devsite-content-data-template"> [[["Easy to understand","easyToUnderstand","thumb-up"],["Solved my problem","solvedMyProblem","thumb-up"],["Other","otherUp","thumb-up"]],[["Missing the information I need","missingTheInformationINeed","thumb-down"],["Too complicated / too many steps","tooComplicatedTooManySteps","thumb-down"],["Out of date","outOfDate","thumb-down"],["Samples / code issue","samplesCodeIssue","thumb-down"],["Other","otherDown","thumb-down"]],["Last updated 2026-09-24 UTC."],[],[]] </template> </div>                    <android-fully-clickable target="
+        .android-case-study .devsite-landing-row-item,
+        .android-grouped-resources .devsite-landing-row-item,
+        .android-grouped-resources-contained--primary .devsite-landing-row-item,
+        .android-grouped-resources-contained--secondary .devsite-landing-row-item,
+        .android-grouped-resources-contained--tertiary .devsite-landing-row-item,
+        .android-grouped-resources-primary .devsite-landing-row-item,
+        .android-grouped-resources-secondary .devsite-landing-row-item,
+        .android-grouped-resources-uncontained--primary .devsite-landing-row-item,
+        .android-grouped-resources-uncontained--secondary .devsite-landing-row-item,
+        .android-grouped-resources-uncontained--tertiary .devsite-landing-row-item,
+        .android-guide-cards .devsite-landing-row-item,
+        .android-illustrated-resources-index .devsite-landing-row-item,
+        .android-illustrated-resources-primary .devsite-landing-row-item,
+        .android-illustrated-resources-secondary .devsite-landing-row-item,
+        .android-illustrated-resources-secondary-small .devsite-landing-row-item,
+        .android-illustrated-resources-tertiary .devsite-landing-row-item,
+        .android-illustrated-resources-tertiary-small .devsite-landing-row-item,
+        .android-promo .devsite-landing-row-item,
+        .android-quick-link,
+        .android-samples .devsite-card-wrapper,
+        .fully-clickable" watch=".android-samples, devsite-content"></android-fully-clickable>   </td><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/driver_distraction/car_uxr" class="_attribution-link">https://source.android.com/docs/automotive/driver_distraction/car_uxr</a>
+  </p>
+</div>

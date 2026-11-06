@@ -1,0 +1,14 @@
+<h1>Run instrumentation tests from existing APKs</h1>  <p>These instructions assume you have the Trade Federation package available locally; if not, <a href="../../fundamentals/machine_setup#download-tradefed">follow the download instructions</a> to obtain it.</p> <p>Then use the following command to install the APK of instrumentation tests, execute the tests, and display the tests that are running:</p> 
+<pre>./tradefed.sh run instrumentations --apk-path &lt;path of your apk&gt;
+</pre> <p>With output resembling:</p> 
+<pre>07-17 10:55:32 D/InvocationToJUnitResultForwarder: Starting test: android.animation.cts.ValueAnimatorTest#testOfArgb
+07-17 10:55:33 D/InvocationToJUnitResultForwarder: Starting test: android.animation.cts.ValueAnimatorTest#testIsRunning
+07-17 10:55:34 D/InvocationToJUnitResultForwarder: Starting test: android.animation.cts.ValueAnimatorTest#testGetCurrentPlayTime
+07-17 10:55:35 D/InvocationToJUnitResultForwarder: Starting test: android.animation.cts.ValueAnimatorTest#testStartDelay
+07-17 10:55:35 I/InvocationToJUnitResultForwarder: Run ended in 2m 20s
+</pre> <p>You can optionally specify <code translate="no" dir="ltr">--serial &lt;device serial number&gt;</code> to run against a given device. The serial number of your device can be obtained using <code translate="no" dir="ltr">adb devices</code>.</p> <p>See the <a href="../through-tf">Testing through Tradefed section</a> for more details about Tradefed executions.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/tradefed/testing/through-tf/instrumentation" class="_attribution-link">https://source.android.com/docs/core/tests/tradefed/testing/through-tf/instrumentation</a>
+  </p>
+</div>

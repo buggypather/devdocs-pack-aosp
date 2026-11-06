@@ -1,0 +1,154 @@
+<h1>Monitor system health</h1>  <p>Watchdog monitors the health of vendor services and the VHAL service, and terminates any unhealthy process. When an unhealthy process is terminated, the Watchdog dumps the process status to <code translate="no" dir="ltr">/data/anr</code> as with other Application Not Responding (ANR) dumps. Doing so facilitates the debugging process.</p> <h2 id="vendor-service-health-monitoring">Vendor service health monitoring</h2> <p>Vendor services are monitored at both native and Java side. For a Vendor service to be monitored, the service must register a health checking process with the Watchdog by specifying a pre-defined timeout. Watchdog monitors the health of a registered health checking process by pinging it at an interval relative to the timeout that is specified during the registration. When a pinged process doesn't respond within the timeout, the process is considered unhealthy.</p> <h3 id="native-service-health-monitoring">Native service health monitoring</h3> <h4 id="specify-the-watchdog-aidl-makefile">Specify the Watchdog AIDL makefile</h4> <ol> <li>Include <code translate="no" dir="ltr">carwatchdog_aidl_interface-ndk_platform</code> in <code translate="no" dir="ltr">shared_libs</code>. <p><code translate="no" dir="ltr"><strong>Android.bp</strong></code></p> 
+<pre>cc_binary {
+    name: "sample_native_client",
+    srcs: [
+        "src/*.cpp"
+    ],
+    shared_libs: [
+        "carwatchdog_aidl_interface-ndk_platform",
+        "libbinder_ndk",
+    ],
+    vendor: true,
+}</pre> </li> </ol> <h4 id="add-an-selinux-policy">Add an SELinux policy</h4> <ol> <li>To add an SELinux policy, allow the vendor service domain to use binder (<code translate="no" dir="ltr">binder_use</code> macro) and add the vendor service domain to the <code translate="no" dir="ltr">carwatchdog</code> client domain (<code translate="no" dir="ltr">carwatchdog_client_domain</code> macro). See the code below for <code translate="no" dir="ltr">sample_client.te</code> and <code translate="no" dir="ltr">file_contexts</code>: <p><code translate="no" dir="ltr"><strong>sample_client.te</strong></code></p> 
+<pre>type sample_client, domain;
+type sample_client_exec, exec_type, file_type, vendor_file_type;
+
+carwatchdog_client_domain(sample_client)
+
+init_daemon_domain(sample_client)
+binder_use(sample_client)</pre> <p><code translate="no" dir="ltr"><strong>file_contexts</strong></code></p> 
+<pre>/vendor/bin/sample_native_client  u:object_r:sample_client_exec:s0</pre> </li> </ol> <h4 id="implement-a-client-class-by-inheriting-bncarwatchdogclient">Implement a client class by inheriting BnCarWatchdogClient</h4> <ol> <li>In <code translate="no" dir="ltr">checkIfAlive</code>, perform a health check. One option is to post to the thread loop handler. If healthy, call <code translate="no" dir="ltr">ICarWatchdog::tellClientAlive</code>. See the code below for <code translate="no" dir="ltr">SampleNativeClient.h</code> and <code translate="no" dir="ltr">SampleNativeClient.cpp</code>: <p><code translate="no" dir="ltr"><strong>SampleNativeClient.h</strong></code></p> 
+<pre>class SampleNativeClient : public BnCarWatchdogClient {
+public:
+    ndk::ScopedAStatus checkIfAlive(int32_t sessionId, TimeoutLength
+        timeout) override;
+    ndk::ScopedAStatus prepareProcessTermination() override;
+    void initialize();
+
+private:
+    void respondToDaemon();
+private:
+    ::android::sp&lt;::android::Looper&gt; mHandlerLooper;
+    std::shared_ptr&lt;ICarWatchdog&gt; mWatchdogServer;
+    std::shared_ptr&lt;ICarWatchdogClient&gt; mClient;
+    int32_t mSessionId;
+};</pre> <p><code translate="no" dir="ltr"><strong>SampleNativeClient.cpp</strong></code></p> 
+<pre>ndk::ScopedAStatus WatchdogClient::checkIfAlive(int32_t sessionId, TimeoutLength timeout) {
+    mHandlerLooper-&gt;removeMessages(mMessageHandler,
+        WHAT_CHECK_ALIVE);
+    mSessionId = sessionId;
+    mHandlerLooper-&gt;sendMessage(mMessageHandler,
+        Message(WHAT_CHECK_ALIVE));
+    return ndk::ScopedAStatus::ok();
+}
+// WHAT_CHECK_ALIVE triggers respondToDaemon from thread handler
+void WatchdogClient::respondToDaemon() {
+  // your health checking method here
+  ndk::ScopedAStatus status = mWatchdogServer-&gt;tellClientAlive(mClient,
+        mSessionId);
+}</pre> </li> </ol> <h4 id="start-a-binder-thread-and-register-the-client">Start a binder thread and register the client</h4> <p>The car watchdog daemon interface name is <code translate="no" dir="ltr">android.automotive.watchdog.ICarWatchdog/default</code>.</p> <ol> <li>Search for the daemon with the name and call <code translate="no" dir="ltr">ICarWatchdog::registerClient</code>. See the code below for <code translate="no" dir="ltr">main.cpp</code> and <code translate="no" dir="ltr">SampleNativeClient.cpp</code>: <p><code translate="no" dir="ltr"><strong>main.cpp</strong></code></p> 
+<pre>int main(int argc, char** argv) {
+    sp&lt;Looper&gt; looper(Looper::prepare(/*opts=*/0));
+
+    ABinderProcess_setThreadPoolMaxThreadCount(1);
+    ABinderProcess_startThreadPool();
+    std::shared_ptr&lt;SampleNativeClient&gt; client =
+        ndk::SharedRefBase::make&lt;SampleNatvieClient&gt;(looper);
+
+    // The client is registered in initialize()
+    client-&gt;initialize();
+    ...
+}</pre> <p><code translate="no" dir="ltr"><strong>SampleNativeClient.cpp</strong></code></p> 
+<pre>void SampleNativeClient::initialize() {
+    ndk::SpAIBinder binder(AServiceManager_getService(
+        "android.automotive.watchdog.ICarWatchdog/default"));
+    std::shared_ptr&lt;ICarWatchdog&gt; server =
+        ICarWatchdog::fromBinder(binder);
+    mWatchdogServer = server;
+    ndk::SpAIBinder binder = this-&gt;asBinder();
+    std::shared_ptr&lt;ICarWatchdogClient&gt; client =
+        ICarWatchdogClient::fromBinder(binder)
+    mClient = client;
+    server-&gt;registerClient(client, TimeoutLength::TIMEOUT_NORMAL);
+}</pre> </li> </ol> <h3 id="java-service-health-monitoring">Java service health monitoring</h3> <h4 id="implement-a-client-by-inheriting-carwatchdogclientcallback">Implement a client by inheriting CarWatchdogClientCallback</h4> <ol> <li>Edit the new file as follows: 
+<pre>private final CarWatchdogClientCallback mClientCallback = new CarWatchdogClientCallback() {
+    @Override
+    public boolean onCheckHealthStatus(int sessionId, int timeout) {
+        // Your health check logic here
+        // Returning true implies the client is healthy
+        // If false is returned, the client should call
+        // CarWatchdogManager.tellClientAlive after health check is
+        // completed
+    }
+
+    @Override
+    public void onPrepareProcessTermination() {}
+};</pre> </li> </ol> <h4 id="register-the-client">Register the client</h4> <ol> <li>Call <code translate="no" dir="ltr">CarWatchdogManager.registerClient()</code>: 
+<pre>private void startClient() {
+    CarWatchdogManager manager =
+        (CarWatchdogManager) car.getCarManager(
+        Car.CAR_WATCHDOG_SERVICE);
+    // Choose a proper executor according to your health check method
+    ExecutorService executor = Executors.newFixedThreadPool(1);
+    manager.registerClient(executor, mClientCallback,
+        CarWatchdogManager.TIMEOUT_NORMAL);
+}</pre> </li> </ol> <h4 id="unregister-the-client">Unregister the client</h4> <ol> <li>Call <code translate="no" dir="ltr">CarWatchdogManager.unregisterClient()</code> when the service is finished: 
+<pre>private void finishClient() {
+    CarWatchdogManager manager =
+        (CarWatchdogManager) car.getCarManager(
+        Car.CAR_WATCHDOG_SERVICE);
+    manager.unregisterClient(mClientCallback);
+}</pre> </li> </ol> <h2 id="vhal-health">VHAL health monitoring</h2> <p>Unlike vendor service health monitoring, Watchdog monitors the VHAL service health by subscribing to the <code translate="no" dir="ltr">VHAL_HEARTBEAT</code> vehicle property. Watchdog expects the value of this property to be updated once every N seconds. When the heartbeat is not updated within this timeout, Watchdog terminates the VHAL service.</p> <p><strong>Note:</strong> Watchdog monitors the VHAL service health only when the <code translate="no" dir="ltr">VHAL_HEARTBEAT</code> vehicle property is supported by the VHAL service.</p> <p>VHAL internal implementation can vary by vendor. Use the following code samples as references.</p> <ol> <li>Register the <code translate="no" dir="ltr">VHAL_HEARTBEAT</code> vehicle property. <p>When starting the VHAL service, register the <code translate="no" dir="ltr">VHAL_HEARTBEAT</code> vehicle property. In the below example, an <code translate="no" dir="ltr">unordered_map</code>, which maps property ID to config is used to hold all supported configs. Config for <code translate="no" dir="ltr">VHAL_HEARTBEAT</code> is added to the map, so that when <code translate="no" dir="ltr">VHAL_HEARTBEAT</code> is queried, the corresponding config is returned.</p> 
+<pre>void registerVhalHeartbeatProperty() {
+        const VehiclePropConfig config = {
+                .prop = toInt(VehicleProperty::VHAL_HEARTBEAT),
+                .access = VehiclePropertyAccess::READ,
+                .changeMode = VehiclePropertyChangeMode::ON_CHANGE,
+        };
+       // mConfigsById is declared as std::unordered_map&lt;int32_t, VehiclePropConfig&gt;.
+       mConfigsById[config.prop] = config;
+}</pre> </li> <li>Update <code translate="no" dir="ltr">VHAL_HEARTBEAT</code> vehicle property. <p>Based on the VHAL health check frequency (explained in <a href="#optional">Define the frequency of VHAL health check"</a>), update the <code translate="no" dir="ltr">VHAL_HEARTBEAT</code> vehicle property once every N seconds. One way to do this is by using the <code translate="no" dir="ltr">RecurrentTimer</code> to call the action that checks the VHAL health and updates the <code translate="no" dir="ltr">VHAL_HEARTBEAT</code> vehicle property within timeout.</p> <p>Shown below is a sample implementation using <code translate="no" dir="ltr">RecurrentTimer</code>:</p> 
+<pre>int main(int argc, char** argv) {
+        RecurrentTimer recurrentTimer(updateVhalHeartbeat);
+        recurrentTimer.registerRecurrentEvent(kHeartBeatIntervalNs,
+                                           static_cast&lt;int32_t&gt;(VehicleProperty::VHAL_HEARTBEAT));
+        … Run service …
+        recurrentTimer.unregisterRecurrentEvent(
+                static_cast&lt;int32_t&gt;(VehicleProperty::VHAL_HEARTBEAT));
+}
+
+void updateVhalHeartbeat(const std::vector&lt;int32_t&gt;&amp; cookies) {
+       for (int32_t property : cookies) {
+              if (property != static_cast&lt;int32_t&gt;(VehicleProperty::VHAL_HEARTBEAT)) {
+                     continue;
+              }
+
+              // Perform internal health checking such as retrieving a vehicle property to ensure
+              // the service is responsive.
+              doHealthCheck();
+
+              // Construct the VHAL_HEARTBEAT property with system uptime.
+              VehiclePropValuePool valuePool;
+              VehicleHal::VehiclePropValuePtr propValuePtr = valuePool.obtainInt64(uptimeMillis());
+              propValuePtr-&gt;prop = static_cast&lt;int32_t&gt;(VehicleProperty::VHAL_HEARTBEAT);
+              propValuePtr-&gt;areaId = 0;
+              propValuePtr-&gt;status = VehiclePropertyStatus::AVAILABLE;
+              propValuePtr-&gt;timestamp = elapsedRealtimeNano();
+
+              // Propagate the HAL event.
+              onHalEvent(std::move(propValuePtr));
+       }
+}</pre> </li> <li id="optional">(<em>Optional</em>) Define the frequency of VHAL health check. <p>Watchdog's <code translate="no" dir="ltr">ro.carwatchdog.vhal_healthcheck.interval</code> read-only product property defines the VHAL health check frequency. Default health check frequency (when this property is not defined) is three seconds. If three seconds isn't sufficient for the VHAL service to update the <code translate="no" dir="ltr">VHAL_HEARTBEAT</code> vehicle property, define the VHAL health check frequency depending on the service responsiveness.</p> </li> </ol> <h2 id="debug-unhealthy-processes-terminated-by-the-watchdog">Debug unhealthy processes terminated by the Watchdog</h2> <p>Watchdog dumps the process state and terminates unhealthy processes. When terminating an unhealthy process, Watchdog logs the text <code translate="no" dir="ltr">carwatchdog terminated
+&lt;process name&gt; (pid:&lt;process id&gt;)</code> to logcat. This log line provides information about the terminated process like the process name and process ID.</p> <ol> <li>The logcat can be searched for the aforementioned text by running: 
+<pre>$ adb logcat -s CarServiceHelper | fgrep "carwatchdog killed"</pre> <p>For example, when the KitchenSink app is a registered Watchdog client and becomes unresponsive to Watchdog pings, Watchdog logs a line such as the below line when terminating the registered KitchenSink process.</p> 
+<pre>05-01 09:50:19.683   578  5777 W CarServiceHelper: carwatchdog killed com.google.android.car.kitchensink (pid: 5574)</pre> </li> <li>To identify the root cause of the unresponsiveness, use the process dump stored at <code translate="no" dir="ltr">/data/anr</code> just as you would use for activity ANR cases. To retrieve the dump file for the terminated process use the below commands. 
+<pre>$ adb root
+$ adb shell grep -Hn "pid process_pid" /data/anr/*</pre> <p>The following sample output is specific to the KitchenSink app:</p> 
+<pre>$ adb shell su root grep -Hn "pid 5574" /data/anr/*.</pre> 
+<pre>/data/anr/anr_2020-05-01-09-50-18-290:3:----- pid 5574 at 2020-05-01 09:50:18 -----
+/data/anr/anr_2020-05-01-09-50-18-290:285:----- Waiting Channels: pid 5574 at 2020-05-01 09:50:18 -----</pre> <p>The dump file for the terminated KitchenSink process is located at <code translate="no" dir="ltr">/data/anr/anr_2020-05-01-09-50-18-290</code>. Start your analysis using the terminated process's ANR dump file.</p> </li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/watchdog/wd_system_health" class="_attribution-link">https://source.android.com/docs/automotive/watchdog/wd_system_health</a>
+  </p>
+</div>

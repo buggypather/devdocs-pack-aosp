@@ -1,0 +1,73 @@
+<h1>Get the page size</h1>  <p>This page lists the different ways to get the kernel page size used in the device. To connect to the device, you can use <code translate="no" dir="ltr">adb</code>.</p> 
+<pre>$ adb shell
+</pre> <h2 id="use-code">Use programming code</h2> <p>In C++, prefer <code translate="no" dir="ltr">getpagesize(2)</code>:</p> 
+<pre># include &lt;unistd.h&gt;
+...
+... = getpagesize();
+</pre> <p>In Java, you can use system config:</p> 
+<pre>import android.system.Os;
+import android.system.OsConstants;
+
+... = Os.sysconf(OsConstants._SC_PAGE_SIZE);
+</pre> <h2 id="use-getconf">Use the getconf command</h2> <p>Use the <code translate="no" dir="ltr">getconf</code> command to get the page size, shown as follows:</p> 
+<pre>$ getconf PAGE_SIZE
+4096
+</pre> <h2 id="use-smaps">Use the /proc/<pid>/smaps pseudo file</pid>
+</h2> <p>The <code translate="no" dir="ltr">KernelPageSize</code> field in the pseudo file <code translate="no" dir="ltr">/proc/&lt;pid&gt;/smaps</code> shows the page size, shown as follows:</p> 
+<pre>$ grep KernelPageSize /proc/1/smaps
+KernelPageSize:        4 kB
+</pre> <h2 id="use-ld-show-aux">Use the LD_SHOW_AUXV=1 linker flag</h2> <p>Use the <code translate="no" dir="ltr">LD_SHOW_AUXV</code> flag to print the auxiliary vector of the program that is about to be executed. The <code translate="no" dir="ltr">AT_PAGESZ</code> field contains the page size, shown as follows:</p> 
+<pre>$ LD_SHOW_AUXV=1 ls
+AT_SYSINFO_EHDR      0x7250460000
+AT_MINSIGSTKSZ       4720
+AT_HWCAP             0b11111111111111111111111111111111
+AT_PAGESZ            4096
+AT_CLKTCK            100
+AT_PHDR              0x5fda1e0040
+AT_PHENT             56
+AT_PHNUM             12
+AT_BASE              0x72502f8000
+AT_FLAGS             0
+AT_ENTRY             0x5fda210000
+AT_UID               0
+AT_EUID              0
+AT_GID               0
+AT_EGID              0
+AT_SECURE            0
+AT_RANDOM            0x7fc59d66f8
+AT_HWCAP2            0b100011001111111111
+AT_EXECFN            "/system/bin/ls"
+AT_PLATFORM          "aarch64"
+data            dev.        init    vendor
+</pre> <h2 id="use-proc-config">Use the /proc/config.gz pseudo file</h2> <p>Check the kernel configuration for the page size in the pseudo file <code translate="no" dir="ltr">/proc/config.gz</code>. The possible configurations for the page size are:</p> <ul> <li>
+<code translate="no" dir="ltr">CONFIG_ARM64_4K_PAGES=y</code>: the kernel uses 4096-byte pages.</li> <li>
+<code translate="no" dir="ltr">CONFIG_ARM64_16K_PAGES=y</code>: the kernel uses 16384-byte pages.</li> <li>
+<code translate="no" dir="ltr">CONFIG_ARM64_64K_PAGES=y</code>: the kernel uses 65536-byte pages.</li> </ul> 
+<pre>$ zcat /proc/config.gz | grep "CONFIG_ARM64_[164K]*_PAGES=y"
+CONFIG_ARM64_16K_PAGES=y
+</pre> <h2 id="use-aux-vector">Use the auxiliary vector</h2> <p>When a program is executed, the kernel allocates and initializes the auxiliary vector with information, such as the page size, that is used by the dynamic linker. The auxiliary vector can be read from the pseudo file <code translate="no" dir="ltr">/proc/&lt;pid&gt;/auxv</code>. The page size from the auxiliary vector of process 1 can be shown as follows:</p> 
+<pre>$ od -N8 -j56 -td8 -An /proc/1/auxv
+4096
+</pre> <p>Where:</p> <ul> <li>
+<code translate="no" dir="ltr">od</code> dumps files in hexadecimal, decimal or other formats.</li> <li>
+<code translate="no" dir="ltr">-N8 -j56</code> dumps the 8 bytes starting at offset 56 into the file, corresponding to <code translate="no" dir="ltr">AT_PAGESZ</code>.</li> <li>
+<code translate="no" dir="ltr">-td8</code> formats the value as a decimal 8-byte integer.</li> <li>
+<code translate="no" dir="ltr">-An</code> causes just the value to be shown, not its address.</li> </ul> <h2 id="kernel-image">Read from a kernel image</h2> <p>You can read a kernel image's header to determine the page size. This is useful in the bootloader, if you need to know what type of kernel you're booting.</p> <p>The page size is in the 25th byte of the kernel header:</p> 
+<pre> $ file Image
+Image: Linux kernel ARM64 boot executable Image, little-endian, 16K pages
+
+ $ hexdump -C Image -n 48
+00000000  4d 5a 40 fa ff 7f 7b 14  00 00 00 00 00 00 00 00  |MZ@...{.........|
+00000010  00 00 64 02 00 00 00 00  0c 00 00 00 00 00 00 00  |..d.............|
+00000020  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+00000030
+</pre> <p>In this example, the value is <code translate="no" dir="ltr">0x0C = 0000 1100b</code>. Bit 1 has the value <code translate="no" dir="ltr">0</code>, and bit 2 has the value <code translate="no" dir="ltr">1</code>. Reading these two bits, we get <code translate="no" dir="ltr">10b</code> or <code translate="no" dir="ltr">2</code> in decimal. Based on the value of these bits, you can determine the kernel page size:</p> <ul> <li>
+<code translate="no" dir="ltr">0</code> - Unspecified</li> <li>
+<code translate="no" dir="ltr">1</code> - 4 KB</li> <li>
+<code translate="no" dir="ltr">2</code> - 16 KB</li> <li>
+<code translate="no" dir="ltr">3</code> - 64 KB</li> </ul> <p>For more information, see the <a href="https://www.kernel.org/doc/Documentation/arm64/booting.txt">Linux kernel documentation</a></p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/16kb-page-size/getting-page-size" class="_attribution-link">https://source.android.com/docs/core/architecture/16kb-page-size/getting-page-size</a>
+  </p>
+</div>

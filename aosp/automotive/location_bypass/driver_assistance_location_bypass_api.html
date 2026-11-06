@@ -1,0 +1,40 @@
+<h1>Automotive Location Bypass API</h1>  <p>This feature allows location access of allowlisted, Android-bundled, driver assistance apps to be controlled separately by the “Use location for driver assistance” switch. This enables these apps to access location even when the "Use location" switch is off.</p> <ul> <li>Android 12 doesn't provide a public API for this feature. Driver assistance apps should request location updates as usual.</li> <li>Android 13 and higher must make a location request to use <code translate="no" dir="ltr">LocationManager.requestLocationUpdates()</code> and pass in a <code translate="no" dir="ltr">LocationRequest</code> object configured with <code translate="no" dir="ltr">LocationRequest.setAdasGnssBypass(true)</code>.</li> </ul> <h2 id="use-the-driver-assistance-location-bypass-api">Use the driver assistance location bypass API</h2> <p>The following sections describe how to use the driver assistance location bypass API. To learn more about the usage policy, see <a href="location_bypass_policy">Location Bypass Allowlist Policy</a>.</p> <h3 id="check-the-driver-assistance-switch-status">Check the driver assistance switch status</h3> <p>In Android 13 and higher, you can check driver assistance switch status before requesting location updates. </p>
+
+<pre>// Returns the current status of "Use location for driver assistance".
+locationManager.isAdasGnssLocationEnabled();</pre> <h3 id="run-android-debug-bridge-adb-commands">Run Android Debug Bridge (ADB) commands</h3> <p>For development and testing, you can quickly check or change the status of the driver assistance toggle without using Location Settings.</p> <ol> <li>To use ADB commands to check or change status: 
+<pre>// Gets the status of ADAS location.
+adb shell cmd location is-adas-gnss-location-enabled
+
+// Enables ADAS location.
+adb shell cmd location set-adas-gnss-location-enabled true
+
+// Disables ADAS location.
+adb shell cmd location set-adas-gnss-location-enabled false</pre> </li> </ol> <h3 id="set-permission">Set permission</h3> <p>See the following for version-specific Android releases:</p> <ol> <li>In Android 12, driver assistance apps must have the <a href="https://developer.android.com/reference/android/Manifest.permission#WRITE_SECURE_SETTINGS">WRITE_SECURE_SETTINGS</a> permission.</li> <li>In Android 13 and higher, the <code translate="no" dir="ltr">LOCATION_BYPASS</code> permission is required.</li> </ol> <h3 id="add-an-app-to-the-allowlist-on-your-device">Add an app to the allowlist on your device</h3> <p>In the <code translate="no" dir="ltr">etc/sysconfig</code> directory:</p> <ol> <li>Add the app’s package name in a system configuration XML file:</li> 
+<pre>&lt;!-- In a xml file under etc/sysconfig–&gt;
+&lt;config&gt;
+…
+&lt;allow-adas-location-settings package="PACKAGE-NAME" /&gt;
+…
+&lt;/config&gt;</pre> </ol> <p>To ensure your package appears in the Location Settings UI, add your package name to <code translate="no" dir="ltr">config_locationDriverAssistancePackageNames</code>.</p> <p>Add the app’s URL of privacy policy disclosure to <code translate="no" dir="ltr">AndroidManifest.xml</code>. The name of the meta-data should be <code translate="no" dir="ltr">privacy_policy</code>.</p> 
+<pre>&lt;meta-data android:name="privacy_policy" android:value= privacy policy URL/&gt;</pre> <h3 id="remove-the-use-location-for-driver-assistance-switch">Remove the "Use location for driver assistance switch"</h3> <p>If you don’t have a location-powered driver assistance app that requests location from Android, you can comment out the code block to remove the switch for Location Settings.</p> <ol> <li>Open <code translate="no" dir="ltr">packages/apps/Car/Settings/res/xml/location_settings_fragment.xml</code> and then comment out the following code. 
+<pre>&lt;com.android.car.ui.preference.CarUiTwoActionSwitchPreference
+
+    android:fragment="com.android.car.settings.location.AdasLocationFragment"
+
+    android:key="@string/pk_location_driver_assistance_state_switch"
+
+    android:title="@string/location_driver_assistance_toggle_title"
+
+    android:summary="@string/location_driver_assistance_toggle_summary"
+
+
+settings:controller="com.android.car.settings.location.AdasLocationSwitchPreferenceController"
+
+    settings:searchable="true"/&gt;
+
+  &lt;com.android.car.settings.common.DividerPreference/&gt;</pre> </li> <li>After removing the switch, set <code translate="no" dir="ltr">config_defaultAdasGnssLocationEnabled</code> to <code translate="no" dir="ltr">false</code>.</li> </ol> <h2 id="run-the-automotive-test-suite">Run the Automotive test suite</h2> <p>Google provides an Automotive test suite (ATS) test, which ensures that all driver assistance packages on a device have been allowlisted with Google. The test is remotely configured. You needn't wait until the next ATS release to add a new package. You can learn more at <a href="../tools/catbox">Complete Automotive Tests in a Box.</a></p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/location_bypass/driver_assistance_location_bypass_api" class="_attribution-link">https://source.android.com/docs/automotive/location_bypass/driver_assistance_location_bypass_api</a>
+  </p>
+</div>

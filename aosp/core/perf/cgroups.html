@@ -1,0 +1,153 @@
+<h1>Cgroup abstraction layer</h1>  <p>Android 10 and higher use a control group (cgroup) abstraction layer with task profiles, which developers can use to describe a set (or sets) of restrictions to apply to a thread or a process. The system then follows the prescribed actions of the task profiles to select one or more appropriate cgroups, through which restrictions are applied, and changes to the underlying cgroup feature set can be made without affecting higher software layers.</p> <h2 id="cgroups">About cgroups</h2> <p>Cgroups provide a mechanism for aggregating and partitioning sets of tasks (which consist of processes, threads, and all their future children) into hierarchical groups with specialized behavior. Android uses cgroups to control and account for system resources such as CPU and memory usage and allocation, with support for Linux kernel <a href="https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v1/#control-groups-version-1">cgroups v1</a> and <a href="https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html">cgroups v2</a>.</p> <h3 id="cgroups-android9-and-lower">Android 9 and lower</h3> <p>In Android 9 and lower, the <code translate="no" dir="ltr">init.rc</code> initialization script contained the set of available cgroups, their mounting points, and versions. While these could be changed, the Android framework expected a specific set of cgroups to exist at specific locations with a specific version and subgroup hierarchy, based on the script. This limited the ability to choose the next cgroup version to use, or to change the cgroup hierarchy to use new features.</p> <h3 id="cgroups-android10-and-higher">Android 10 and higher</h3> <p>Android 10 and higher use cgroups with task profiles:</p> <ul> <li>
+<strong>Cgroup setup.</strong> Developers describe the cgroups setup in their <code translate="no" dir="ltr">cgroups.json</code> file to define sets of cgroups, and their mounting locations and attributes. All cgroups are mounted during the early-init stage of the initialization process.</li> <li>
+<strong>Task profiles.</strong> These provide an abstraction that decouples the required functionality from the details of its implementation. The Android framework applies the task profiles as described in the <code translate="no" dir="ltr">task_profiles.json</code> file to a process or thread using the <code translate="no" dir="ltr">SetTaskProfiles</code> and <code translate="no" dir="ltr">SetProcessProfiles</code> APIs. (These APIs are unique to Android 11 and higher.)</li> </ul> <p>To provide backward compatibility, the legacy functions <code translate="no" dir="ltr">set_cpuset_policy</code>, <code translate="no" dir="ltr">set_sched_policy</code>, and <code translate="no" dir="ltr">get_sched_policy</code> provide the same API and functionality, but their implementation has been modified to use task profiles. For new use cases AOSP recommends using new task profiles APIs instead of the legacy <code translate="no" dir="ltr">set_sched_policy</code> function.</p> <aside class="special"><strong>Important:</strong><span> Although you can mount additional cgroups using the <code translate="no" dir="ltr">init.rc</code> initialization script (vendor code can still use these just as before), AOSP strongly discourages doing so. Instead, you must describe the groups in the <code translate="no" dir="ltr">cgroups.json</code> file, and define the new task profiles in the <code translate="no" dir="ltr">task_profiles.json</code> file to operate with these cgroups.</span></aside> <h2 id="cgroups-description-file">Cgroups description file</h2> <p>Cgroups are described in the <a href="https://android.googlesource.com/platform/system/core/+/6e3f64e7d8b60d912ef00f337f10999a3bc8d8bf/libprocessgroup/profiles/cgroups.json"><code translate="no" dir="ltr">cgroups.json</code></a> file located under <code translate="no" dir="ltr">&lt;ANDROID_BUILD_TOP&gt;/system/core/libprocessgroup/profiles/</code>. Each controller is described in a subsection and must have a minimum of the following:</p> <ul> <li>Name, defined by the <strong>Controller</strong> field.</li> <li>Mounting path, defined by the <strong>Path</strong> field.</li> <li>
+<strong>Mode</strong>, <strong>UID</strong> (user ID), and <strong>GID</strong> (group ID) describing the owner and access modes for the files under this path (all optional).</li> <li>
+<strong>Optional</strong> attribute, set to <strong>true</strong> to let the system ignore the mounting error caused by a cgroup controller that the kernel doesn’t support being mounted.</li> </ul> <h3 id="example-cgrups-json-file">Example cgroups.json file</h3> <p>The example below shows descriptions for cgroup v1 (<code translate="no" dir="ltr">Cgroups</code>) and cgroup v2 (<code translate="no" dir="ltr">Cgroups2</code>) controllers with their respective paths.</p> 
+<pre>{
+  "Cgroups": [
+    {
+      "Controller": "cpu",
+      "Path": "/dev/cpuctl",
+      "Mode": "0755",
+      "UID": "system",
+      "GID": "system"
+    },
+    {
+      "Controller": "memory",
+      "Path": "/dev/memcg",
+      "Mode": "0700",
+      "Optional": true
+    }
+  ],
+ "Cgroups2": {
+   "Path": "/sys/fs/cgroup",
+   "Mode": "0755",
+   "UID": "system",
+   "GID": "system",
+   "Controllers": [
+     {
+       "Controller": "freezer",
+       "Path": ".",
+       "Mode": "0755",
+       "UID": "system",
+       "GID": "system"
+     }
+   ]
+ }
+}
+</pre> <p>This example file contains two sections, <strong>Cgroups</strong> (describing the cgroup v1 controllers) and <strong>Cgroups2</strong> (describing the cgroup v2 controllers). All controllers in the cgroups v2 hierarchy are mounted at the same location. Therefore, the <strong>Cgroups2</strong> section has its own <strong>Path</strong>, <strong>Mode</strong>, <strong>UID</strong>, and <strong>GID</strong> attributes to describe the location and attributes for the root of the hierarchy. The <strong>Path</strong> attribute for <strong>Controllers</strong> under <strong>Cgroups2</strong> is relative to that root path. In Android 12 and higher you can define a cgroup controller that's specified with path and mode as <code translate="no" dir="ltr">"Optional"</code> by setting it to <code translate="no" dir="ltr">true</code>.</p> <p>The <code translate="no" dir="ltr">cgroups.json</code> file is parsed as part of the init process, during the early-init stage, and the cgroups are mounted at the specified locations. To later obtain the cgroup mounting locations, use the <code translate="no" dir="ltr">CgroupGetControllerPath</code> API function.</p> <h2 id="task-profiles-file">Task profiles file</h2> <p>The <a href="https://android.googlesource.com/platform/system/core/+/6e3f64e7d8b60d912ef00f337f10999a3bc8d8bf/libprocessgroup/profiles/task_profiles.json"><code translate="no" dir="ltr">task_profiles.json</code></a> file is located under <code translate="no" dir="ltr">&lt;ANDROID_BUILD_TOP&gt;/system/core/libprocessgroup/profiles/</code>. Use it to describe a specific set of actions to be applied to a process or a thread. A set of actions is associated with a profile name, which is used in <code translate="no" dir="ltr">SetTaskProfiles</code> and <code translate="no" dir="ltr">SetProcessProfiles</code> calls to invoke profile actions.</p> <h3 id="example-task-profiles-json-file">Example task_profiles.json file</h3> 
+<pre>{
+  "Attributes": [
+    {
+      "Name": "MemSoftLimit",
+      "Controller": "memory",
+      "File": "memory.soft_limit_in_bytes"
+    },
+    {
+      "Name": "MemSwappiness",
+      "Controller": "memory",
+      "File": "memory.swappiness"
+    }
+  ],
+  "Profiles": [
+    {
+      "Name": "MaxPerformance",
+      "Actions" : [
+        {
+          "Name" : "JoinCgroup",
+          "Params" :
+          {
+            "Controller": "schedtune",
+            "Path": "top-app"
+          }
+        }
+      ]
+    },
+    {
+      "Name": "TimerSlackHigh",
+      "Actions" : [
+        {
+          "Name" : "SetTimerSlack",
+          "Params" :
+          {
+            "Slack": "40000000"
+          }
+        }
+      ]
+    },
+    {
+      "Name": "LowMemoryUsage",
+      "Actions" : [
+        {
+          "Name" : "SetAttribute",
+          "Params" :
+          {
+            "Name" : "MemSoftLimit",
+            "Value" : "16MB"
+          }
+        },
+        {
+          "Name" : "SetAttribute",
+          "Params" :
+          {
+            "Name" : "MemSwappiness",
+            "Value" : "150"
+
+          }
+        }
+      ]
+    }
+  ]
+  "AggregateProfiles": [
+     {
+       "Name": "SCHED_SP_DEFAULT",
+       "Profiles": [ "TimerSlackHigh", "MaxPerformance" ]
+     },
+     {
+       "Name": "SCHED_SP_BACKGROUND",
+       "Profiles": [ "LowMemoryUsage" ]
+     }
+}
+</pre>
+<aside class="note"><strong>Note:</strong><span> In the example, task profiles include a parameter for <code translate="no" dir="ltr">MemSwappiness</code>, described by a controller and with a unitless value. <code translate="no" dir="ltr">MemSwappiness</code> is a relative measure of the balance between anonymous memory vs. file-backed memory usage (0 to 200, inclusive). Obtaining an optimal value for swappiness is workload-dependent and requires experimentation. For a more detailed explanation, see <a href="https://www.kernel.org/doc/html/latest/admin-guide/sysctl/vm.html">swappiness</a>.</span></aside> <p>Assign names to specific cgroup files as entries in your <strong>Attributes</strong> list. Each entry contains the following:</p> <ul> <li>
+<strong>Name</strong> field specifies the name of the Attribute.</li> <li>
+<strong>Controller</strong> field references a cgroup controller from the <code translate="no" dir="ltr">cgroups.json</code> file, by its name.</li> <li>
+<strong>File</strong> field names a specific file under this controller.</li> </ul> <p><strong>Attributes</strong> are references in task profile definitions. Outside of task profiles, use them <em>only</em> when the framework requires direct access to those files, and access can't be abstracted using task profiles. In all other cases, use task profiles; they provide better decoupling between required behavior and its implementation details.</p> <p>The <strong>Profiles</strong> section contains task profile definitions with the following:</p> <ul> <li>
+<strong>Name</strong> field defines the profile name.</li> <li>
+<p><strong>Actions</strong> section lists a set of actions performed when the profile is applied. Each action has the following:</p> <ul> <li>
+<strong>Name</strong> field specifies the action.</li> <li>
+<strong>Params</strong> section specifies a set of parameters for the action.</li> </ul>
+</li> </ul> <p>Supported actions are listed in the table:</p> <table> <tbody> <tr> <th>Action</th> <th>Parameter</th> <th>Description</th> </tr> <tr> <td><code translate="no" dir="ltr">SetTimerSlack</code></td> <td><code translate="no" dir="ltr">Slack</code></td> <td>Timer slack in ns</td> </tr> <tr> <td rowspan="2"><code translate="no" dir="ltr">SetAttribute</code></td> <td><code translate="no" dir="ltr">Name</code></td> <td>A name referencing an attribute from the <strong>Attributes</strong> section</td> </tr> <td><code translate="no" dir="ltr">Value</code></td> <td>A value to be written to the file represented by the named attribute</td> <tr> <td><code translate="no" dir="ltr">WriteFile</code></td>
+<td><code translate="no" dir="ltr">FilePath</code></td>
+<td>path to the file</td>
+</tr> <td></td>
+<td><code translate="no" dir="ltr">Value</code></td>
+<td>a value to be written to the file</td> <tr> <td><code translate="no" dir="ltr">JoinCgroup</code></td> <td><code translate="no" dir="ltr">Controller</code></td> <td>A name of the cgroup controller from <code translate="no" dir="ltr">cgroups.json</code>
+</td> </tr> <tr> <td> </td> <td><code translate="no" dir="ltr">Path</code></td> <td>A sub-group path in the cgroup controller's hierarchy</td> </tr> </tbody> </table> <p>Android 12 and higher feature an <strong>AggregateProfiles</strong> section that contains aggregate profiles, each of which is an alias for a set of one or more profiles. Aggregate profile definitions consist of the following:</p> <ul> <li>
+<strong>Name</strong> field specifies the name of the aggregate profile.</li> <li>
+<strong>Profiles</strong> field lists the names of the profiles included in the aggregate profile.</li> </ul> <p>When an aggregate profile is applied, all the containing profiles are also automatically applied. Aggregate profiles can contain both individual profiles or other aggregate profiles, as long as there are no recursions (a profile that includes itself).</p> <h2 id="taskprofiles-init-language-command">task_profiles init language command</h2> <p>A <code translate="no" dir="ltr">task_profiles</code> command in the <a href="https://android.googlesource.com/platform/system/core/+/c5c532fc312c9e5a2f2b8fecbfc535af4ffcd245/init/README.md">Android Init Language</a> is available for Android 12 and higher to facilitate task profile activation for a specific process. It replaces the <code translate="no" dir="ltr">writepid</code> command (deprecated in Android 12) that was used to migrate a process between cgroups. The <code translate="no" dir="ltr">task_profiles</code> command provides flexibility for changing underlying implementations with no effect on upper layers. In the example below, these two commands effectively perform the same operation:</p> <ul> <li>
+<p><code translate="no" dir="ltr">writepid /dev/cpuctl/top-app/tasks</code></p> <p>Deprecated in Android 12, This was used to write the PID of the current task into the <code translate="no" dir="ltr">/dev/cpuctl/top-app/tasks</code> file.</p>
+</li> <li>
+<p><code translate="no" dir="ltr">task_profiles MaxPerformance</code></p> <p>Joins the current process into the top-app group under "cpu" controller (<code translate="no" dir="ltr">cpuctl</code>), which results in writing the PID of the process to <code translate="no" dir="ltr">dev/cpuctl/top-app/tasks</code>.</p>
+</li> </ul> <p>Always use the <code translate="no" dir="ltr">task_profiles</code> command to migrate tasks in cgroup hierarchies in Android 12 and higher. It accepts one or more parameters, representing the names of the profiles specified in the <code translate="no" dir="ltr">task_profiles.json</code> file.</p> <h2 id="per-api-level-task-profiles">Per API-level task profiles</h2> <p>In Android 12 and higher, you can amend or override definitions in the default <code translate="no" dir="ltr">cgroups.json</code> and <code translate="no" dir="ltr">task_profiles.json</code> files, either basing your change on the Android API level, or making it from the vendor partition.</p> <p>To override the definitions based on API level, the following files must be present on the device:</p> <ul> <li>
+<p><code translate="no" dir="ltr">/system/etc/task_profiles/cgroups_&lt;API level&gt;.json</code></p> <p>Use this for cgroups specific to an API level.</p>
+</li> <li>
+<p><code translate="no" dir="ltr">/system/etc/task_profiles/task_profiles_&lt;API level&gt;.json</code></p> <p>Use this for profiles specific to an API level.</p>
+</li> </ul> <p>To override the definitions from the vendor partition, the following files must be present on the device:</p> <ul> <li><code translate="no" dir="ltr">/vendor/etc/cgroups.json</code></li> <li><code translate="no" dir="ltr">/vendor/etc/task_profiles.json</code></li> </ul> <p>If an attribute or a profile definition in these files uses the same name as is in the default file, the file (API-level or vendor-level) definition overrides the previous definition. Note also that vendor-level definitions override API-level definitions. If the new definition has a new name, then the set of attributes or profiles is amended with the new definition.</p> <p>The Android system loads the <code translate="no" dir="ltr">cgroup</code> and <code translate="no" dir="ltr">task_profile</code> files in this order:</p> <ol> <li>Default <a href="https://android.googlesource.com/platform/system/core/+/c5c532fc312c9e5a2f2b8fecbfc535af4ffcd245/libprocessgroup/profiles/cgroups.json"><code translate="no" dir="ltr">cgroups.json</code></a> and <a href="https://android.googlesource.com/platform/system/core/+/c5c532fc312c9e5a2f2b8fecbfc535af4ffcd245/libprocessgroup/profiles/task_profiles.json"><code translate="no" dir="ltr">task_profiles.json</code></a> files.</li> <li>API level-specific files, if present.</li> <li>Vendor partition files, if present.</li> </ol> <h2 id="changes-to-existing-api">Changes to existing API</h2> <p>Android 10 and higher keeps the functions <code translate="no" dir="ltr">set_cpuset_policy</code>, <code translate="no" dir="ltr">set_sched_policy</code>, and <code translate="no" dir="ltr">get_sched_policy</code> without changes to the API. However, Android 10 moves these functions into <code translate="no" dir="ltr">libprocessgroup</code>, which now contains all cgroup-related functionality.</p> <p>Although the <code translate="no" dir="ltr">cutils/sched_policy.h</code> header still exists, to avoid breaking existing code ensure that new code includes a new <code translate="no" dir="ltr">processgroup/sched_policy.h</code> header instead.</p> <p>Modules that use any of these functions should add dependency on the <code translate="no" dir="ltr">libprocessgroup</code> library into their makefile. If a module doesn't use any other <code translate="no" dir="ltr">libcutils</code> functionality, drop the <code translate="no" dir="ltr">libcutils</code> library dependency from the makefile.</p> <h2 id="task-profiles-api">Task profiles APIs</h2> <p>The private APIs in <code translate="no" dir="ltr">processgroup/processgroup.h</code> are defined in the table:</p> <table> <tbody> <tr> <th>Type</th> <th>API and definition</th> </tr> <tr> <td><code translate="no" dir="ltr">bool</code></td> <td>
+<code translate="no" dir="ltr">SetTaskProfiles(int tid, const std::vector<std::string>&amp; profiles)</std::string></code> <br>Applies the task profiles specified in <code translate="no" dir="ltr">profiles</code> to the thread specified by a thread ID (tid) using its <code translate="no" dir="ltr">tid</code> parameter.</td>
+</tr> <tr> <td><code translate="no" dir="ltr">bool</code></td> <td>
+<code translate="no" dir="ltr">SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>&amp; profiles)</std::string></code> <br>Applies the task profiles specified in <code translate="no" dir="ltr">profiles</code> to the process specified by its user and process IDs using <code translate="no" dir="ltr">uid</code> and <code translate="no" dir="ltr">pid</code> parameters</td>
+</tr> <tr> <td><code translate="no" dir="ltr">bool</code></td> <td>
+<code translate="no" dir="ltr">CgroupGetControllerPath(const std::string&amp; cgroup_name, std::string* path)</code> <br>Returns whether a cgroup controller specified by <code translate="no" dir="ltr">cgroup_name</code> exists; if <code translate="no" dir="ltr">true</code>, sets the <code translate="no" dir="ltr">path</code> variable to the root of that cgroup</td>
+</tr> <tr> <td><code translate="no" dir="ltr">bool</code></td> <td>
+<code translate="no" dir="ltr">CgroupGetAttributePath(const std::string&amp; attr_name, std::string* path)</code> <br>Returns whether a profile attribute specified by <code translate="no" dir="ltr">attr_name</code> exists; if <code translate="no" dir="ltr">true</code>, sets the <code translate="no" dir="ltr">path</code> variable to the path of the file associated with that profile attribute.</td>
+</tr> <tr> <td><code translate="no" dir="ltr">bool</code></td> <td>
+<code translate="no" dir="ltr">CgroupGetAttributePathForTask(const std::string&amp; attr_name, int tid, std::string* path)</code> <br>Returns whether a profile attribute specified by <code translate="no" dir="ltr">attr_name</code> exists; if <code translate="no" dir="ltr">true</code>, sets the <code translate="no" dir="ltr">path</code> variable to the path of the file associated with that profile attribute, and to the thread specified by its thread ID using the <code translate="no" dir="ltr">tid</code> parameter.</td>
+</tr> <tr> <td><code translate="no" dir="ltr">bool</code></td> <td>
+<code translate="no" dir="ltr">UsePerAppMemcg()</code> <br>Returns whether system is configured to use per-app memory cgroups.</td>
+</tr> </tbody> </table><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/perf/cgroups" class="_attribution-link">https://source.android.com/docs/core/perf/cgroups</a>
+  </p>
+</div>

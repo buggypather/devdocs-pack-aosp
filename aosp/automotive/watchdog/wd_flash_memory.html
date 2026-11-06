@@ -1,0 +1,323 @@
+<h1>Monitor flash memory usage</h1>  <p>Watchdog monitors flash memory usage by tracking the total amount of disk I/O writes made by all apps and services using the per-UID disk I/O stats exposed by the Kernel at the location `/proc/uid_io/stats`. When an app or service exceeds the disk I/O overuse threshold, Watchdog takes actions on the app or service. The disk I/O overuse thresholds and the action to take on overuse is predefined in the disk I/O overuse configuration.</p> <h2 id="overuse-thresholds">Overuse thresholds</h2> <ul> <li>The disk I/O overuse thresholds are enforced on a daily basis, that is, all writes made by an app/service are aggregated since the beginning of the current UTC calendar day and checked against the thresholds defined in the overuse configurations.</li> <li>When a vehicle is started multiple times on a given day, the Watchdog module stores the disk I/O usage stats on flash memory and aggregates them since the beginning of the current UTC calendar day.</li> </ul> <h2 id="overuse-actions">Overuse actions</h2> <p>When an app repeatedly exceeds the defined disk I/O overuse thresholds, Watchdog takes actions defined in the overuse configuration. </p> <ul> <li>All vendor apps and services are considered critical for the overall system stability, so they are not terminated on disk I/O overuse. However, the overuse configuration can define a list of safe-to-terminate vendor apps and services.</li> <li>All third-party apps are safe-to-terminate.</li> </ul> <p>When an app or service is safe-to-terminate, Watchdog disables the app or service with the app component state <code translate="no" dir="ltr">
+    <a href="https://developer.android.com/reference/android/content/pm/PackageManager#COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED">PackageManager.COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED</a>
+  </code>.</p> <aside class="important"><strong>Important:</strong> When apps are disabled due to system resource (including flash memory) overuse, the apps no longer appear in the default launcher app.</aside> <h2 id="overuse-configuration">Overuse configuration</h2> <p>The overuse configuration contains the disk I/O overuse thresholds and actions. Default overuse configurations are defined in the system and vendor images, and shipped with the build. Vendors can optionally include the vendor configuration in the vendor image. When the vendor configuration is not provided, the system configuration is used for the vendor apps and services as well.</p> <p>Watchdog exposes system APIs through <code translate="no" dir="ltr">CarWatchdogManager</code>, which lets vendors apps or services update the vendor configuration anytime.</p> <h3 id="overuse-configuration-definition">Overuse configuration definition</h3> <p>Overuse configuration is split by the component type, for example, system, vendor, and third party. OEMs must update only the vendor component configuration.</p> <h4 id="vendor-configuration">Vendor configuration</h4> <p>Vendor configuration defines the disk I/O overuse thresholds and actions for all vendor apps and services, and all maps and media apps. The configuration contains the below configuration fields.</p> <ul> <li>
+<strong>Vendor package prefixes</strong>. All packages installed in the vendor partition are considered as vendor packages. In addition to these packages, vendors can classify preinstalled packages as vendor packages by adding the package prefixes to the <strong>vendor package prefixes</strong> config. This config doesn't accept regular expressions.</li> <li>
+<strong>Safe-to-terminate packages</strong>. Vendors can specify which vendor packages are safe to be terminated by adding the complete package names to the <strong>safe-to-terminate packages</strong> config.</li> <li>
+<strong>Application category mappings</strong>. Vendors can map any package (including third-party packages) to one of the two supported app categories - Map and Media apps. This mapping is done to provide maps and media apps higher disk I/O overuse thresholds because these apps tend to download and write more data to disk than other app types.</li> <li>
+<strong>Component level thresholds</strong>. Defines generic thresholds for all vendor packages (that is, packages not covered by <strong>Package specific thresholds</strong> or <strong>Application category specific thresholds</strong> get these thresholds). Vendors must define non-zero component-level thresholds when defining disk I/O overuse configuration.</li> <li>
+<strong>Package specific thresholds</strong>. Vendors can define special thresholds for specific vendor packages. The mappings should contain the complete package names. The thresholds defined in this config takes precedence over thresholds defined in other configs for a given package.</li> <li>
+<strong>Application category specific thresholds</strong>. Vendors can specify special thresholds for specific app categories. The app categories must be one of the supported categories - Maps and Media apps. The thresholds defined in this config are mapped to specific packages using <strong>Application category mappings</strong>.</li> <li>
+<strong>System-wide thresholds</strong>. Vendors must not specify this config.</li> </ul> <p><strong>Vendor package prefixes</strong>, <strong>Safe-to-terminate packages</strong>, <strong>Component level thresholds</strong>, and <strong>Package specific thresholds</strong> configs are updatable only by the vendor configuration for vendor apps and services. <strong>Application category specific thresholds</strong> config can be updated only by the vendor configuration for all maps and media apps.</p> <p>The overuse thresholds contain the amount of bytes allowed to be written during:</p> <ul> <li>An app or service foreground mode versus background mode</li> <li>System garage mode</li> </ul> <p>This classification allows user facing foreground apps and services to write more data than background apps and services. In Garage mode, apps and services tend to download updates, so each needs a higher threshold than apps and services running in other modes.</p> <h4 id="system-and-third-party-configurations">System and third-party configurations</h4> <p>OEMs should <strong>not</strong> update the system and third-party configurations.</p> <ul> <li>System configuration defines I/O overuse thresholds and actions for system apps and services. <ul> <li>This configuration can also update the <strong>Application category mappings</strong>. Thus, this config field is shared between system and vendor configurations.</li> </ul> </li>
+<li>Third-party configuration defines thresholds for all third-party apps. All apps that are not preinstalled in the system are third-party apps. <ul> <li>All third-party apps receive the same thresholds (for example, no third-party app receives special thresholds) except maps and media apps, whose thresholds are defined by the vendor configuration.</li> <li>The below disk I/O overuse thresholds are the default thresholds for the third-party apps. These thresholds are shipped with the system image. <ul> <li>3 GiB write in the app foreground mode.</li> <li>2 GiB write in the app background mode.</li> <li>4 GiB write in the system garage mode.</li> </ul> </li> <li>These are base thresholds. These thresholds are updated as more is learned about disk I/O usage.</li> </ul> </li> </ul> <h3 id="overuse-configuration-xml-format">Overuse configuration XML format</h3> <p>Optional: In Android 16 and higher, you can place the default vendor configuration in <code translate="no" dir="ltr">/vendor/etc/io-watchdog/resource_overuse_configuration.xml</code> in the build image.</p> <p>In Android 15 and lower, you can place the default vendor configuration in <code translate="no" dir="ltr">/vendor/etc/watchdog/resource_overuse_configuration.xml</code> in the build image. When this configuration isn't specified, the system-defined configuration is applied for vendor apps and services as well.</p> <p>The XML file should contain only one tag for each config field. I/O overuse configuration must be defined in the XML file. All threshold values should be specified in the MiB unit.</p> <p>A sample XML configuration is provided below:</p> 
+<pre>&lt;resourceOveruseConfiguration version="1.0"&gt;
+      &lt;componentType&gt;VENDOR&lt;/componentType&gt;
+
+      &lt;!-- List of safe to kill vendor packages. --&gt;
+      &lt;safeToKillPackages&gt;
+            &lt;package&gt;com.vendor.package.A&lt;/package&gt;
+            &lt;package&gt;com.vendor.package.B&lt;/package&gt;
+      &lt;/safeToKillPackages&gt;
+
+      &lt;!-- List of vendor package prefixes. --&gt;
+      &lt;vendorPackagePrefixes&gt;
+            &lt;packagePrefix&gt;com.vendor.package&lt;/packagePrefix&gt;
+      &lt;/vendorPackagePrefixes&gt;
+
+      &lt;!-- List of unique package names to app category mappings. --&gt;
+      &lt;packagesToAppCategoryTypes&gt;
+            &lt;packageAppCategory type="MEDIA"&gt;com.vendor.package.A&lt;/packageAppCategory&gt;
+            &lt;packageAppCategory type="MAPS"&gt;com.google.package.B&lt;/packageAppCategory&gt;
+            &lt;packageAppCategory type="MEDIA"&gt;com.third.party.package.C&lt;/packageAppCategory&gt;
+      &lt;/packagesToAppCategoryTypes&gt;
+
+      &lt;ioOveruseConfiguration&gt;
+        &lt;!-- Thresholds in MiB for all vendor packages that don't have package specific thresholds. --&gt;
+            &lt;componentLevelThresholds&gt;
+                  &lt;state id="foreground_mode"&gt;1024&lt;/state&gt;
+                  &lt;state id="background_mode"&gt;512&lt;/state&gt;
+                  &lt;state id="garage_mode"&gt;3072&lt;/state&gt;
+            &lt;/componentLevelThresholds&gt;
+
+            &lt;packageSpecificThresholds&gt;
+                  &lt;!-- IDs must be unique --&gt;
+                  &lt;perStateThreshold id="com.vendor.package.C"&gt;
+                    &lt;state id="foreground_mode"&gt;400&lt;/state&gt;
+                    &lt;state id="background_mode"&gt;100&lt;/state&gt;
+                    &lt;state id="garage_mode"&gt;200&lt;/state&gt;
+                  &lt;/perStateThreshold&gt;
+
+                  &lt;perStateThreshold id="com.vendor.package.D"&gt;
+                    &lt;state id="foreground_mode"&gt;1024&lt;/state&gt;
+                    &lt;state id="background_mode"&gt;500&lt;/state&gt;
+                    &lt;state id="garage_mode"&gt;2048&lt;/state&gt;
+                  &lt;/perStateThreshold&gt;
+            &lt;/packageSpecificThresholds&gt;
+
+            &lt;!-- Application category specific thresholds. --&gt;
+            &lt;appCategorySpecificThresholds&gt;
+                  &lt;!-- One entry per supported application category --&gt;
+                  &lt;perStateThreshold id="MEDIA"&gt;
+                    &lt;state id="foreground_mode"&gt;600&lt;/state&gt;
+                    &lt;state id="background_mode"&gt;700&lt;/state&gt;
+                    &lt;state id="garage_mode"&gt;1024&lt;/state&gt;
+                  &lt;/perStateThreshold&gt;
+
+                  &lt;perStateThreshold id="MAPS"&gt;
+                    &lt;state id="foreground_mode"&gt;800&lt;/state&gt;
+                    &lt;state id="background_mode"&gt;900&lt;/state&gt;
+                    &lt;state id="garage_mode"&gt;2048&lt;/state&gt;
+                  &lt;/perStateThreshold&gt;
+            &lt;/appCategorySpecificThresholds&gt;
+      &lt;/ioOveruseConfiguration&gt;
+&lt;/resourceOveruseConfiguration&gt;</pre> <h3 id="update-overuse-configuration-through-carwatchdogmanager-system-apis">Update overuse configuration through CarWatchdogManager system APIs</h3> <p>The above XML configuration can be provided only in the build image. If an OEM chooses to update the on-device configuration after a build is released, they can use the following APIs to make changes to the on-device configuration.</p> <ul> <li>Grant the permission <code translate="no" dir="ltr">Car.PERMISSION_CONTROL_CAR_WATCHDOG_CONFIG</code> to the caller.</li> <li>Must use the existing configurations to update and set the new configurations. Use the API <code translate="no" dir="ltr">CarWatchdogManager.getResourceOveruseConfigurations</code> to get the existing configurations. If existing configurations are not used, all configurations (including system and third-party configurations) are overwritten, which is not recommended.</li> <li>Update the existing configurations with the delta changes and set the new configurations. Do <strong>not</strong> update the system and third-party component configurations.</li> <li>Use the API <code translate="no" dir="ltr">CarWatchdogManager.setResourceOveruseConfigurations</code> to set the new configurations.</li> <li>To get and set the disk I/O overuse configurations use the flag <code translate="no" dir="ltr">CarWatchdogManager.FLAG_RESOURCE_OVERUSE_IO</code>.</li> </ul> <p>Here's a sample implementation that updates the resource overuse configurations:</p> 
+<pre>void updateResourceOveruseConfigurations() {
+    CarWatchdogManager manager =
+        (CarWatchdogManager) car.getCarManager(Car.CAR_WATCHDOG_SERVICE);
+
+    List&lt;ResourceOveruseConfiguration&gt; resourceOveruseConfigurations =
+        manager.getResourceOveruseConfigurations(
+            CarWatchdogManager.FLAG_RESOURCE_OVERUSE_IO);
+
+    List&lt;ResourceOveruseConfiguration&gt; newResourceOveruseConfigurations =
+            new List&lt;&gt;();
+    ResourceOveruseConfiguration vendorConfiguration;
+    for(ResourceOveruseConfiguration config : resourceOveruseConfigurations) {
+        // Do not update the configurations of the system and third-party component types.
+        if (config.getComponentType()
+            != ResourceOveruseConfiguration.COMPONENT_TYPE_VENDOR) {
+            newResourceOveruseConfigurations.add(config);
+            continue;
+        }
+        vendorConfiguration = config;
+    }
+
+    if (vendorConfiguration == null) {
+        ResourceOveruseConfiguration.Builder vendorConfigBuilder =
+            new ResourceOveruseConfiguration.Builder();
+        initializeConfig(vendorConfigBuilder);
+        newResourceOveruseConfigurations.add(vendorConfigBuilder.build());
+    } else {
+        ResourceOveruseConfiguration newVendorConfig =
+            updateConfig(vendorConfiguration);
+        newResourceOveruseConfigurations.add(newVendorConfig);
+    }
+    int result = manager.setResourceOveruseConfigurations(
+        newResourceOveruseConfigurations,
+
+    if (result != CarWatchdogManager.RETURN_CODE_SUCCESS) {
+        // Failed to set the resource overuse configurations.
+    }
+}
+
+/** Sets the delta between the old configuration and the new configuration. */
+ResourceOveruseConfiguration updateConfig(
+    ResourceOveruseConfiguration oldConfiguration) {
+    // Replace com.vendor.package.A with com.vendor.package.B in the safe-to-kill list.
+    List&lt;String&gt; safeToKillPackages = oldConfiguration.getSafeToKillPackages();
+    safeToKillPackages.remove("com.vendor.package.A");
+    safeToKillPackages.add("com.vendor.package.B");
+
+    ResourceOveruseConfiguration.Builder configBuilder =
+        new ResourceOveruseConfiguration.Builder(
+            oldConfiguration.getComponentType(),
+            safeToKillPackages,
+            oldConfiguration.getVendorPackagePrefixes(),
+            oldConfiguration.getPackagesToAppCategoryTypes());
+
+    configBuilder.addVendorPackagePrefixes("com.vendor.");
+    configBuilder.addPackagesToAppCategoryTypes("com.vendor.package.B",
+        ResourceOveruseConfiguration.APPLICATION_CATEGORY_TYPE_MAPS);
+
+    IoOveruseConfiguration oldIoConfiguration = oldConfiguration.getIoOveruseConfiguration();
+    IoOveruseConfiguration.Builder ioConfigBuilder =
+        new IoOveruseConfiguration.Builder(
+            oldIoConfiguration.getComponentLevelThresholds(),
+            oldIoConfiguration.getPackageSpecificThresholds(),
+            oldIoConfiguration.getAppCategorySpecificThresholds(),
+            oldIoConfiguration.getSystemWideThresholds());
+
+    // Define the amount of bytes based on the flash memory specification, expected lifetime,
+    // and estimated average amount of bytes written by a package during different modes.
+    ioConfigBuilder.addPackageSpecificThresholds("com.vendor.package.B",
+        new PerStateBytes(/* foregroundModeBytes= */ 2 * 1024 * 1024 * 1024,
+                          /* backgroundModeBytes= */ 500 * 1024 * 1024,
+                          /* garageModeBytes= */ 3 * 1024 * 1024 * 1024));
+
+
+    return configBuilder.setIoOveruseConfiguration(ioConfigBuilder.build()).build();
+}</pre> <h2 id="apps-monitoring-their-resource-overuse">Apps monitoring their resource overuse</h2> <p>Vendor and third-party apps can listen for app specific resource overuse notifications from Watchdog or poll <code translate="no" dir="ltr">CarWatchdogManager</code> for the app specific resource overuse statistics for up to the past 30 days.</p> <h3 id="listen-for-resource-overuse-notifications">Listen for resource overuse notifications</h3> <p>Apps can implement a resource overuse listener and register the listener with <code translate="no" dir="ltr">CarWatchdogManager</code> to receive app specific notifications when they exceed 80% or 100% of their disk I/O overuse thresholds. Apps can use these notifications to:</p> <ul> <li>Log the disk I/O overuse statistics for offline analysis. App developers can use this logging to debug the disk I/O overuse issue.</li> <li>Reduce the disk I/O writes until the overuse counters reset.</li> </ul> <h4 id="java-client">Java client</h4> <ol> <li>Implement listener by inheriting <code translate="no" dir="ltr">CarWatchdogManager.ResourceOveruseListener</code>: 
+<pre>class ResourceOveruseListenerImpl implements
+      CarWatchdogManager.ResourceOveruseListener {
+            @Override
+            public void onOveruse(
+                  @NonNull ResourceOveruseStats resourceOveruseStats) {
+                  // 1. Log/Upload resource overuse metrics.
+                  // 2. Reduce writes until the counters reset.
+
+                  IoOveruseStats ioOveruseStats = resourceOveruseStats.getIoOveruseStats();
+                  // Stats period - [ioOveruseStats.getStartTime(), ioOveruseStats.getStartTime()
+                  //   + ioOveruseStats.getDurationInSeconds()]
+                  // Total I/O overuses - ioOveruseStats.getTotalOveruses()
+                  // Total bytes written - ioOveruseStats.getTotalBytesWritten()
+                  // Remaining write bytes for the current UTC calendar day -
+                  //    ioOveruseStats.getRemainingWriteBytes()
+            }
+      }
+}</pre> </li> <li>Register the listener instance by calling <code translate="no" dir="ltr">CarWatchdogManager.addResourceOveruseListener</code> 
+<pre>private void addResourceOveruseListener() {
+      CarWatchdogManager manager =
+            (CarWatchdogManager) car.getCarManager(Car.CAR_WATCHDOG_SERVICE);
+      // Choose a proper executor to handle resource overuse notifications.
+      Executor executor = mContext.getMainExecutor();
+      manager.addResourceOveruseListener(
+            executor, CarWatchdogManager.FLAG_RESOURCE_OVERUSE_IO,
+            mListenerImpl);
+}</pre> </li> <li>Unregister the listener instance when the app has finished listening to: 
+<pre>private void removeResourceOveruseListener() {
+    CarWatchdogManager manager =
+            (CarWatchdogManager) car.getCarManager(Car.CAR_WATCHDOG_SERVICE);
+    mCarWatchdogManager.removeResourceOveruseListener(
+          mListenerImpl);
+}</pre> </li> </ol> <h4 id="native-client">Native client</h4> <ol> <li>Include <code translate="no" dir="ltr">carwatchdog_aidl_interface-ndk_platform</code> in the <code translate="no" dir="ltr">shared_libs</code> dependency of the build rule. <p><code translate="no" dir="ltr"><strong>Android.bp</strong></code></p> 
+<pre>cc_binary {
+    name: "sample_native_client",
+    srcs: [
+        "src/*.cpp"
+    ],
+    shared_libs: [
+        "carwatchdog_aidl_interface-ndk_platform",
+        "libbinder_ndk",
+    ],
+    vendor: true,
+}</pre> </li> <li>Add SELinux policy to allow the vendor service domain to use binder (<code translate="no" dir="ltr">binder_user</code> macro) and add the vendor service domain to the <code translate="no" dir="ltr">carwatchdog</code> client domain <code translate="no" dir="ltr">(carwatchdog_client_domain
+  macro)</code>. See the code below for <code translate="no" dir="ltr">sample_client.te</code> and <code translate="no" dir="ltr">file_contexts</code>. <p><code translate="no" dir="ltr"><strong>sample_client.te</strong></code></p> 
+<pre>type sample_client, domain;
+type sample_client_exec, exec_type, file_type, vendor_file_type;
+
+carwatchdog_client_domain(sample_client)
+
+init_daemon_domain(sample_client)
+binder_use(sample_client)</pre> <p><code translate="no" dir="ltr"><strong>file_contexts</strong></code></p> 
+<pre>/vendor/bin/sample_native_client  u:object_r:sample_client_exec:s0</pre> </li> <li>Implement the resource overuse listener by inheriting <code translate="no" dir="ltr">BnResourceOveruseListener</code>. Override <code translate="no" dir="ltr">BnResourceOveruseListener::onOveruse</code> to handle resource overuse notifications. <p><code translate="no" dir="ltr"><strong>ResourceOveruseListenerImpl.h</strong></code></p> 
+<pre>class ResourceOveruseListenerImpl : public BnResourceOveruseListener {
+public:
+    ndk::ScopedAStatus onOveruse(
+        ResourceOveruseStats resourceOveruseStats) override;
+
+private:
+    void initialize();
+    void terminate();
+
+    std::shared_ptr&lt;ICarWatchdog&gt; mWatchdogServer;
+    std::shared_ptr&lt;IResourceOveruseListener&gt; mListener;
+}</pre> <p><code translate="no" dir="ltr"><strong>ResourceOveruseListenerImpl.cpp</strong></code></p> 
+<pre>ndk::ScopedAStatus ResourceOveruseListenerImpl::onOveruse(
+      ResourceOveruseStats resourceOveruseStats) {
+
+      // 1. Log/Upload resource overuse metrics.
+      // 2. Reduce writes until the counters reset.
+
+      if (stats.getTag() != ResourceOveruseStats::ioOveruseStats) {
+            // Received resourceOveruseStats doesn't contain I/O overuse stats.
+      }
+
+      const IoOveruseStats&amp; ioOveruseStats = stats.get();
+      // Stats period - [ioOveruseStats.startTime,
+      //   ioOveruseStats.startTime + ioOveruseStats.durationInSeconds]
+      // Total I/O overuses - ioOveruseStats.totalOveruses
+      // Total bytes written - ioOveruseStats.writtenBytes
+      // Remaining write bytes for the current UTC calendar day -
+      //    ioOveruseStats.remainingWriteBytes
+
+      return ndk::ScopedAStatus::ok();
+}</pre> </li> <li>Start a binder thread pool and register the resource overuse listener with the watchdog server. Watchdog server is registered under the service name <code translate="no" dir="ltr">android.automotive.watchdog.ICarWatchdog/default</code>. <p><code translate="no" dir="ltr"><strong>main.cpp</strong></code></p> 
+<pre>int main(int argc, char** argv) {
+    ABinderProcess_setThreadPoolMaxThreadCount(1);
+    ABinderProcess_startThreadPool();
+    std::shared_ptr&lt;ResourceOveruseListenerImpl&gt; listener =
+        ndk::SharedRefBase::make&lt;ResourceOveruseListenerImpl&gt;();
+
+    // The listener is added in initialize().
+    listener-&gt;initialize();
+
+    ... Run service ...
+
+    // The listener is removed in terminate().
+    listener-&gt;terminate();
+}</pre> <p><code translate="no" dir="ltr"><strong>ResourceOveruseListenerImpl.cpp</strong></code></p> 
+<pre>void ResourceOveruseListener::initialize() {
+    ndk::SpAIBinder binder(AServiceManager_getService(
+            "android.automotive.watchdog.ICarWatchdog/default"));
+    std::shared_ptr&lt;ICarWatchdog&gt; server = ICarWatchdog::fromBinder(binder);
+    mWatchdogServer = server;
+
+    std::shared_ptr&lt;IResourceOveruseListener&gt; listener =
+        IResourceOveruseListener::fromBinder(this-&gt;asBinder());
+    mWatchdogServer-&gt;addResourceOveruseListener(
+      std::vector&lt;int&gt;{ResourceType.IO}, listener);
+    mListener = listener;
+}
+
+void ResourceOveruseListener::terminate() {
+    mWatchdogServer-&gt;removeResourceOveruseListener(mListener);
+}</pre> </li> </ol> <h3 id="poll-resource-overuse-statistics">Poll resource overuse statistics</h3> <p>Apps can poll CarWatchdogManager for the app-specific I/O overuse statistics ATS for the most recent 30 days.</p> <h4 id="java-client_1">Java client</h4> <p>Use <code translate="no" dir="ltr">CarWatchdogManager.getResourceOveruseStats</code> to get the resource overuse stats. Pass the <code translate="no" dir="ltr">CarWatchdogManager.FLAG_RESOURCE_OVERUSE_IO</code> flag to get the disk I/O overuse stats.</p> 
+<pre>private void getResourceOveruseStats() {
+      CarWatchdogManager manager =
+            (CarWatchdogManager) car.getCarManager(Car.CAR_WATCHDOG_SERVICE);
+
+      // Returns resource overuse stats with I/O overuse stats for the past
+      // 7 days. Stats are available for up to the past 30 days.
+      ResourceOveruseStats resourceOveruseStats =
+            mCarWatchdogManager.getResourceOveruseStats(
+                  CarWatchdogManager.FLAG_RESOURCE_OVERUSE_IO,
+                  CarWatchdogManager.STATS_PERIOD_PAST_7_DAYS);
+
+      IoOveruseStats ioOveruseStats = resourceOveruseStats.getIoOveruseStats();
+      // Stats period - [ioOveruseStats.getStartTime(), ioOveruseStats.getStartTime()
+      //   + ioOveruseStats.getDurationInSeconds()]
+      // Total I/O overuses - ioOveruseStats.getTotalOveruses()
+      // Total bytes written - ioOveruseStats.getTotalBytesWritten()
+      // Remaining write bytes for the UTC calendar day -
+      //    ioOveruseStats.getRemainingWriteBytes()
+}</pre> <h4 id="native-client_1">Native client</h4> <p>Use <code translate="no" dir="ltr">CarWatchdogServer.getResourceOveruseStats</code> to get the resource overuse stats. Pass the <code translate="no" dir="ltr">ResourceType.IO</code> enum to fetch disk I/O overuse stats.</p> <aside class="note"><strong>Limitation:</strong> The native API returns statistics only for the current UTC calendar day.</aside> 
+<pre>void getResourceOveruseStats() {
+      ndk::SpAIBinder binder(AServiceManager_getService(
+            "android.automotive.watchdog.ICarWatchdog/default"));
+      std::shared_ptr&lt;ICarWatchdog&gt; server = ICarWatchdog::fromBinder(binder);
+      // Returns the stats only for the current UTC calendar day.
+      const std::vector&lt;ResourceOveruseStats&gt; resourceOveruseStats;
+      ndk::ScopedAStatus status = server.getResourceOveruseStats(
+            std::vector&lt;int&gt;{ResourceType.IO}, &amp;resourceOveruseStats);
+      if (!status.isOk()) {
+            // Failed to get the resource overuse stats.
+            return;
+      }
+
+      for (const auto&amp; stats : resourceOveruseStats) {
+            if (stats.getTag() != ResourceOveruseStats::ioOveruseStats) {
+                  continue;
+            }
+            const IoOveruseStats&amp; ioOveruseStats = stats.get();
+            // Stats period - [ioOveruseStats.startTime,
+            //   ioOveruseStats.startTime + ioOveruseStats.durationInSeconds]
+            // Total I/O overuses - ioOveruseStats.totalOveruses
+            // Total bytes written - ioOveruseStats.writtenBytes
+            // Remaining write bytes for the current UTC calendar day -
+            //   ioOveruseStats.remainingWriteBytes
+      }
+}</pre> <h2 id="ux">Resource overuse user experience</h2> <p> The following sections describe the user experience when resource overuse occurs. </p> <h3 id="app-performance-setting">Prioritize app performance setting</h3> <p> The app <strong>Settings</strong> page contains settings for<code translate="no" dir="ltr">Prioritize app performance</code> (see the image below), which allows users to prioritize an app's performance over the system and long-term hardware performance. This setting is available only for apps that are safe to be terminated on resource overuse. Otherwise, this setting is disabled. When this setting is toggled off (the default setting) for an app, the app can be terminated on resource overuse. Otherwise, the app is not terminated on resource overuse. </p> <p><img src="https://source.android.com/static/docs/automotive/images/watchdog_01.png" class="screenshot android-image-dark-theme-background" width="550"></p> <p>When the user toggles on this setting, the following confirmation dialog describes the implications of toggling on the setting:</p> <p><img src="https://source.android.com/static/docs/automotive/images/watchdog_02.png" class="screenshot android-image-dark-theme-background" width="550"></p> <p> After 90 days, this setting is automatically reset to the default. The day limit can be modified with an RRO overlay app using <code translate="no" dir="ltr">watchdogUserPackageSettingsResetDays</code>, up to a maximum of 180 days. To learn more, see <a href="../../core/runtime/rros">Change the value of an app's resources at runtime</a>. The following example overlay tag can be included in <code translate="no" dir="ltr">AndroidManifest.xml</code>:</p> 
+<pre>&lt;overlay android:priority="&lt;insert-value&gt;"
+      android:targetPackage="com.android.car.updatable"
+      android:targetName="CarServiceCustomization"
+      android:resourcesMap="@xml/overlays" /&gt;</pre> <p>In <code translate="no" dir="ltr">res/values/config.xml</code>:</p> 
+<pre>&lt;resources&gt;
+  &lt;integer name="watchdogUserPackageSettingsResetDays"&gt;value&lt;/integer&gt;
+&lt;/resources&gt;</pre> <p>In <code translate="no" dir="ltr">res/xml/overlays.xml</code>:</p> 
+<pre>&lt;overlay&gt;
+  &lt;item target="integer/watchdogUserPackageSettingsResetDays" value="@integer/watchdogUserPackageSettingsResetDays" /&gt;
+&lt;/overlay&gt;</pre> <h3 id="performance-impacting-apps">Performance-impacting apps setting</h3> <p>The <strong>Settings</strong> app contains a <strong>Performance-impacting apps</strong> section (see Figure 1). When tapped, a list of apps that have been restricted due to flash memory overuse and that negatively impacts system performance are displayed. This follows <a href="../../compatibility/14/android-14-cdd#351_application_restriction">CDD 3.5.1 requirement [C-1-1]</a>.</p> <p><img src="https://source.android.com/static/docs/automotive/images/watchdog-perf-apps-01.png" class="screenshot android-image-dark-theme-background" alt="Performance-impacting apps" width="600"></p> <p><strong>Figure 1.</strong> Performance-impacting apps.</p> <p> Apps terminated due to resource overuse are listed here (see Figure 2). The listed apps can be prioritized. To learn more, see <a href="#app-performance-setting">Prioritize app performance setting</a>. </p> <p><img src="https://source.android.com/static/docs/automotive/images/watchdog-perf-apps-02.png" class="screenshot android-image-dark-theme-background" alt="List of apps terminated due to resource overuse" width="600"></p> <p><strong>Figure 2.</strong> List of apps terminated due to resource overuse.</p> <h3 id="user-notification">User notification</h3> <p>When an app or service repeatedly overuses disk I/O (for example, writes data to disk beyond the defined thresholds) within a certain period and is safe to be terminated on resource overuse, the user is notified after the vehicle enters the allow-driver-distraction state.</p> <p>The first user notification (during a drive) is posted as a heads-up notification and the other notifications are posted on the notification center.</p> <p>For example, when an app repeatedly overuses disk I/O, the user receives the following notification:</p> <ul> <li>When the user clicks on the <strong>Prioritize app</strong> button, the app's settings page is launched, where the user can toggle on or off the <strong>Prioritize app performance</strong> setting.</li> <li>When the user clicks on the <strong>Disable app</strong> button, the app is disabled until the user launches the app or enables it on the app's settings page. </li> </ul> <aside class="important"><strong>Important:</strong>When apps are disabled either by Watchdog or the user through a user notification, the apps disappear from the default launcher app. For details, see <a href="#launcher-impl">Recommendation for launcher implementation</a>.</aside> <ul> <li>For uninstallable apps, the <strong>Disable app</strong> button is replaced with the <strong>Uninstall app</strong> button. When the user clicks on the <strong>Uninstall app</strong> button, the app's Settings page is launched, from which the user can uninstall the app. <p><img src="https://source.android.com/static/docs/automotive/images/watchdog_03.jpg" width="550"></p> <p><img src="https://source.android.com/static/docs/automotive/images/watchdog_04.png" class="screenshot android-image-dark-theme-background" width="550"></p> </li> </ul> <h3 id="launcher-impl">Recommendation for launcher implementation</h3> <p>When apps are disabled due to resource overuse, the apps disappear from the default launcher app because CarService updates the apps' enabled state as <code translate="no" dir="ltr"><a href="https://developer.android.com/reference/android/content/pm/PackageManager#COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED">PackageManager.COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED</a></code>. OEMs must update the builtin launcher implementation to display these apps as usual, so users can use them if needed. See the following recommendations based on the build release.</p> <h3 id="android-sc-v2-release">Android SC V2 release</h3> <ul> <li>The launcher implementation should use the <code translate="no" dir="ltr"><a href="https://developer.android.com/reference/android/content/pm/PackageManager#MATCH_DISABLED_UNTIL_USED_COMPONENTS">MATCH_DISABLED_UNTIL_USED_COMPONENTS</a></code> flag when retrieving the list of packages to show on the launcher.</li> <li>When the user clicks an apps that is in the <code translate="no" dir="ltr"><a href="https://developer.android.com/reference/android/content/pm/PackageManager#COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED">PackageManager.COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED</a></code> state, the launcher app must enable the app by setting the enabled state as: <p><code translate="no" dir="ltr"><a href="https://developer.android.com/reference/android/content/pm/PackageManager#COMPONENT_ENABLED_STATE_ENABLED">PackageManager.COMPONENT_ENABLED_STATE_ENABLED</a></code>.</p> </li> </ul> <aside class="note"><strong>Note:</strong> See the reference launcher implementation for guidance.</aside><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/watchdog/wd_flash_memory" class="_attribution-link">https://source.android.com/docs/automotive/watchdog/wd_flash_memory</a>
+  </p>
+</div>

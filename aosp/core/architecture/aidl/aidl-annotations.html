@@ -1,0 +1,168 @@
+<h1>Annotations in AIDL</h1>  <p>AIDL supports annotations that give the AIDL compiler extra info about the annotated element, which also affects the generated stub code.</p> <p>The syntax is similar to that of Java:</p> 
+<pre>@AnnotationName(argument1=value, argument2=value) AidlEntity
+</pre> <p>Here, <code translate="no" dir="ltr">AnnotationName</code> is the name of the annotation, and <code translate="no" dir="ltr">AidlEntity</code> is an AIDL entity like <code translate="no" dir="ltr">interface Foo</code>, <code translate="no" dir="ltr">void method()</code>, or <code translate="no" dir="ltr">int arg</code>. An annotation is attached to the entity that follows it.</p> <p>Some annotations can have arguments set inside the parentheses, as shown in the previous example. Annotations that don't have an argument don't need the parentheses. For example:</p> 
+<pre>@AnnotationName AidlEntity
+</pre> <p>These annotations aren't the same as the Java annotations, although they look similar. All annotations are all predefined, and have restrictions for where you can attach them. Some annotations affect only a certain backend and are no-op in other backends.</p> <p>Here is the list of predefined AIDL annotations:</p> <table> <tr>
+<th>Annotations</th>
+<th>Added in Android version</th>
+</tr> <tr>
+<td><code translate="no" dir="ltr">nullable</code></td>
+<td>7</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">utf8InCpp</code></td>
+<td>7</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">VintfStability</code></td>
+<td>11</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">UnsupportedAppUsage</code></td>
+<td>10</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">Hide</code></td>
+<td>11</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">Backing</code></td>
+<td>11</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">NdkOnlyStableParcelable</code></td>
+<td>14</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">JavaOnlyStableParcelable</code></td>
+<td>11</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">JavaDerive</code></td>
+<td>12</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">JavaPassthrough</code></td>
+<td>12</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">FixedSize</code></td>
+<td>12</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">Descriptor</code></td>
+<td>12</td>
+</tr> </table> <aside class="note"><strong>Note:</strong><span> The AIDL compiler parses <code translate="no" dir="ltr">@hide</code> and <code translate="no" dir="ltr">@deprecated</code> in comments.</span></aside> <h2 id="nullable">nullable</h2> <p><code translate="no" dir="ltr">nullable</code> declares that the value of the annotated entity can be null.</p> <p>You can attach this annotation only to method return types, method parameters, and parcelable fields:</p> 
+<pre>interface IFoo {
+    // method return types
+    @nullable Data method();
+
+    // method parameters
+    void method2(in @nullable Data d);
+}
+
+parcelable Data {
+    // parcelable fields
+    @nullable Data d;
+}
+</pre> <p>Annotations can't be attached to primitive types. The following is an error:</p> 
+<pre>void method(in @nullable int a); // int is a primitive type
+</pre> <p>This annotation is no-op for the Java backend. In Java, all nonprimitive types are passed by reference, which could be <code translate="no" dir="ltr">null</code>.</p> <p>In the CPP backend, <code translate="no" dir="ltr">@nullable T</code> maps to <code translate="no" dir="ltr">std::unique_ptr&lt;T&gt;</code> in Android 11 or lower, and to <code translate="no" dir="ltr">std::optional&lt;T&gt;</code> in Android 12 or higher.</p> <p>In the NDK backend, <code translate="no" dir="ltr">@nullable T</code> maps to <code translate="no" dir="ltr">std::optional&lt;T&gt;</code>.</p> <p>In the Rust backend, <code translate="no" dir="ltr">@nullable T</code> maps to <code translate="no" dir="ltr">Option&lt;T&gt;</code>.</p> <p>For a list-like type <code translate="no" dir="ltr">L</code> such as <code translate="no" dir="ltr">T[]</code> or <code translate="no" dir="ltr">List&lt;T&gt;</code>, <code translate="no" dir="ltr">@nullable L</code> maps to <code translate="no" dir="ltr">std::optional&lt;std::vector&lt;std::optional&lt;T&gt;&gt;&gt;</code> (or <code translate="no" dir="ltr">std::unique_ptr&lt;std::vector&lt;std::unique_ptr&lt;T&gt;&gt;&gt;</code> in case of the CPP backend for Android 11 or lower).</p> <p>There is an exception to this mapping. When <code translate="no" dir="ltr">T</code> is <code translate="no" dir="ltr">IBinder</code> or an AIDL interface, <code translate="no" dir="ltr">@nullable</code> is a no-op for the Java, CPP, and NDK backends. For example, in the CPP backend, both <code translate="no" dir="ltr">@nullable IBinder</code> and <code translate="no" dir="ltr">IBinder</code> equally map to <code translate="no" dir="ltr">android::sp&lt;IBinder&gt;</code>, which is already nullable because it is a strong <em>pointer</em> (CPP and NDK reads still enforce nullability, but the type remains <code translate="no" dir="ltr">android::sp&lt;IBinder&gt;</code> or <code translate="no" dir="ltr">ndk::SpAIBinder</code>).</p> <p>In the Rust backend, types that don't implement <code translate="no" dir="ltr">Default</code> (<code translate="no" dir="ltr">IBinder</code>, AIDL interfaces, <code translate="no" dir="ltr">ParcelFileDescriptor</code>, and unstructured parcelables) map to <code translate="no" dir="ltr">Option&lt;T&gt;</code> depending on their context:</p> <ul> <li>
+<strong>Method return types, <code translate="no" dir="ltr">in</code> parameters, and <code translate="no" dir="ltr">inout</code> parameters:</strong> These types are nullable only if annotated with <code translate="no" dir="ltr">@nullable</code>, mapping to <code translate="no" dir="ltr">Option&lt;T&gt;</code> (or <code translate="no" dir="ltr">Option&lt;&amp;T&gt;</code> for <code translate="no" dir="ltr">in</code> parameters and <code translate="no" dir="ltr">&amp;mut Option&lt;T&gt;</code> for <code translate="no" dir="ltr">inout</code> parameters). Without <code translate="no" dir="ltr">@nullable</code>, they map directly to <code translate="no" dir="ltr">T</code> (or <code translate="no" dir="ltr">&amp;T</code> and <code translate="no" dir="ltr">&amp;mut T</code>).</li> <li>
+<strong>Parcelable fields and <code translate="no" dir="ltr">out</code> parameters:</strong> Because generated Rust parcelables derive <code translate="no" dir="ltr">Default</code> and <code translate="no" dir="ltr">out</code> parameters are default-initialized, these types always map to <code translate="no" dir="ltr">Option&lt;T&gt;</code> (and fixed-size arrays in these contexts map to <code translate="no" dir="ltr">[Option&lt;T&gt;; N]</code>, while dynamic arrays in <code translate="no" dir="ltr">out</code> parameters map to <code translate="no" dir="ltr">Vec&lt;Option&lt;T&gt;&gt;</code>), even without <code translate="no" dir="ltr">@nullable</code>. When not annotated with <code translate="no" dir="ltr">@nullable</code>, non-nullability is still enforced at runtime during parceling (returning <code translate="no" dir="ltr">StatusCode::UNEXPECTED_NULL</code> if the value is <code translate="no" dir="ltr">None</code>).</li> </ul> <p>Beginning with Android 13, <code translate="no" dir="ltr">@nullable(heap=true)</code> can be used for parcelable fields to model recursive types. <code translate="no" dir="ltr">@nullable(heap=true)</code> can't be used with method parameters or return types. When annotated with it, the field is mapped to a heap-allocated reference <code translate="no" dir="ltr">std::unique_ptr&lt;T&gt;</code> in the CPP and NDK backends. <code translate="no" dir="ltr">@nullable(heap=true)</code> is no-op in the Java backend.</p> <h2 id="utf8incpp">utf8InCpp</h2> <p><code translate="no" dir="ltr">utf8InCpp</code> declares that <code translate="no" dir="ltr">String</code> is represented in UTF8 format for the CPP backend. As its name indicates, the annotation is a no-op for other backends. Specifically, <code translate="no" dir="ltr">String</code> is always UTF16 in the Java backend and UTF8 in the NDK backend.</p> <p>This annotation can be attached anywhere the <code translate="no" dir="ltr">String</code> type can be used, including return values, parameters, constant declarations, and parcelable fields.</p> <p>For the CPP backend, <code translate="no" dir="ltr">@utf8InCpp String</code> in AIDL maps to <code translate="no" dir="ltr">std::string</code>, where <code translate="no" dir="ltr">String</code> without the annotation maps to <code translate="no" dir="ltr">android::String16</code> where UTF16 is used.</p> <aside class="note"><strong>Note:</strong><span> The existence of the <code translate="no" dir="ltr">utf8InCpp</code> annotation doesn't change the way strings are transmitted over the wire. Strings are always transmitted as UTF16 over the wire. A <code translate="no" dir="ltr">utf8InCpp</code> annotated string is converted to UTF16 before it's transmitted. When a string is received, it is converted from UTF16 to UTF8 if it was annotated as <code translate="no" dir="ltr">utf8InCpp</code>.</span></aside> <h2 id="vintfstability">VintfStability</h2> <p><code translate="no" dir="ltr">VintfStability</code> declares that a user-defined type (interface, parcelable, and enum) can be used across the system and vendor domains. See <a href="aidl-hals">AIDL for HALs</a> for more about system-vendor interoperability.</p> <p>The annotation doesn't change the signature of the type, but when it's set, the instance of the type is marked as stable so that it can travel across the vendor and system processes.</p> <p>The annotation can be attached only to user-defined type declarations as shown here:</p> 
+<pre>@VintfStability
+interface IFoo {
+    ....
+}
+
+@VintfStability
+parcelable Data {
+    ....
+}
+
+@VintfStability
+enum Type {
+    ....
+}
+</pre> <p>When a type is annotated with <code translate="no" dir="ltr">VintfStability</code>, any other type that is referenced in the type should also be annotated as such. In the following example, <code translate="no" dir="ltr">Data</code> and <code translate="no" dir="ltr">IBar</code> should both be annotated with <code translate="no" dir="ltr">VintfStability</code>:</p> 
+<pre>@VintfStability
+interface IFoo {
+    void doSomething(in IBar b); // references IBar
+    void doAnother(in Data d); // references Data
+}
+
+@VintfStability // required
+interface IBar {...}
+
+@VintfStability // required
+parcelable Data {...}
+</pre> <p>In addition, the AIDL files defining types annotated with <code translate="no" dir="ltr">VintfStability</code> can only be built using the <code translate="no" dir="ltr">aidl_interface</code> Soong module type, with the <code translate="no" dir="ltr">stability</code> property set to <code translate="no" dir="ltr">vintf</code>:</p> 
+<pre>aidl_interface {
+    name: "my_interface",
+    srcs: [...],
+    stability: "vintf",
+}
+</pre> <h2 id="unsupportedappusage">UnsupportedAppUsage</h2> <p>The <code translate="no" dir="ltr">UnsupportedAppUsage</code> annotation denotes that the annotated AIDL type is part of the non-SDK interface that has been accessible for legacy apps. See <a href="https://developer.android.com/distribute/best-practices/develop/restrictions-non-sdk-interfaces">Restrictions on non-SDK interfaces</a> for more information about the hidden APIs.</p> <p>The <code translate="no" dir="ltr">UnsupportedAppUsage</code> annotation doesn't affect the behavior of the generated code. The annotation annotates only the generated Java class with the Java annotation of the same name:</p> 
+<pre>// in AIDL
+@UnsupportedAppUsage
+interface IFoo {...}
+
+// in Java
+@android.compat.annotation.UnsupportedAppUsage
+public interface IFoo {...}
+</pre> <p>This is a no-op for non-Java backends.</p> <h2 id="backing">Backing annotation</h2> <p>The <code translate="no" dir="ltr">Backing</code> annotation specifies the storage type of an AIDL enum type:</p> 
+<pre>@Backing(type="int")
+enum Color { RED, BLUE, }
+</pre> <p>In the CPP backend, this emits a C++ enum class of type <code translate="no" dir="ltr">int32_t</code>:</p> 
+<pre>enum class Color : int32_t {
+    RED = 0,
+    BLUE = 1,
+}
+</pre> <p>If the annotation is omitted, <code translate="no" dir="ltr">type</code> is assumed to be <code translate="no" dir="ltr">byte</code>, which maps to <code translate="no" dir="ltr">int8_t</code> for the CPP backend.</p> <p>The <code translate="no" dir="ltr">type</code> argument can be set only to the following integral types:</p> <ul> <li>
+<code translate="no" dir="ltr">byte</code> (8-bit wide)</li> <li>
+<code translate="no" dir="ltr">int</code> (32-bit wide)</li> <li>
+<code translate="no" dir="ltr">long</code> (64-bit wide)</li> </ul> <h2 id="ndkonlystableparcelable">NdkOnlyStableParcelable</h2> <p><code translate="no" dir="ltr">NdkOnlyStableParcelable</code> marks a parcelable declaration (not definition) as stable so that it can be referenced from other stable AIDL types. This is like <a href="#javaonlystableparcelable"><code translate="no" dir="ltr">JavaOnlyStableParcelable</code></a>, but <code translate="no" dir="ltr">NdkOnlyStableParcelable</code> marks a parcelable declaration as stable for the NDK backend instead of for Java.</p> <p>To use this parcelable:</p> <ul> <li>You must specify <code translate="no" dir="ltr">ndk_header</code>.</li> <li>You must have an NDK library specifying the parcelable and the library must be compiled into the library. For example, in the core build system on a <code translate="no" dir="ltr">cc_*</code> module, use <code translate="no" dir="ltr">static_libs</code> or <code translate="no" dir="ltr">shared_libs</code>. For <code translate="no" dir="ltr">aidl_interface</code>, add the library under <code translate="no" dir="ltr">additional_shared_libraries</code> in <code translate="no" dir="ltr">Android.bp</code>.</li> </ul> <h2 id="javaonlystableparcelable">JavaOnlyStableParcelable</h2> <p><code translate="no" dir="ltr">JavaOnlyStableParcelable</code> marks a parcelable declaration (not definition) as stable so that it can be referenced from other stable AIDL types.</p> <p>Stable AIDL requires that all user-defined types are stable. For parcelables, being stable requires that its fields are explicitly described in the AIDL source file:</p> 
+<pre>parcelable Data { // Data is a structured parcelable.
+    int x;
+    int y;
+}
+
+parcelable AnotherData { // AnotherData is also a structured parcelable
+    Data d; // OK, because Data is a structured parcelable
+}
+</pre> <p>If the parcelable is unstructured (or just declared), then it can't be referenced:</p> 
+<pre>parcelable Data; // Data is NOT a structured parcelable
+
+parcelable AnotherData {
+    Data d; // Error
+}
+</pre> <p><code translate="no" dir="ltr">JavaOnlyStableParcelable</code> lets you override the check when the parcelable you're referencing is safely available as part of the Android SDK:</p> 
+<pre>@JavaOnlyStableParcelable
+parcelable Data;
+
+parcelable AnotherData {
+    Data d; // OK
+}
+</pre> <h2 id="javaderive">JavaDerive</h2> <p><code translate="no" dir="ltr">JavaDerive</code> automatically generates methods for parcelable types in the Java backend:</p> 
+<pre>@JavaDerive(equals = true, toString = true)
+parcelable Data {
+  int number;
+  String str;
+}
+</pre> <p>The annotation requires additional parameters to control what to generate. The supported parameters are:</p> <ul> <li>
+<code translate="no" dir="ltr">equals=true</code> generates <code translate="no" dir="ltr">equals</code> and <code translate="no" dir="ltr">hashCode</code> methods.</li> <li>
+<code translate="no" dir="ltr">toString=true</code> generates <code translate="no" dir="ltr">toString</code> method that prints the name of the type and fields, for example, <code translate="no" dir="ltr">Data{number: 42, str: foo}</code>.</li> </ul> <h2 id="javadefault">JavaDefault (deprecated)</h2> <aside class="deprecated"><strong>Deprecated:</strong><span> The JavaDefault annotation is deprecated and isn't used by Android. If used, it's unclear which object receives the call.</span></aside> <p><code translate="no" dir="ltr">JavaDefault</code>, added in Android 13, controls whether the default implementation versioning support is generated (for <code translate="no" dir="ltr">setDefaultImpl</code>). This support is no longer generated by default in order to save space.</p> <h2 id="javapassthrough">JavaPassthrough</h2> <p><code translate="no" dir="ltr">JavaPassthrough</code> lets the generated Java API be annotated with an arbitrary Java annotation.</p> <p>These annotations in AIDL:</p> 
+<pre>@JavaPassthrough(annotation="@android.annotation.Alice")
+@JavaPassthrough(annotation="@com.android.Alice(arg=com.android.Alice.Value.A)")
+</pre> <p>become the following in the generated Java code:</p> 
+<pre>@android.annotation.Alice
+@com.android.Alice(arg=com.android.Alice.Value.A)
+</pre> <p>The value of the <code translate="no" dir="ltr">annotation</code> parameter is directly emitted. The AIDL compiler doesn't examine the value of the parameter. If there's any Java-level syntax error, it won't be caught by the AIDL compiler but by the Java compiler.</p> <p>This annotation can be attached to any AIDL entity. This annotation is a no-op for non-Java backends.</p> <h2 id="rustderive">RustDerive</h2> <p><code translate="no" dir="ltr">RustDerive</code> automatically implements traits for generated Rust types.</p> <p>The annotation requires additional parameters to control what to generate. The supported parameters are:</p> <ul> <li><code translate="no" dir="ltr">Copy=true</code></li> <li><code translate="no" dir="ltr">Clone=true</code></li> <li><code translate="no" dir="ltr">Ord=true</code></li> <li><code translate="no" dir="ltr">PartialOrd=true</code></li> <li><code translate="no" dir="ltr">Eq=true</code></li> <li><code translate="no" dir="ltr">PartialEq=true</code></li> <li><code translate="no" dir="ltr">Hash=true</code></li> </ul> <p>For explanations of these traits, see <a href="https://doc.rust-lang.org">Rust Documentation</a>.</p> <h2 id="fixedsize">FixedSize</h2> <p><code translate="no" dir="ltr">FixedSize</code> marks a structured parcelable as fixed size. After it's marked, you can't add new fields to the parcelable. All fields of the parcelable must be fixed sized types, including primitive types, enums, fixed-size arrays, and other parcelables marked with <code translate="no" dir="ltr">FixedSize</code>.</p> <aside class="note"><strong>Note:</strong><span> For forward compatibility, for <code translate="no" dir="ltr">@FixedSize</code> unions, we recommend allocating a fixed amount of space in a dedicated field of an array type within the union, to reserve room to add additional fields.</span></aside> <p><code translate="no" dir="ltr">FixedSize</code> objects have stable sizes and alignements in the <code translate="no" dir="ltr">ndk</code> backend.</p> <table> <tr> <th>Type</th> <th>Size (bytes)</th> <th>Alignment (bytes)</th> </tr> <tr> <td><code translate="no" dir="ltr">boolean</code></td> <td><code translate="no" dir="ltr">1</code></td> <td><code translate="no" dir="ltr">1</code></td> </tr> <tr> <td><code translate="no" dir="ltr">byte</code></td> <td><code translate="no" dir="ltr">1</code></td> <td><code translate="no" dir="ltr">1</code></td> </tr> <tr> <td><code translate="no" dir="ltr">char</code></td> <td><code translate="no" dir="ltr">2</code></td> <td><code translate="no" dir="ltr">2</code></td> </tr> <tr> <td><code translate="no" dir="ltr">int</code></td> <td><code translate="no" dir="ltr">4</code></td> <td><code translate="no" dir="ltr">4</code></td> </tr> <tr> <td><code translate="no" dir="ltr">long</code></td> <td><code translate="no" dir="ltr">8</code></td> <td><code translate="no" dir="ltr">8</code></td> </tr> <tr> <td><code translate="no" dir="ltr">float</code></td> <td><code translate="no" dir="ltr">4</code></td> <td><code translate="no" dir="ltr">4</code></td> </tr> <tr> <td><code translate="no" dir="ltr">double</code></td> <td><code translate="no" dir="ltr">8</code></td> <td><code translate="no" dir="ltr">8</code></td> </tr> <tr> <td><code translate="no" dir="ltr">parcelable</code></td> <td>Total size of all fields</td> <td>Largest alignment of all fields</td> </tr> <tr> <td><code translate="no" dir="ltr">union</code></td> <td>Largest size of all fields</td> <td>Largest alignment of all fields</td> </tr> <tr> <td><code translate="no" dir="ltr">enum</code></td> <td>Size of backing type</td> <td>Alignment of backing type</td> </tr> <tr> <td>
+<code translate="no" dir="ltr">T[N]</code> (fixed-size array)</td> <td>Size of <code translate="no" dir="ltr">T * N</code>
+</td> <td>Alignment of <code translate="no" dir="ltr">T</code>
+</td> </tr> <tr> <td><code translate="no" dir="ltr">String, IBinder, FileDescriptor, ParcelFileDescriptor</code></td> <td><code translate="no" dir="ltr">N/A</code></td> <td><code translate="no" dir="ltr">N/A</code></td> </tr> </table> <aside class="note"><strong>Note:</strong><span> <code translate="no" dir="ltr">cpp</code> backend parcelables from libbinder have virtual table pointers in the objects, so they can't be used with Fast Message Queue (FMQ) even with the <code translate="no" dir="ltr">FixedSize</code> annotation.</span></aside> <h2 id="descriptor">Descriptor</h2> <p><code translate="no" dir="ltr">Descriptor</code> forcibly specifies the interface descriptor of an interface:</p> 
+<pre>package android.foo;
+
+@Descriptor(value="android.bar.IWorld")
+interface IHello {...}
+</pre> <p>The descriptor of this interface is <code translate="no" dir="ltr">android.bar.IWorld</code>. If the <code translate="no" dir="ltr">Descriptor</code> annotation is missing, the descriptor would be <code translate="no" dir="ltr">android.foo.IHello</code>.</p> <p>This is useful for renaming an already published interface. Making the descriptor of the renamed interface the same as the descriptor of the interface before the renaming allows the two interfaces to talk to each other.</p> <h2 id="hide">@hide in comments</h2> <p>The AIDL compiler recognizes <code translate="no" dir="ltr">@hide</code> in comments and passes it through to Java output for metalava to pickup. This comment helps ensure that the Android build system recognizes that AIDL APIs aren't SDK APIs.</p> <h2 id="deprecated">@deprecated in comments</h2> <p>The AIDL compiler recognizes <code translate="no" dir="ltr">@deprecated</code> in comments as a tag to identify an AIDL entity that should no longer be used:</p> 
+<pre>interface IFoo {
+  /** @deprecated use bar() instead */
+  void foo();
+  void bar();
+}
+</pre> <p>Each backend marks deprecated entities with a backend-specific annotation or attribute so that the client code is warned if it refers the deprecated entities. For example, the <code translate="no" dir="ltr">@Deprecated</code> annotation and the <code translate="no" dir="ltr">@deprecated</code> tag are attached to the Java generated code.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/aidl/aidl-annotations" class="_attribution-link">https://source.android.com/docs/core/architecture/aidl/aidl-annotations</a>
+  </p>
+</div>

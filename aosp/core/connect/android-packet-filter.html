@@ -1,0 +1,170 @@
+<h1>Android Packet Filter</h1>  <p>Android Packet Filter (APF) lets the framework control hardware packet filtering logic at runtime. This lets the system save power by dropping packets in hardware, while allowing the Android framework to change filtering rules at runtime based on network conditions.</p> <h2 id="overview">APF overview</h2> <p>APF consists of two main components:</p> <ul> <li>
+<strong>The APF interpreter</strong> runs on networking hardware (typically, the Wi-Fi chipset). The APF interpreter runs APF bytecode on packets received by the hardware and decides whether to accept, drop, or reply to them.</li> <li>
+<strong>The APF program generation code</strong> runs on the main CPU. The code creates and updates APF programs according to network and device state.</li> </ul> <p>Wi-Fi HAL methods allow the Android framework to install the APF program bytecode and to read the current counters. The <a href="../ota/modular-system/networking">Network Stack Mainline module</a> can update the APF program bytecode at any time while APF is running.</p> <p>There are several APF filters implemented. For example, APF includes filters to drop disallowed ethertypes, filter IPv6 router advertisement (RA) packets, filter multicast and broadcast traffic if the multicast lock isn't held, drop DHCP packets for other hosts, and drop unsolicited address resolution protocol (ARP) and neighbor discovery (ND) packets. If the firmware supports APFv6, <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/NetworkStack/src/android/net/apf/ApfFilter.java"><code translate="no" dir="ltr">ApfFilter</code></a> also generates rules to reply to common packet types that would otherwise require the CPU to wake up to respond, such as ARP queries and NS queries. The full list of filters is defined in <code translate="no" dir="ltr">ApfFilter</code>.</p> <p>Because the APF program generation code is part of the Network Stack module, you can use monthly <a href="../ota/modular-system">Mainline updates</a> to add new filters and update the filtering logic.</p> <h2 id="apf-revision">APF revision</h2> <p>The following list describes the revision history of APF:</p> <ul> <li>
+<strong>APFv6:</strong> Introduced in Android 15, this version supports packet filtering, includes counters for debugging and metrics, and supports packet transmission.</li> <li>
+<strong>APFv4:</strong> Introduced in Android 10, this version supports packet filtering and includes counters for debugging and metrics.</li> <li>
+<strong>APFv2:</strong> Introduced in Android 7, this version supports packet filtering.</li> </ul> <h2 id="apf-integration">APF integration</h2> <p>The APF APIs between the APF interpreter and the hardware are defined in <code translate="no" dir="ltr">apf_interpreter.h</code> (<a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/google/apf/v4/apf_interpreter.h">APFv4</a>, <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/google/apf/v6/apf_interpreter.h">APFv6</a>). The Wi-Fi firmware code calls <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/google/apf/v4/apf_interpreter.h"><code translate="no" dir="ltr">accept_packet()</code></a> in APFv4 or <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/google/apf/v6/apf_interpreter.h"><code translate="no" dir="ltr">apf_run()</code></a> in APFv6 to determine if the packet should be dropped (zero return value) or passed to the app processor (nonzero return value). If a packet needs to be transmitted, <code translate="no" dir="ltr">apf_run()</code> also returns zero because its packet doesn't need to be passed to the app processor. If the firmware supports APFv6, it must implement the <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/google/apf/v6/apf_interpreter.h"><code translate="no" dir="ltr">apf_allocate_buffer()</code></a> and <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/google/apf/v6/apf_interpreter.h"><code translate="no" dir="ltr">apf_transmit_buffer()</code></a> APIs. The APF interpreter calls these two APIs during packet transmission logic. APF instructions are variable length. Each instruction is at least 1 byte in length. The APF instruction codes are defined in <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/google/apf/v4/apf.h"><code translate="no" dir="ltr">apf.h</code></a> for APFv4 and are inlined directly within <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/google/apf/v6/apf_interpreter.c"><code translate="no" dir="ltr">apf_interpreter.c</code></a> for APFv6.</p> <p>APF relies on dedicated memory. The memory is used for both the APF program itself and for data storage, and the memory must not be cleared or written by the chipset except through the APF HAL methods. The APF bytecode uses the data storage to store counters for accepted and dropped packets. You can read the data region from the Android framework. APF instructions are memory efficient, but maximizing their power-saving and functionality potential demands complex, dynamic filtering rules. This complexity necessitates a dedicated portion of on-chipset memory. The minimum memory requirement for APFv4 is 1024 bytes, while APFv6 requires 2048 bytes. However, we strongly recommend that you allocate 4096 bytes for APFv6 to verify optimal performance. The APF interpreter must be compiled into firmware. Both APFv4 and APFv6 interpreters are optimized for code size. Under arm32 architecture, the compiled APFv4 interpreter is around 1.8 KB, while the more complex APFv6 interpreter, with added features (for example, built-in checksum support and built-in DNS decompression code), is approximately 4 KB.</p> <p>APF filters can work alongside other chipset vendor-specific filters within the firmware. You can choose to run your filtering logic either before or after the APF filtering process. If a packet is dropped before reaching the APF filter, the APF filter doesn't process the packet.</p> <p>To verify correct APF filter functionality, when APF is turned on, verify that the firmware provides the APF filter with access to the entire packet, not just the header.</p> <h2 id="apf-program-samples">APF program samples</h2> <p><a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/NetworkStack/tests/unit/src/android/net/apf/ApfTest.java"><code translate="no" dir="ltr">ApfTest</code></a> and <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/NetworkStack/tests/unit/src/android/net/apf/ApfFilterTest.kt"><code translate="no" dir="ltr">ApfFilterTest</code></a> contain sample test programs that illustrate how each APF filter works. To study the actual generated program, modify the test case to print the program as a hex string.</p> <p>The <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/google/apf/testdata/"><code translate="no" dir="ltr">testdata</code></a> folder contains sample APFv4 programs for APF RA filters. The <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/google/apf/samples/"><code translate="no" dir="ltr">samples</code></a> folder contains Python utilities that generate APFv6 offload programs. For more details, see the documentation in the Python utility files.</p> <h2 id="debug-apf">Debug APF</h2> <p>To check if APF is enabled on your device, display the current program, show the current counters, and run the <code translate="no" dir="ltr">adb shell dumpsys network_stack</code> command. The following is an example of this command:</p> 
+<pre>adb shell dumpsys network_stack
+......
+IpClient.wlan0 APF dump:
+    Capabilities: ApfCapabilities{version: 4, maxSize: 4096, format: 1}
+......
+    Last program:
+      6bfcb03a01b8120c6b9494026506006b907c025e88a27c025988a47c025488b87c024f88cd7c024a88e17c024588e384004408066a0e6bdca4022b000600010800060412147a1e016bd884021f00021a1c6b8c7c021c0000686bd4a402080006ffffffffffff6a266bbca402010004c0a801eb6bf87401f6120c84005f08000a17821f1112149c00181fffab0d2a108211446a3239a20506c2fc393057dd6bf47401cb0a1e52f06bac7c01c600e06bb41a1e7e000001b9ffffffff6bb07e000001aec0a801ff6be868a4019a0006ffffffffffff6bb874019b6bf07401907c001386dd686bd0a4017d0006ffffffffffff6bc874017e0a147a0e3a6b980a267c017000ff6be07401650a366ba87c016200858219886a26a2050fff02000000000000000000000000006ba4740146aa0e84013700e6aa0f8c0130006068a4011b000f33330000000184c9b26aed4c86dd606a12a2f02600b03afffe8000000000000086c9b2fffe6aed4cff02000000000000000000000000000186006a3aa2e9024000123c92e4606a3ea2d70800000000000000006a56a2ce04030440c01a5a92c9601a5e92c4606a62a2bb04000000006a66a2a6102401fa00049c048400000000000000006a76a29d04030440c01a7a9298601a7e9293606c0082a28904000000006c0086a27310fdfd9ed67950000400000000000000006c0096a2690418033c001a9a9264606c009ea24e102401fa00049c048000000000000000006c00aea24404180330001ab2923f606c00b6a22910fdfd9ed67950000000000000000000006c00c6a21f04190300001aca921a606c00cea20410fdfd9ed67950000400000000000000016bc472086be4b03a01b87206b03a01b87201
+    APF packet counters:
+      TOTAL_PACKETS: 469
+      PASSED_DHCP: 4
+      PASSED_IPV4: 65
+      PASSED_IPV6_NON_ICMP: 64
+      PASSED_IPV4_UNICAST: 64
+      PASSED_IPV6_ICMP: 223
+      PASSED_IPV6_UNICAST_NON_ICMP: 6
+      PASSED_ARP_UNICAST_REPLY: 4
+      PASSED_NON_IP_UNICAST: 1
+      DROPPED_RA: 4
+      DROPPED_IPV4_BROADCAST_ADDR: 7
+      DROPPED_IPV4_BROADCAST_NET: 27</pre> <p>The output for this example <code translate="no" dir="ltr">adb shell dumpsys network_stack</code> command includes the following:</p> <ul> <li>
+<code translate="no" dir="ltr">ApfCapabilities{version: 4, maxSize: 4096, format: 1}</code>: This means the Wi-Fi chips support APF (version 4).</li> <li>
+<code translate="no" dir="ltr">Last program</code>: This section is the latest installed APF program binary in hex string format.</li> <li>
+<code translate="no" dir="ltr">APF packet counters</code>: This section shows how many packets are passed or dropped by APF and the specific reasons.</li> </ul> <p>To decode and disassemble the code into human-readable assembler language, use the <a href="https://android.googlesource.com/platform/hardware/google/apf/+/aee42cded0c886106d7f45142348051888360735/apf_disassembler.c"><code translate="no" dir="ltr">apf_disassembler</code></a> tool. To compile the executable binary, run the <code translate="no" dir="ltr">m apf_disassembler</code> command. The following is an example of how to use the <code translate="no" dir="ltr">apf_disassembler</code> tool:</p> 
+<pre>echo "6bfcb03a01b8120c6b949401e906006b907c01e288a27c01dd88a47c01d888b87c01d388cd7c01ce88e17c01c988e384004008066a0e6bdca401af000600010800060412147a1e016bd88401a300021a1c6b8c7c01a00000686bd4a4018c0006ffffffffffff1a266bc07c018900006bf874017e120c84005408000a17821f1112149c00181fffab0d2a108211446a3239a205065a56483ac3146bf47401530a1e52f06bac7c014e00e06bb41a1e7e00000141ffffffff6be868a4012d0006ffffffffffff6bb874012e6bf07401237c001386dd686bd0a401100006ffffffffffff6bc87401110a147a0d3a6b980a267c010300ff6be072f90a366ba87af8858218886a26a2040fff02000000000000000000000000006ba472ddaa0e82d0aeaa0f8c00c9025868a2b60f5a56483ac3140c8126f3895186dd606a12a28b2600783afffe8000000000000002005efffe00026fff02000000000000000000000000000186006a3aa284024000123c94007d02586a3ea2700800000000000000006a56a26704190500001a5a94006002586a5ea23b2020014860486000000000000000006464200148604860000000000000000000646a7ea23204030440c01a8294002b02581a8694002402586c008aa21a04000000006c008ea204102a0079e10abcf60500000000000000006bc472086be4b03a01b87206b03a01b87201" | out/host/linux-x86/bin/apf_disassembler
+       0: li    r1, -4
+       2: lddw  r0, [r1+0]
+       3: add   r0, 1
+       5: stdw  r0, [r1+0]
+       6: ldh   r0, [12]
+       8: li    r1, -108
+      10: jlt   r0, 0x600, 504
+      15: li    r1, -112
+      17: jeq   r0, 0x88a2, 504
+      22: jeq   r0, 0x88a4, 504
+      27: jeq   r0, 0x88b8, 504
+      32: jeq   r0, 0x88cd, 504
+      37: jeq   r0, 0x88e1, 504
+      42: jeq   r0, 0x88e3, 504
+      47: jne   r0, 0x806, 116
+......</pre> <p>To check APF results offline, use the <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/google/apf/apf_run.c"><code translate="no" dir="ltr">apf_run</code></a> tool. To compile the executable binary, run the <code translate="no" dir="ltr">m apf_run</code> command. The <code translate="no" dir="ltr">apf_run</code> tool supports both APFv4 and APFv6 interpreters.</p> <p>The following is the manual for the <code translate="no" dir="ltr">apf_run</code> command. By default, the <code translate="no" dir="ltr">apf_run</code> command runs in the APFv4 interpreter. Passing the <code translate="no" dir="ltr">--v6</code> argument to <code translate="no" dir="ltr">apf_run</code> lets it run against the APFv6 interpreter. All other arguments can be used for both APFv4 and APFv6.</p> 
+<pre>apf_run --help
+Usage: apf_run --program &lt;program&gt; --pcap &lt;file&gt;|--packet &lt;packet&gt; [--data &lt;content&gt;] [--age &lt;number&gt;] [--trace]
+  --program    APF program, in hex.
+  --pcap       Pcap file to run through program.
+  --packet     Packet to run through program.
+  --data       Data memory contents, in hex.
+  --age        Age of program in seconds (default: 0).
+  --trace      Enable APF interpreter debug tracing
+  --v6         Use APF v6
+  -c, --cnt    Print the APF counters
+  -h, --help   Show this message.</pre> <p>Here is an example to pass one packet to APF to check if the packet can be dropped or passed.</p> <p>To provide the hex binary string presentation of the raw packet, use the <code translate="no" dir="ltr">--packet</code> option. To provide the hex binary string of the data region, which is used to store the <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/NetworkStack/src/android/net/apf/ApfCounterTracker.java">APF counter</a>, use the <code translate="no" dir="ltr">--data</code> option. Because each counter is 4 bytes long, the data regions must be long enough to make sure no buffer overflow occurs.</p> 
+<pre>out/host/linux-x86/bin/apf_run --program 6bfcb03a01b8120c6b9494010c06006b907c010588a27c010088a47c00fb88b87c00f688cd7c00f188e17c00ec88e384003908066a0e6bdca2d40600010800060412147a18016bd882ca021a1c6b8c7ac900686bd4a2b706ffffffffffff6a266bbca2b204c0a814656bf872a8120c84005808000a17821e1112149c00171fffab0d2a108210446a3239a204064651dbcc88ff6bf4727e0a1e52f06bac7a7be06bb41a1e7e0000006effffffff6bb07e00000063c0a814ff6be868a25106ffffffffffff6bb872536bf072497c001086dd686bd0a23806ffffffffffff6bc8723a0a147a0b3a6b980a267a2eff6be072240a366ba87a23858218886a26a2040fff02000000000000000000000000006ba472086be4b03a01b87206b03a01b87201 --packet 5ebcd79a8f0dc244efaab81408060001080006040002c244efaab814c0a8ca1e5ebcd79a8f0d --data 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+Packet passed
+Data: 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000001</pre> <p>To check APF results against the pcap file taken by tcpdump, use the <code translate="no" dir="ltr">apf_run</code> command as follows:</p> 
+<pre>out/host/linux-x86/bin/apf_run --program 6bfcb03a01b8120c6b989401df06006b947c01d888a27c01d388a47c01ce88b87c01c988cd7c01c488e17c01bf88e384004408066a0e6bdca401a5000600010800060412147a1e016bd884019900021a1c6b907c01960000686bd4a401820006ffffffffffff6a266bc0a4017b0004c0a82b056bf874017084005f08000a17821f1112149c00181fffab0d2a108211446a3239a20506fabe589435936bf47401470a1e52f06bb07c014200e06bb81a1e7e00000135ffffffff6bb47e0000012ac0a82bff6be868a401160006ffffffffffff6bbc7401176bf074010c7c001086dd686bd0a2fb06ffffffffffff6bcc72fd0a147a0b3a6b9c0a267af1ff6be072e70a366bac7ae6858218886a26a2040fff02000000000000000000000000006ba872cbaa0e82be8eaa0f8c00b7025868a2a40ffabe5894359352a9874d08aa86dd606a12a2792600583afffe80000000000000f7d4e8ccd81ddb43fe80000000000000f8be58fffe94359386006a3aa272024108123c94006b02586a3ea25e0800000000000000006a56a25504030440c01a5a94004e02581a5e94004702586a62a23e04000000006a66a229102409891f9a26ae6d00000000000000006a76a22004190300001a7a94001902586a7ea204102409891f9a26ae6dba98e781ca9ef9ba6bc872086be4b03a01b87206b03a01b87201 --pcap apf.pcap --data 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+37 packets dropped
+1733 packets passed
+Data: 00000000000000000000000000000000000000000200000005000000000000000000000002000000000000001b000000000000000000000001000000000000000000000000000000000000000000000000000000000000000000000689000000000000003c00000000000000000000000000000000000006ea</pre> <p>To test APFv6 transmit capabilities, use the <code translate="no" dir="ltr">apf_run</code> command as follows:</p> 
+<pre>$ apf_run --program 75001001020304050608060001080006040002AA300E3CAA0FBA06AA09BA07AA08BA086A01BA09120C84006F08066A0EA30206000108000604032B12147A27017A020203301A1C820200032D68A30206FFFFFFFFFFFF020E1A267E000000020A000001032C020B1A267E000000020A000001032CAB24003CCA0606CB0306CB090ACB0306C60A000001CA0606CA1C04AA
+0A3A12AA1AAA25FFFF032F020D120C84001708000A1782100612149C00091FFFAB0D2A10820207032A02117C000E86DD68A30206FFFFFFFFFFFF021603190A1482020002187A023A02120A36820285031F8216886A26A2020FFF020000000000000000000000000003200214 --packet FFFFFFFFFFFF112233445566080600010800060400011122334455660A0000020000000000000A0000
+01 --data 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 --age 0 --v6 --trace
+      R0       R1       PC  Instruction
+-------------------------------------------------
+       0        0        0: data        16, 01020304050608060001080006040002
+       0        0       19: debugbuf    size=3644
+       0        0       23: ldm         r0, m[15]
+       0        0       25: stdw        counter=6, r0
+       0        0       27: ldm         r0, m[9]
+       0        0       29: stdw        counter=7, r0
+       0        0       31: ldm         r0, m[8]
+ 134d811        0       33: stdw        counter=8, r0
+ 134d811        0       35: li          r0, 1
+       1        0       37: stdw        counter=9, r0
+       1        0       39: ldh         r0, [12]
+     806        0       41: jne         r0, 0x806, 157
+     806        0       46: li          r0, 14
+       e        0       48: jbseq       r0, 0x6, 59, 000108000604
+       e        0       59: ldh         r0, [20]
+       1        0       61: jeq         r0, 0x1, 103
+       1        0      103: ldw         r0, [38]
+ a000001        0      105: jeq         r0, 0xa000001, 116
+ a000001        0      116: allocate    60
+ a000001        0      120: pktcopy     src=6, len=6
+ a000001        0      123: datacopy    src=3, len=6
+ a000001        0      126: datacopy    src=9, len=10
+ a000001        0      129: datacopy    src=3, len=6
+ a000001        0      132: write       0x0a000001
+ a000001        0      137: pktcopy     src=6, len=6
+ a000001        0      140: pktcopy     src=28, len=4
+ a000001        0      143: ldm         r0, m[10]
+      2a        0      145: add         r0, 18
+      3c        0      147: stm         r0, m[10]
+      3c        0      149: transmit    ip_ofs=255
+      3c        0      153: drop        counter=47
+Packet dropped
+Data: 00000000000000000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000100000011d8340100000000000000000000000000000000000000000100000078563412
+transmitted packet: 112233445566010203040506080600010800060400020102030405060a0000011122334455660a000002000000000000000000000000000000000000</pre> <p>When you use the <code translate="no" dir="ltr">--trace</code> parameter, the <code translate="no" dir="ltr">apf_run</code> tool provides a detailed output of each step in the interpreter's execution, which is helpful for debugging. In this example, you input an ARP query packet into the APF program. The output shows that the ARP query is dropped, but a reply packet is generated. The details of this generated packet are shown in the <code translate="no" dir="ltr">transmitted packet</code> section.</p> <h2 id="common-integration-issues">Common integration issues</h2> <p>This section highlights several common problems encountered during APF integration:</p> <ul> <li>
+<strong>Unexpected data region clearing:</strong> The APF memory must be entirely dedicated to APF; only the interpreter code or framework code (through HAL API) are allowed to modify the APF memory region.</li> <li>
+<strong>Installation issues with APF programs of X bytes (X &lt;= <code translate="no" dir="ltr">maxLen</code>):</strong> Firmware must support reading or writing any program length up to <code translate="no" dir="ltr">maxLen</code> without failure, crashes, or truncation. Writes must not alter any bytes between <code translate="no" dir="ltr">X</code> and <code translate="no" dir="ltr">maxLen</code>.</li> <li>
+<strong>APF implementation in driver code:</strong> APF should be implemented only within firmware, not driver code. Otherwise, there are no power saving benefits because the CPU needs to wake up to process the packet.</li> <li>
+<strong>Incorrect <code translate="no" dir="ltr">filter_age</code> or <code translate="no" dir="ltr">filter_age_16384th</code> values:</strong> The <code translate="no" dir="ltr">filter_age</code> (APFv4) and <code translate="no" dir="ltr">filter_age_16384th</code> (APFv6) values must be correctly passed to the <code translate="no" dir="ltr">accept_packet()</code> and <code translate="no" dir="ltr">apf_run()</code> functions. For details on calculating <code translate="no" dir="ltr">filter_age_16384th</code>, refer to the documentation in <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/google/apf/v6/apf_interpreter.h;l=145"><code translate="no" dir="ltr">apf_interpreter.h</code></a>.</li> <li>
+<strong>APF not enabled when required:</strong> APF must be enabled when the screen is off and either the Wi-Fi link is idle or traffic is less than 10 Mbps.</li> <li>
+<strong>Truncated packets passed to <code translate="no" dir="ltr">accept_packet()</code> or <code translate="no" dir="ltr">apf_run()</code>:</strong> All unicast, broadcast, and multicast packets passed to <code translate="no" dir="ltr">accept_packet()</code> or <code translate="no" dir="ltr">apf_run()</code> must be complete. Passing truncated packets into APF isn't valid.</li> </ul> <h2 id="apf-tests">APF tests</h2> <p>Starting in Android 15, Android provides both single-device and multidevice Compatibility Test Suite (CTS) test cases for APF filter and APF interpreter integration to verify correct APF functionality. Here's a breakdown of the purpose of each test case:</p> <ul> <li>
+<strong><a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/NetworkStack/tests/unit/src/android/net/apf/">ApfFilter and apf_interpreter integration test</a>:</strong> Verifies that <code translate="no" dir="ltr">ApfFilter</code> generates correct bytecode, and <code translate="no" dir="ltr">apf_interpreter</code> executes the code correctly to produce expected results.</li> <li>
+<strong><a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/Connectivity/tests/cts/net/src/android/net/cts/ApfIntegrationTest.kt">APF single-device CTS</a>:</strong> Uses a single device to test APF functionality on the Wi-Fi chipset. Confirms that: <ul> <li>APF turns on when the screen is off and Wi-Fi traffic is less than 10 Mbps.</li> <li>APF capabilities are declared correctly.</li> <li>Read and write operations on the APF memory region succeed, and the memory region isn't unexpectedly modified.</li> <li>Arguments are passed correctly to <code translate="no" dir="ltr">accept_packet()</code> or <code translate="no" dir="ltr">apf_run()</code>.</li> <li>Firmware integrated with APFv4/APFv6 can drop packets.</li> <li>Firmware integrated with APFv6 can reply to packets.</li> </ul>
+</li> <li>
+<strong><a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/Connectivity/tests/cts/multidevices/">APF multidevice CTS</a>:</strong> Employs two devices (one sender, one receiver) to test the filtering behavior of APF. Various types of packets are generated on the sender side, and the test confirms whether they are correctly dropped, passed, or replied to based on the rules configured in <code translate="no" dir="ltr">ApfFilter</code> to verify correct APF functionality.</li> </ul> <h3 id="integration-test-instructions">Additional integration test instructions</h3> <p>Additionally, we strongly recommend that you incorporate APF testing into your firmware Wi-Fi integration test suites.</p> <p>Integrating APF testing into firmware Wi-Fi integration test suites is crucial for verifying proper APF functionality in complex Wi-Fi connection scenarios such as make-before-break or roaming Wi-Fi connection scenarios. Detailed instructions on how to perform integration tests can be found in the following section.</p> <h4 id="integration-test-prerequisites">Prerequisites</h4> <p>When you perform integration tests, do the following:</p> <ul> <li>APF must be enabled throughout all integration test cases (for example, roaming, make-before-break).</li> <li>At the start of each test, clear the APF memory.</li> <li>Install or reinstall APF programs every 5 minutes during the test.</li> </ul> <h4 id="integration-test-scenarios">Test scenarios</h4> <p>APF must be active throughout integration tests. This document provides two APF programs that you can install during testing. The programs are in hex string format, and you must convert the hex string to binary and install the programs to the firmware so the <code translate="no" dir="ltr">apf_interpreter</code> can execute them. During the integration test, you should send packets that are expected to trigger the filtering logic in program 1 and program 2.</p> <h5 id="apf-program-1">APF program 1</h5> <p>When the device screen is on, install <em>APF program 1</em>. This program can drop harmless packets that don't impact device functionality. These packets are used to test whether the APF is correctly filtering network traffic.</p> <p>The APF program 1 logic is as follows:</p> <ol> <li>Drop and increment counter: <ol> <li>EtherType values: <code translate="no" dir="ltr">0x88A2</code>, <code translate="no" dir="ltr">0x88A4</code>, <code translate="no" dir="ltr">0x88B8</code>, <code translate="no" dir="ltr">0x88CD</code>, <code translate="no" dir="ltr">0x88E1</code>, <code translate="no" dir="ltr">0x88E3</code>
+</li> <li>IPv4 DHCP discover or request packets</li> <li>RS packets</li> </ol>
+</li> <li>Pass and increment counter: All other packets.</li> </ol> <p>APF program 1 byte codes are as follows:</p> 
+<pre>6BF0B03A01B86BF8AA0FB86BF4AA09B8120C6BEC7C005D88A27C005888A47C005388B87C004E88CD7C004988E17C004488E3120C84002008001A1A821B001A1E8600000010FFFFFFFF0A17820B11AB0D2A108204436BE8721D120C84000E86DD0A1482093A0A368204856BE072086BDCB03A01B87206B03A01B87201
+</pre> <h5 id="apf-program-2">APF program 2</h5> <p>When the device screen is off, install <em>APF program 2</em>. This program filters out all the packets that <em>APF program 1</em> filters, as well as ping request packets. To verify that <em>APF program 2</em> is correctly installed, send ping packets to the device under test.</p> <p>The APF program 2 logic is as follows:</p> <ol> <li>Drop and increment counter: <ol> <li>EtherType values: <code translate="no" dir="ltr">0x88A2</code>, <code translate="no" dir="ltr">0x88A4</code>, <code translate="no" dir="ltr">0x88B8</code>, <code translate="no" dir="ltr">0x88CD</code>, <code translate="no" dir="ltr">0x88E1</code>, <code translate="no" dir="ltr">0x88E3</code>
+</li> <li>IPv4 DHCP discover or request packets</li> <li>RS packets</li> </ol>
+</li> <li>Drop and increment counter: ICMP ping request packets</li> <li>Pass and increment counter: All other packets</li> </ol> <p>APF program 2 bytes codes are as follows:</p> 
+<pre>6BF0B03A01B86BF8AA0FB86BF4AA09B8120C6BEC7C007488A27C006F88A47C006A88B87C006588CD7C006088E17C005B88E3120C84002008001A1A821B001A1E8600000010FFFFFFFF0A17820B11AB0D2A108204436BE87234120C84000E86DD0A1482093A0A368204856BE0721F120C84001008000A17820B01AB0D220E8204086BE472086BDCB03A01B87206B03A01B87201
+</pre> <h5 id="data-verification">Data verification</h5> <p>To verify that the APF program executes and passes or drops packets correctly, do the following:</p> <ul> <li>Fetch and verify the APF data region every 5 minutes.</li> <li>Don't clear the counter.</li> <li>Generate test packets to trigger each filter rule.</li> <li>
+<p>Verify counter increments using these memory locations:</p> <table> <thead> <tr> <th>Counter name</th> <th>Memory location</th> </tr> </thead> <tbody> <tr> <td><code translate="no" dir="ltr">DROPPED_ETHERTYPE_DENYLISTED</code></td> <td> [ApfRamSize - 20, ApfRamSize - 16]</td> </tr> <tr> <td><code translate="no" dir="ltr">DROPPED_DHCP_REQUEST_DISCOVERY</code></td> <td> [ApfRamSize - 24, ApfRamSize - 20]</td> </tr> <tr> <td><code translate="no" dir="ltr">DROPPED_ICMP4_ECHO_REQUEST</code></td> <td> [ApfRamSize - 28, ApfRamSize - 24]</td> </tr> <tr> <td><code translate="no" dir="ltr">DROPPED_RS</code></td> <td> [ApfRamSize - 32, ApfRamSize - 28]</td> </tr> <tr> <td><code translate="no" dir="ltr">PASSED_PACKET</code></td> <td> [ApfRamSize - 36, ApfRamSize - 32]</td> </tr> </tbody> </table>
+</li> </ul> <h4 id="pseudocode-program-1-2">Pseudocode for APF program 1 and APF program 2</h4> <p>The following pseudocode explains the logic of APF program 1 and APF program 2 in detail:</p> 
+<pre>// ethertype filter
+If the ethertype in [0x88A2, 0x88A4, 0x88B8, 0x88CD, 0x88E1, 0x88E3]:
+    drop packet and increase counter: DROPPED_ETHERTYPE_DENYLISTED
+
+// dhcp discover/request filter
+if ethertype != ETH_P_IP:
+    skip the filter
+if ipv4_src_addr != 0.0.0.0:
+    skip the filter
+if ipv4_dst_addr != 255.255.255.255
+    skip the filter
+if not UDP packet:
+    skip the filter
+if UDP src port is not dhcp request port:
+    skip the filter
+else:
+    drop the packet and increase the counter: DROPPED_DHCP_REQUEST_DISCOVERY
+
+// Router Solicitation filter:
+if ethertype != ETH_P_IPV6:
+    skip the filter
+if not ICMP6 packet:
+    skip the filter
+if ICMP6 type is not a Router Solicitation:
+    skip the filter
+else:
+    drop the packet and increase the counter: DROPPED_RS
+
+// IPv4 ping filter (only included in Program 2)
+if ethertype != ETH_P_IP:
+    skip the filter
+if it ipv4 protocol is not ICMP:
+    skip the filter
+if port is not a ping request port
+    skip the filter
+else:
+    drop the packet and increase the counter: DROPPED_ICMP4_ECHO_REQUEST
+
+pass the packet and increase: PASSED_PACKET
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/connect/android-packet-filter" class="_attribution-link">https://source.android.com/docs/core/connect/android-packet-filter</a>
+  </p>
+</div>

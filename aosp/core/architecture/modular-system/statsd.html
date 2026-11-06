@@ -1,0 +1,24 @@
+<h1>Statsd</h1>  <p>The Statsd module includes statsd, a native service that runs in the background collecting metrics, and the Java service <code translate="no" dir="ltr">StatsCompanionService</code>, which runs in the system process and bridges statsd and Java. This module is updatable, meaning it can receive updates to functionality (such as updates to the metrics used in data collection) outside of the normal Android release cycle.</p> <h2 id="module-boundary">Module boundary</h2> <p>Statsd is the primary touchpoint between the platform and launch-safety data collection. The statsd module includes the following code.</p> <ul> <li><p><code translate="no" dir="ltr">statsd</code>, located in <code translate="no" dir="ltr">frameworks/base/cmds/statsd</code></p></li> <li><p><code translate="no" dir="ltr">StatsCompanionService</code>, located in <code translate="no" dir="ltr">frameworks/base/services/core/java/com/android/server/stats/StatsCompanionService.java</code></p></li> <li><p>A subset of the platform protobuf structures, located primarily in <code translate="no" dir="ltr">frameworks/base/core/proto</code></p></li> </ul> <p>As a native service, statsd can outlive the framework and detect crashes in the <code translate="no" dir="ltr">system_server</code> itself.</p> <p>In Android 12, the Statsd module code is moved from <code translate="no" dir="ltr">frameworks/base/cmds/StatsD</code>, <code translate="no" dir="ltr">frameworks/base/apex/StatsD</code>, and <code translate="no" dir="ltr">system/core/libstats</code>.</p> <h3 id="new-project-structure">New project structure</h3> <ul> <li>
+<code translate="no" dir="ltr">system/core/libstats</code> → <code translate="no" dir="ltr">packages/modules/StatsD/lib/libstats</code> <ul> <li>
+<code translate="no" dir="ltr">system/core/libstats/socket</code> → <code translate="no" dir="ltr">packages/modules/StatsD/lib/libstatssocket</code>
+</li> <li>
+<code translate="no" dir="ltr">system/core/libstats/pull</code> → <code translate="no" dir="ltr">packages/modules/StatsD/lib/libstatspull</code>
+</li> </ul>
+</li> <li>
+<code translate="no" dir="ltr">frameworks/base/cmds/StatsD</code> → <code translate="no" dir="ltr">packages/modules/StatsD/bin</code>
+</li> <li>
+<code translate="no" dir="ltr">frameworks/base/apex/StatsD</code> → <ul> <li>Copy top level as is</li> <li>Move <code translate="no" dir="ltr">jni</code> into <code translate="no" dir="ltr">framework/jni</code>
+</li> <li>Move toplevel files into <code translate="no" dir="ltr">/apex</code> directory <ul> <li>
+<code translate="no" dir="ltr">frameworks/base/apex/StatsD/\*</code> → <code translate="no" dir="ltr">packages/modules/StatsD/apex/\*</code>
+</li> <li>
+<code translate="no" dir="ltr">frameworks/base/apex/StatsD/jni</code> → <code translate="no" dir="ltr">packages/modules/StatsD/apex/framework/jni</code>
+</li> </ul>
+</li> </ul>
+</li> <li>
+<code translate="no" dir="ltr">cts/hostsidetests/StatsD</code> → <code translate="no" dir="ltr">packages/modules/StatsD/tests</code>
+</li> </ul> <h3 id="move-sample-commands">Patch move sample commands</h3> <p>Apply the changes to the following branches:</p> <ul> <li><code translate="no" dir="ltr">goog/mainline-prod</code></li> <li><code translate="no" dir="ltr">goog/main</code></li> <li><code translate="no" dir="ltr">goog/\*-plus-aosp</code></li> <li><code translate="no" dir="ltr">aosp/main</code></li> </ul> <p>The history for the files within Statsd should be preserved.</p> <h2 id="module-format">Module format</h2> <p>The statsd module (<code translate="no" dir="ltr">com.android.os.statsd</code>) is in <a href="../../ota/apex">APEX</a> format and is available for devices running Android 11 or higher.</p> <h2 id="module-dependences">Module dependencies</h2> <p>The Statsd module presents a set of <code translate="no" dir="ltr">@hide</code> APIs to log events from the system. For Java code, most <code translate="no" dir="ltr">@hide</code> APIs are refactored to be built on a smaller set of <code translate="no" dir="ltr">@SystemApi</code> tagged methods, with some small generated glue code built in. For native code, existing native functions are refactored to be official VNDK C APIs, with generated glue.</p> <h2 id="customization">Customization</h2> <p>The Statsd module doesn't support customization.</p> <h2 id="testing">Testing</h2> <p>The Android Compatibility Test Suite (CTS) verifies the functionality of statsd and the atoms on which release management depends.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/modular-system/statsd" class="_attribution-link">https://source.android.com/docs/core/architecture/modular-system/statsd</a>
+  </p>
+</div>

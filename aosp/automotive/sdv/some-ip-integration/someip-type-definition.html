@@ -1,0 +1,63 @@
+<h1>Write a SOME/IP type definition</h1>  <p>When defining scalable service-oriented middleware over IP (SOME/IP) mappings in VSIDL, you describe the wire format serialization and payload encoding of each SOME/IP message. Using the <code translate="no" dir="ltr">SomeIpType</code> and <code translate="no" dir="ltr">SomeIpStruct</code> definitions, you can model primitives, strings, arrays, and nested structs that match AUTOSAR ARXML (<code translate="no" dir="ltr">SOMEIP-TRANSFORMATION-PROPS</code>) and SOME/IP stack payload encoding rules (including COVESA <code translate="no" dir="ltr">vsomeip</code>).</p> <p>This page focuses on how to write a <code translate="no" dir="ltr">SomeIpStruct</code> type definition, which is used in <code translate="no" dir="ltr">type_definition</code> blocks for event and method mappings.</p> <h2 id="someipstruct-message">SomeIpStruct message</h2> <p>A <code translate="no" dir="ltr">SomeIpStruct</code> message represents a structured SOME/IP payload consisting of multiple fields. The structure defined here is used by the SOME/IP broker to translate between raw SOME/IP bytes and the fields of an SDV protobuf message.</p> <p>When defining a struct, you configure two main properties:</p> <ul> <li>
+<code translate="no" dir="ltr">length_field_size</code> (optional): Specifies the size (in bytes) of the length field that precedes the struct in the serialized payload. Used values from the <code translate="no" dir="ltr">LengthFieldSize</code> enum include <code translate="no" dir="ltr">ZERO</code> (no length field), <code translate="no" dir="ltr">ONE</code>, <code translate="no" dir="ltr">TWO</code>, and <code translate="no" dir="ltr">FOUR</code>.</li> <li>
+<code translate="no" dir="ltr">field</code> (repeated): A list of fields that make up the struct.</li> </ul> <h3 id="define-struct-fields">Define struct fields</h3> <p>Each field inside <code translate="no" dir="ltr">SomeIpStruct</code> requires:</p> <ul> <li>
+<code translate="no" dir="ltr">field_name</code>: The name of the field. This must exactly match the corresponding field name defined in the SDV protobuf message to ensure proper message translation.</li> <li>
+<code translate="no" dir="ltr">field_type</code>: The SOME/IP data type of the field (<code translate="no" dir="ltr">SomeIpType</code>). This can be a primitive, string, array, or another nested struct.</li> </ul> <h2 id="write-field-types">Write SomeIpType field types</h2> <p>The <code translate="no" dir="ltr">field_type</code> block configures the specific data type using one of the following variants:</p> <ul> <li>
+<strong>Primitive types:</strong> Use <code translate="no" dir="ltr">someip_primitive</code> with values like <code translate="no" dir="ltr">UINT8</code>, <code translate="no" dir="ltr">UINT32</code>, <code translate="no" dir="ltr">INT32</code>, <code translate="no" dir="ltr">FLOAT32</code>, and <code translate="no" dir="ltr">BOOL</code>.</li> <li>
+<strong>Strings:</strong> Use <code translate="no" dir="ltr">someip_string</code> and specify the encoding (for example, <code translate="no" dir="ltr">UTF_8</code> or <code translate="no" dir="ltr">UTF_16_LE</code>) and length information (either <code translate="no" dir="ltr">fixed_length</code> or <code translate="no" dir="ltr">length_field_size</code>).</li> <li>
+<strong>Arrays:</strong> Use <code translate="no" dir="ltr">someip_array</code> and define <code translate="no" dir="ltr">array_type</code> (which is another recursive <code translate="no" dir="ltr">SomeIpType</code>), along with length information (<code translate="no" dir="ltr">fixed_length</code> or <code translate="no" dir="ltr">length_field_size</code>).</li> <li>
+<strong>Nested structs:</strong> Use <code translate="no" dir="ltr">someip_struct</code> to embed another struct definition recursively.</li> </ul> <h2 id="struct-type-definitions">Example: Write a struct type definition</h2> <p>Here is a practical example of how to write a <code translate="no" dir="ltr">SomeIpStruct</code> inside a <code translate="no" dir="ltr">type_definition</code> block. This payload contains an 8-bit unsigned integer named <code translate="no" dir="ltr">interval</code> and a 32-bit unsigned integer named <code translate="no" dir="ltr">counter</code>:</p> 
+<pre>type_definition {
+  # No length field precedes this struct
+  length_field_size: ZERO
+
+  # First field: interval
+  field {
+    field_name: "interval"
+    field_type {
+      someip_primitive: UINT8
+    }
+  }
+
+  # Second field: counter
+  field {
+    field_name: "counter"
+    field_type {
+      someip_primitive: UINT32
+    }
+  }
+}
+</pre> <h3 id="add-complextypes">Add complex types</h3> <p>To include a dynamic-length string field and an array inside the struct, add fields like this:</p> 
+<pre>field {
+  field_name: "status_message"
+  field_type {
+    someip_string {
+      string_encoding: UTF_8
+      length_field_size: FOUR
+    }
+  }
+}
+field {
+  field_name: "measurements"
+  field_type {
+    someip_array {
+      length_field_size: FOUR
+      array_type { someip_primitive: FLOAT32 }
+    }
+  }
+}
+</pre> <h2 id="arxml-payload-mapping">Map AUTOSAR ARXML and vsomeip payload encoding</h2> <p>When integrating AAOS SDV with external AUTOSAR electronic control units (ECUs) or SOME/IP stacks such as COVESA <code translate="no" dir="ltr">vsomeip</code>, ensure your VSIDL <code translate="no" dir="ltr">type_definition</code> matches the wire serialization parameters defined in your system's ARXML (<code translate="no" dir="ltr">SOMEIP-TRANSFORMATION-PROPS</code> and <code translate="no" dir="ltr">SOMEIP-DATA-PROTOTYPE-TRANSFORMATION-PROPS</code>) or <code translate="no" dir="ltr">vsomeip</code> configuration:</p> <table> <thead> <tr> <th>AUTOSAR ARXML and <code translate="no" dir="ltr">vsomeip</code> parameter</th> <th>VSIDL <code translate="no" dir="ltr">SomeIpType</code> equivalent</th> <th>Wire serialization and payload encoding rule</th> </tr> </thead> <tbody> <tr> <td>
+<code translate="no" dir="ltr">sizeOfStructLengthField</code> (<code translate="no" dir="ltr">0</code>, <code translate="no" dir="ltr">1</code>, <code translate="no" dir="ltr">2</code>, <code translate="no" dir="ltr">4</code> bytes)</td> <td>
+<code translate="no" dir="ltr">SomeIpStruct.length_field_size</code> (<code translate="no" dir="ltr">ZERO</code>, <code translate="no" dir="ltr">ONE</code>, <code translate="no" dir="ltr">TWO</code>, <code translate="no" dir="ltr">FOUR</code>)</td> <td>Prepends an explicit byte-length prefix before the serialized struct payload. Set to <code translate="no" dir="ltr">ZERO</code> for fixed-layout structs without a length prefix.</td> </tr> <tr> <td>
+<code translate="no" dir="ltr">sizeOfArrayLengthField</code> (<code translate="no" dir="ltr">0</code>, <code translate="no" dir="ltr">1</code>, <code translate="no" dir="ltr">2</code>, <code translate="no" dir="ltr">4</code> bytes)</td> <td>
+<code translate="no" dir="ltr">SomeIpArray.length_field_size</code> (<code translate="no" dir="ltr">ZERO</code>, <code translate="no" dir="ltr">ONE</code>, <code translate="no" dir="ltr">TWO</code>, <code translate="no" dir="ltr">FOUR</code>) or <code translate="no" dir="ltr">fixed_length</code>
+</td> <td>Dynamic arrays require a length field prefix (<code translate="no" dir="ltr">ONE</code>, <code translate="no" dir="ltr">TWO</code>, or <code translate="no" dir="ltr">FOUR</code> bytes) indicating the byte length of the serialized array elements.</td> </tr> <tr> <td>
+<code translate="no" dir="ltr">sizeOfStringLengthField</code> and encoding (<code translate="no" dir="ltr">UTF-8</code>, <code translate="no" dir="ltr">UTF-16LE</code>, <code translate="no" dir="ltr">UTF-16BE</code>)</td> <td>
+<code translate="no" dir="ltr">SomeIpString.string_encoding</code> and <code translate="no" dir="ltr">length_field_size</code> or <code translate="no" dir="ltr">fixed_length</code>
+</td> <td>Matches AUTOSAR string serialization rules (including byte order mark and null-termination handling) for variable-length and fixed-length strings.</td> </tr> <tr> <td>Primitive base types (<code translate="no" dir="ltr">uint8</code>, <code translate="no" dir="ltr">uint16</code>, <code translate="no" dir="ltr">uint32</code>, <code translate="no" dir="ltr">float32</code>, <code translate="no" dir="ltr">boolean</code>)</td> <td>
+<code translate="no" dir="ltr">SomeIpPrimitive</code> (<code translate="no" dir="ltr">UINT8</code>, <code translate="no" dir="ltr">UINT16</code>, <code translate="no" dir="ltr">UINT32</code>, <code translate="no" dir="ltr">INT32</code>, <code translate="no" dir="ltr">FLOAT32</code>, <code translate="no" dir="ltr">BOOL</code>)</td> <td>Encodes primitive values in network byte order (big-endian by default per SOME/IP specification) matching the target protobuf field.</td> </tr> </tbody> </table><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/some-ip-integration/someip-type-definition" class="_attribution-link">https://source.android.com/docs/automotive/sdv/some-ip-integration/someip-type-definition</a>
+  </p>
+</div>

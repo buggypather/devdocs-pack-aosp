@@ -1,0 +1,117 @@
+<h1>Wi-Fi</h1>  <p>The Wi-Fi module is updatable, meaning it can receive updates to capabilities outside of the normal Android release cycle. This module contains the following components.</p> <p><img src="https://source.android.com/static/devices/architecture/images/wifi-components.png" alt="Wi-Fi module components" width="900" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> Wi-Fi module components and architecture</p> <p>The Wi-Fi module provides the following benefits.</p> <ul> <li><p>End users get a consistent Wi-Fi experience across Android devices and fixes to interoperability issues through module updates.</p></li> <li><p>App developers get reduced platform fragmentation.</p></li> <li><p>OEMs can fulfill carrier requirements while also reducing costs for individual customizations (as they don't need different implementations of the same requirements in different ways).</p></li> </ul> <h2 id="module-boundary-s">Module boundary for Android 12 and Android 13</h2> <ul> <li>
+<code translate="no" dir="ltr">packages/modules/Wifi</code> <ul> <li>
+<code translate="no" dir="ltr">framework</code> <ul> <li>
+<code translate="no" dir="ltr">java/</code> <ul> <li>
+<code translate="no" dir="ltr">android/net/wifi</code> (files from <code translate="no" dir="ltr">frameworks/base/wifi/java</code>)</li> </ul>
+</li> <li>
+<code translate="no" dir="ltr">tests/</code> <ul> <li>
+<code translate="no" dir="ltr">android/net/wifi</code> (files from <code translate="no" dir="ltr">frameworks/base/wifi/tests</code>)</li> </ul>
+</li> <li><code translate="no" dir="ltr">aidl-export/</code></li> <li><code translate="no" dir="ltr">api/</code></li> <li><code translate="no" dir="ltr">Android.bp</code></li> </ul>
+</li> <li>
+<code translate="no" dir="ltr">service/</code> <ul> <li>
+<code translate="no" dir="ltr">java/</code> <ul> <li>
+<code translate="no" dir="ltr">com/android/server/wifi</code> (files from <code translate="no" dir="ltr">frameworks/opt/net/wifi/service/java</code>)</li> </ul>
+</li> <li>
+<code translate="no" dir="ltr">tests/</code> <ul> <li>
+<code translate="no" dir="ltr">com/android/server/wifi</code> (files from <code translate="no" dir="ltr">frameworks/opt/net/wifi/tests</code>)</li> </ul>
+</li> <li><code translate="no" dir="ltr">proto/</code></li> <li><code translate="no" dir="ltr">Android.bp</code></li> <li><code translate="no" dir="ltr">proguard.flags</code></li> <li><code translate="no" dir="ltr">wifi.rc</code></li> </ul>
+</li> <li>
+<code translate="no" dir="ltr">OsuLogin/</code> (files from <code translate="no" dir="ltr">frameworks/base/packages/OsuLogin</code>)</li> <li>
+<code translate="no" dir="ltr">ServiceResources/</code> (new in Android 12, Overlay APK manifest is stored here) <ul> <li>
+<code translate="no" dir="ltr">res/</code> (new in Android 11, Wi-Fi configs extracted from from <code translate="no" dir="ltr">frameworks/base/core/res/res</code>)</li> <li><code translate="no" dir="ltr">AndroidManifest.xml</code></li> <li><code translate="no" dir="ltr">Android.bp</code></li> </ul>
+</li> <li>
+<code translate="no" dir="ltr">WifiDialog/</code> (new in Android 13 App to launch user dialogs requested by the service is stored here.) <ul> <li>
+<code translate="no" dir="ltr">src/</code> <ul> <li>
+<code translate="no" dir="ltr">com/android/wifi/dialog</code> (Contains the Activity the dialogs are launched from)</li> </ul>
+</li> <li><code translate="no" dir="ltr">AndroidManifest.xml</code></li> <li><code translate="no" dir="ltr">Android.bp</code></li> </ul>
+</li> </ul>
+</li> </ul> <p>The preceding directories also contain code that remains outside the modular system component and in its current location, for example:</p> <ul> <li>
+<code translate="no" dir="ltr">wificond interface</code> (classes in package <code translate="no" dir="ltr">android.net.wifi.nl80211</code>, for example, <code translate="no" dir="ltr">WifiNl80211Manager</code>)</li> <li>Sample Resource Overlay app</li> <li><code translate="no" dir="ltr">WifiTrackerLib</code></li> <li><code translate="no" dir="ltr">libwifi_hal</code></li> <li><code translate="no" dir="ltr">libwifi_system</code></li> <li><code translate="no" dir="ltr">libwifi_system_iface</code></li> </ul> <p>OEMs can use the sample commands to help move their patches from the original project directories to the new project directory.</p> <aside class="note"><strong>Note:</strong><span> These commands are just a reference. OEMs can use different ways to move the patch.</span></aside> <h3 id="move-patch-base">Move a patch from frameworks/base/wifi</h3> <p><strong>Generating the patch file in root/frameworks/base/wifi</strong></p> 
+<pre>git format-patch -1 commit --stdout &gt; patch-file.txt</pre> <p><strong>Applying the patch file to root/packages/modules/Wifi</strong></p> 
+<pre>git am -p2 --directory=framework/ patch-file.txt</pre> <h3 id="move-patch-opt">Move a patch from frameworks/opt/net/wifi</h3> <p>To move the patch from <code translate="no" dir="ltr">frameworks/opt/net/wifi</code>, complex steps are needed because the directory hierarchy was changed during the migration.</p> <p>In <code translate="no" dir="ltr">frameworks/opt/net/wifi</code>, split the commit into two commits, one for <code translate="no" dir="ltr">service/</code> and one for <code translate="no" dir="ltr">tests/</code>.</p> <p><strong>Migrating the HEAD commit</strong></p> 
+<pre>git reset HEAD^
+git add service/
+git commit # Enter your commit message. Call this commit service-commit
+git add tests/
+git commit # Enter your commit message. Call this commit test-commit</pre> <p><strong>Generating two commit patch files</strong></p> 
+<pre>git format-patch -1 service-commit --stdout &gt; service-patch.txt
+git format-patch -1 test-commit --stdout &gt; test-patch.txt</pre> <p><strong>Applying the two patches to packages/modules/Wifi</strong></p> 
+<pre>git am service-patch.txt
+git am -p1 --directory=service/ test-patch.txt</pre> <p><strong>Squashing the two commits back into one commit</strong></p> 
+<pre>git rebase -i</pre> <p>Change the second commit's operation to <code translate="no" dir="ltr">squash</code>.</p> <p>Edit the commit message as appropriate.</p> <h2 id="module-boundary-11">Module boundary for Android 11</h2> <p>The Wi-Fi service continues to run inside the System Service process. The Wi-Fi module includes all code in <code translate="no" dir="ltr">packages/modules/Wifi</code> including the following.</p> <ul> <li>SDK and service classes for <code translate="no" dir="ltr">WifiService</code>, <code translate="no" dir="ltr">WifiP2pService</code>, <code translate="no" dir="ltr">WifiAwareService</code>, <code translate="no" dir="ltr">WifiScannerService</code>, and <code translate="no" dir="ltr">WifiRttService</code>
+</li> <li><code translate="no" dir="ltr">OsuLogin</code></li> <li><code translate="no" dir="ltr">ServiceWifiResources</code></li> </ul> <p>The module excludes the following components, which remain part of the OEM's AOSP build.</p> <ul> <li>
+<code translate="no" dir="ltr">wificond</code> native component in <code translate="no" dir="ltr">system/connectivity/wificond</code>
+</li> <li>
+<code translate="no" dir="ltr">wificond</code> interface (classes in package <code translate="no" dir="ltr">android.net.wifi.nl80211</code>, for example, <code translate="no" dir="ltr">WifiNl80211Manager</code>)</li> <li><code translate="no" dir="ltr">android.net.wifi.SoftApConfToXmlMigrationUtil</code></li> <li><code translate="no" dir="ltr">android.net.wifi.WifiNetworkScoreCache</code></li> <li><code translate="no" dir="ltr">android.net.wifi.WifiMigration</code></li> <li><code translate="no" dir="ltr">WifiTrackerLib</code></li> <li><code translate="no" dir="ltr">libwifi_hal</code></li> <li><code translate="no" dir="ltr">libwifi_system</code></li> <li><code translate="no" dir="ltr">libwifi_system_iface</code></li> </ul> <p>Android 11 doesn't move files, but future releases might. To reduce the effort involved in porting file location changes, we recommend upstream as many changes as possible to AOSP (after porting them to Android 11 or refactoring proprietary extensions to use formal Android APIs or vendor HAL extensions to detangle them from AOSP code.</p> <h2 id="module-format">Module format</h2> <p>The Wi-Fi module (<code translate="no" dir="ltr">com.android.wifi</code>) is in <a href="https://source.android.com/devices/tech/ota/apex">APEX</a> format and is available for devices running Android 11 or higher. The APEX file includes the following components.</p> <ul> <li>SDK library (<code translate="no" dir="ltr">framework-wifi.jar</code>)</li> <li>Service library (<code translate="no" dir="ltr">service-wifi.jar</code>)</li> <li>OsuLogin APK (<code translate="no" dir="ltr">OsuLoginGoogle.apk</code>)</li> <li>Resource APK (<code translate="no" dir="ltr">ServiceWifiResourcesGoogle.apk</code>)</li> <li>WFA certificates</li> </ul> <h2 id="module-dependences">Module dependencies</h2> <p>The Wi-Fi module depends on the following components.</p> <ul> <li>Connectivity</li> <li>Telephony</li> <li>Proto libraries</li> <li>Misc system components</li> <li>Wi-Fi HALs</li> <li><code translate="no" dir="ltr">wificond</code></li> <li><code translate="no" dir="ltr">bouncycastle</code></li> <li><code translate="no" dir="ltr">ksoap2</code></li> <li><code translate="no" dir="ltr">libnanohttpd</code></li> </ul> <p>This module interacts with the framework using only stable <code translate="no" dir="ltr">@SystemApi</code> (no <code translate="no" dir="ltr">@hide</code> API usage) and is signed with a Google signature instead of a platform signature.</p> <h2 id="customization">Customization</h2> <p>The Wi-Fi module doesn't support direct customization, but you can customize the config using <a href="https://source.android.com/devices/architecture/rros">runtime resource overlays (RROs)</a> or carrier configs.</p> <p><img src="https://source.android.com/static/devices/architecture/images/wifi-customization.png" alt="Wi-Fi customization" class="android-image-dark-theme-background"> </p> <p><strong>Figure 2.</strong> Wi-Fi module customization</p> <ul> <li>For small customizations, enable or disable settings in the RRO <code translate="no" dir="ltr">config</code>.</li> <li>For more control, customize config values for any carrier configuration key exposed as <code translate="no" dir="ltr">@SystemAPI</code>.</li> </ul> <h3 id="overlays">Use runtime resource overlays</h3> <p>You can customize the Wi-Fi module by overriding the default configurations using RROs. For a list of overlayable configurations, refer to <code translate="no" dir="ltr">packages/modules/Wifi/service/ServiceWifiResources/res/values/overlayable.xml</code>. For configuration behavior details, refer to <code translate="no" dir="ltr">packages/modules/Wifi/service/ServiceWifiResources/res/values/config.xml</code>. For a sample overlay app, refer to <code translate="no" dir="ltr">device/google/coral/rro_overlays/WifiOverlay/</code>.</p> <p>Because the <code translate="no" dir="ltr">device/google/coral/rro_overlays/WifiOverlay/AndroidManifest.xml</code> file sets the <code translate="no" dir="ltr">targetPackage</code> attribute to <code translate="no" dir="ltr">com.android.wifi.resources</code> and the resource APK delivered by the Wi-Fi module has package name <code translate="no" dir="ltr">com.google.android.wifi.resources</code>, you must set the overlay APKS <code translate="no" dir="ltr">targetPackage</code> to <code translate="no" dir="ltr">com.google.android.wifi.resources</code> to overlay Wi-Fi configurations successfully.</p> <h3 id="configstore-migration">Migrate configuration storage format</h3> <p>The Wi-Fi module can parse only the AOSP Wi-Fi configuration storage format. If you've previously modified the Wi-Fi configuration storage format (which includes the user's saved network list), you must convert that data to the AOSP format when upgrading a device to any Android release that includes the Wi-Fi module. The hooks needed for this conversion are in the <code translate="no" dir="ltr">android.net.wifi.WifiMigration</code> class.</p> <p>Implement the format conversion in the following methods.</p> <ul> <li>
+<p><code translate="no" dir="ltr">WifiMigration.convertAndRetrieveSharedConfigStoreFile(&lt;storeFileId&gt;)</code></p> <ul> <li><p>Invoked by Wi-Fi module to retrieve the Wi-Fi shared store file contents that have been converted to AOSP format.</p></li> <li><p>These files were previously (in Android 10) stored in the <code translate="no" dir="ltr">/data/misc/wifi</code> folder on the device.</p></li> </ul>
+</li> <li>
+<p><code translate="no" dir="ltr">WifiMigration.convertAndRetrieveUserConfigStoreFile(&lt;storeFileId&gt;)</code></p> <ul> <li><p>Invoked by Wi-Fi module to retrieve Wi-Fi user-specific store file contents that have been converted to AOSP format.</p></li> <li><p>These files were previously (in Android 10) stored in the <code translate="no" dir="ltr">/data/misc_ce/&lt;userId&gt;/wifi</code> folder on the device.</p></li> </ul>
+</li> </ul> <h3 id="hidden-wifi-apis">Access hidden Wi-Fi APIs</h3> <p>Symbols (classes, methods, fields, etc.) annotated with <code translate="no" dir="ltr">@hide</code> in the Wi-Fi module are not part of its public API surface and cannot be accessed on devices with the module installed. Devices that don't include the Wi-Fi module can continue to use <code translate="no" dir="ltr">@hide</code> Wi-Fi APIs using the following steps.</p> <ol> <li>
+<p>Remove the visibility restrictions placed on <code translate="no" dir="ltr">framework-wifi</code> at <code translate="no" dir="ltr">packages/modules/Wifi/framework/Android.bp</code> by changing the <code translate="no" dir="ltr">impl_library_visibility</code> attribute to public.</p> 
+<pre>java_sdk_library {
+    name: "framework-wifi",
+    ...
+    impl_library_visibility: [
+       "//visibility:public", // Add this rule and remove others.
+    ],
+    ...
+}
+</pre>
+</li> <li>
+<p>Change the build rule to allow library access <code translate="no" dir="ltr">@hide</code> Wi-Fi APIs. For example, the following is a build rule for a <code translate="no" dir="ltr">java_library</code>.</p> 
+<pre>java_library {
+    name: "foo-lib",
+
+    // no sdk_version attribute defined
+
+    libs: [
+        "dependency1",
+        "dependency2",
+    ],
+}
+</pre> <p>To allow library access for <code translate="no" dir="ltr">foo-lib</code>, change the build rule as follows:</p> 
+<pre>java_library {
+    name: "foo-lib",
+
+    sdk_version: "core_platform",
+
+    libs: [
+        "framework-wifi.impl",
+        "framework",
+        "dependency1",
+        "dependency2",
+    ],
+}
+</pre>
+</li> <li><p>Ensure that <code translate="no" dir="ltr">framework-wifi.impl</code> appears before <code translate="no" dir="ltr">framework</code> in the list of <code translate="no" dir="ltr">libs</code>. The order of dependencies in the <code translate="no" dir="ltr">libs</code> attribute is significant.</p></li> </ol> <h3 id="hidden-framework-apis">Access hidden framework APIs</h3> <p>Symbols annotated with <code translate="no" dir="ltr">@hide</code> outside the Wi-Fi module can't be accessed by code within the Wi-Fi module. Devices that don't include the Wi-Fi module can continue to use <code translate="no" dir="ltr">@hide</code> external APIs (for example, from <code translate="no" dir="ltr">framework.jar</code>) in <code translate="no" dir="ltr">service-wifi</code> by making the following modifications to <code translate="no" dir="ltr">frameworks/opt/net/wifi/service/Android.bp</code>.</p> <ol> <li><p>In <strong>both</strong> <code translate="no" dir="ltr">wifi-service-pre-jarjar</code> and <code translate="no" dir="ltr">service-wifi</code>, change the <code translate="no" dir="ltr">sdk_version</code> attribute to <code translate="no" dir="ltr">core_platform</code>.</p></li> <li><p>In <strong>both</strong> <code translate="no" dir="ltr">wifi-service-pre-jarjar</code> and <code translate="no" dir="ltr">service-wifi</code>, add <code translate="no" dir="ltr">framework</code> and <code translate="no" dir="ltr">android_system_server_stubs_current</code> to the <code translate="no" dir="ltr">libs</code> attribute.</p></li> <li>
+<p>Verify the result is similar to the following code sample.</p> 
+<pre>java_library {
+    name: "wifi-service-pre-jarjar",
+    ...
+    sdk_version: "core_platform",
+    ...
+    libs: [
+        ...
+        "framework",
+        "android_system_server_stubs_current",
+    ],
+}
+...
+java_library {
+    name: "service-wifi",
+    ...
+    sdk_version: "core_platform",
+    ...
+    libs: [
+        ...
+        "framework",
+        "android_system_server_stubs_current",
+    ],
+}
+</pre>
+</li> </ol> <h2 id="testing">Testing</h2> <p>The Android Compatibility Test Suite (CTS) verifies the Wi-Fi module's capabilities by running a comprehensive set of CTS tests on every module release. You can also run the tests described in <a href="../../connect/wifi-debug">Test, debug, and tune Wi-Fi</a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/modular-system/wifi" class="_attribution-link">https://source.android.com/docs/core/architecture/modular-system/wifi</a>
+  </p>
+</div>

@@ -1,0 +1,181 @@
+<h1>Add system properties</h1>  <p>This page provides a canonical method for adding or defining system properties in Android, with guidelines for refactoring existing system properties. Ensure that you use the guidelines when you refactor, unless you have a strong compatibility issue that dictates otherwise.</p> <h2 id="define-system-property">Step 1: Define the system property</h2> <p>When you add a system property, decide on a name for the property, and associate it with an SELinux property context. If there's no appropriate existing context, create a new one. The name is used when accessing the property; the property context is used to control accessibility in terms of SELinux. Names can be any string, but AOSP recommends that you follow a structured format to make them clear.</p> <h3 id="property-name">Property name</h3> <p>Use this format with snake_case casing:</p> 
+<pre>[{prefix}.]{group}[.{subgroup}]*.{name}[.{type}]
+</pre> <p>Use either "" (omitted), <code translate="no" dir="ltr">ro</code> (for properties set only once), or <code translate="no" dir="ltr">persist</code> (for properties that persist across reboots) for the element <strong><code translate="no" dir="ltr">prefix</code></strong>.</p> <h4 id="caveats">Caveats</h4> <p>Use <code translate="no" dir="ltr">ro</code> only when you're certain that you don't need <code translate="no" dir="ltr">prefix</code> to be writable in the future. ** Don't specify the <code translate="no" dir="ltr">ro</code> prefix.** Instead, rely on sepolicy to make <code translate="no" dir="ltr">prefix</code> read-only (in other words, writable only by <code translate="no" dir="ltr">init</code>).</p> <p>Use <code translate="no" dir="ltr">persist</code> only when you're certain that the value must be persisted across reboots, and that using the system properties is your only option.</p> <p>Google strictly reviews the system properties that have either <code translate="no" dir="ltr">ro</code> or <code translate="no" dir="ltr">persist</code> properties.</p> <p>The term <strong><code translate="no" dir="ltr">group</code></strong> is used to aggregate related properties. It's intended to be a subsystem name similar in use to <code translate="no" dir="ltr">audio</code> or <code translate="no" dir="ltr">telephony</code>. <em>Don't use</em> ambiguous or overloaded terms such as <code translate="no" dir="ltr">sys</code>, <code translate="no" dir="ltr">system</code>, <code translate="no" dir="ltr">dev</code>, <code translate="no" dir="ltr">default</code>, or <code translate="no" dir="ltr">config</code>.</p> <p>It's common practice to use the name of the domain type of a process that has exclusive read or write access to the system properties. For example, for the system properties to which the <code translate="no" dir="ltr">vold</code> process has write access, it's common to use <code translate="no" dir="ltr">vold</code> (the name of the domain type for the process) as the group name.</p> <p>If needed, add <strong><code translate="no" dir="ltr">subgroup</code></strong> to further categorize properties, but avoid ambiguous or overloaded terms to describe this element. (You can also have more than one <code translate="no" dir="ltr">subgroup</code>.)</p> <p>Many group names have already been defined. Check the <code translate="no" dir="ltr">system/sepolicy/private/property_contexts</code> file and use existing group names where possible, instead of making new ones. The following table provides examples of frequently used group names.</p> <table> <tr> <th>Domain</th> <th>Group (and subgroup)</th> </tr> <tr> <td>bluetooth related</td> <td><code translate="no" dir="ltr">bluetooth</code></td> </tr> <tr> <td>sysprops from kernel cmdline</td> <td><code translate="no" dir="ltr">boot</code></td> </tr> <tr> <td>sysprops that identify a build</td> <td>
+<code translate="no" dir="ltr">build</code> </td> </tr> <tr> <td>telephony related</td> <td><code translate="no" dir="ltr">telephony</code></td> </tr> <tr> <td>audio related</td> <td><code translate="no" dir="ltr">audio</code></td> </tr> <tr> <td>graphics related</td> <td><code translate="no" dir="ltr">graphics</code></td> </tr> <tr> <td>vold related</td> <td><code translate="no" dir="ltr">vold</code></td> </tr> </table> <p>The following defines the use of <code translate="no" dir="ltr">name</code> and <code translate="no" dir="ltr">type</code> in the previous <a href="#property-name">regex example</a>.</p> <p><strong><code translate="no" dir="ltr">[{prefix}.]{group}[.{subgroup}]*.{name}[.{type}]</code></strong></p> <ul> <li><p><strong><code translate="no" dir="ltr">name</code></strong> identifies a system property within a group.</p></li> <li><p><strong><code translate="no" dir="ltr">type</code></strong> is an optional element that clarifies the type or intent of the system property. For example, instead of naming a sysprop as <code translate="no" dir="ltr">audio.awesome_feature_enabled</code> or just <code translate="no" dir="ltr">audio.awesome_feature</code>, rename it as <code translate="no" dir="ltr">audio.awesome_feature.enabled</code> to reflect the system property type and intent.</p></li> </ul> <p>There's no specific rule about what the type must be; these are usage recommendations:</p> <ul> <li>
+<code translate="no" dir="ltr">enabled</code>: Use if the type is a boolean system property that's used to turn a feature on or off.</li> <li>
+<code translate="no" dir="ltr">config</code>: Use if the intent is to clarify that the system property <strong>doesn't</strong> represent a dynamic state of the system; it represents a preconfigured value (for example, a read-only thing).</li> <li>
+<code translate="no" dir="ltr">List</code>: Use if it's a system property whose value is a list.</li> <li>
+<code translate="no" dir="ltr">Timeoutmillis</code>: Use if it's a system property for a timeout value in units of ms.</li> </ul> <p>Examples:</p> <ul> <li><code translate="no" dir="ltr">persist.radio.multisim.config</code></li> <li><code translate="no" dir="ltr">drm.service.enabled</code></li> </ul> <h3 id="property-context">Property context</h3> <p>The new SELinux property context scheme allows for finer granularity and more descriptive names. Similar to what's used for property names, AOSP recommends the following format:</p> 
+<pre>{group}[_{subgroup}]*_prop
+</pre> <p>The terms are defined as follows:</p> <p><strong><code translate="no" dir="ltr">group</code></strong> and <strong><code translate="no" dir="ltr">subgroup</code></strong> have the same meaning as defined for the previous <a href="#property-name">sample regex</a>. For example, <code translate="no" dir="ltr">vold_config_prop</code> signifies properties which are configurations from a vendor and meant to be set by <code translate="no" dir="ltr">vendor_init</code>, while <code translate="no" dir="ltr">vold_status_prop</code> or just <code translate="no" dir="ltr">vold_prop</code> signifies properties which are to expose the current status of <code translate="no" dir="ltr">vold</code>.</p> <p>When naming a property context, choose names that reflect the general usage of the properties. In particular, avoid the following types of terms:</p> <ul> <li>Terms which look too general and ambiguous, such as <code translate="no" dir="ltr">sys</code>, <code translate="no" dir="ltr">system</code>, <code translate="no" dir="ltr">default</code>.</li> <li>Terms that directly encode accessibility: such as <code translate="no" dir="ltr">exported</code>, <code translate="no" dir="ltr">apponly</code>, <code translate="no" dir="ltr">ro</code>, <code translate="no" dir="ltr">public</code>, <code translate="no" dir="ltr">private</code>.</li> </ul> <p>Prefer name usages like <code translate="no" dir="ltr">vold_config_prop</code> to <code translate="no" dir="ltr">exported_vold_prop</code>, or <code translate="no" dir="ltr">vold_vendor_writable_prop</code>.</p> <h4 id="type">Type</h4> <p>A property type can be one of the following as listed in the table.</p> <table> <tr> <th>Type</th> <th>Definition</th> </tr> <tr> <td>Boolean</td> <td>
+<code translate="no" dir="ltr">true</code> or <code translate="no" dir="ltr">1</code> for true, <code translate="no" dir="ltr">false</code> or <code translate="no" dir="ltr">0</code> for false</td> </tr> <tr> <td>Integer</td> <td>signed 64-bit integer </td> </tr> <tr> <td>Unsigned integer</td> <td>unsigned 64-bit integer </td> </tr> <tr> <td>Double</td> <td>double-precision floating point </td> </tr> <tr> <td>String</td> <td>any valid UTF-8 string</td> </tr> <tr> <td>enum</td> <td>values can be any valid UTF-8 string without whitespaces</td> </tr> <tr> <td>List of above</td> <td>A comma (<code translate="no" dir="ltr">,</code>) is used as the delimiter<br> The integer list <code translate="no" dir="ltr">[1, 2, 3]</code> is stored as <code translate="no" dir="ltr">1,2,3</code>
+</td> </tr> </table> <p>Internally, all properties are stored as strings. You can enforce the type by specifying it as a <code translate="no" dir="ltr">property_contexts</code> file. For more information, see <code translate="no" dir="ltr">property_contexts</code> in <a href="#step3-add-levels-to-system">Step 3</a>.</p> <h2 id="step2-determine-access-levels">Step 2: Determine required accessibility levels</h2> <p>There are four helper macros that define a property.</p> <table> <tr> <th>Accessibility type</th> <th>Meaning</th> </tr> <tr> <td><code translate="no" dir="ltr">system_internal_prop</code></td> <td>Properties which are used only in <code translate="no" dir="ltr">/system</code>
+</td> </tr> <tr> <td><code translate="no" dir="ltr">system_restricted_prop</code></td> <td>Properties which are read outside <code translate="no" dir="ltr">/system</code>, but not written</td> </tr> <tr> <td><code translate="no" dir="ltr">system_vendor_config_prop</code></td> <td>Properties which are read outside <code translate="no" dir="ltr">/system</code>, and written only by <code translate="no" dir="ltr">vendor_init</code>
+</td> </tr> <tr> <td><code translate="no" dir="ltr">system_public_prop</code></td> <td>Properties which are read and written outside <code translate="no" dir="ltr">/system</code>
+</td> </tr> </table> <p>Scope the access to system properties as narrowly as possible. In the past, broad access has resulted in app breakage and security vulnerabilities. Consider the following questions when scoping:</p> <ul> <li>Does this system property need to be persisted? (if so, why?)</li> <li>Which process should have read access to this property?</li> <li>Which process should have write access to this property?</li> </ul> <p>Use the preceding questions and the following decision tree as tools for determining an appropriate scope for access.</p> <p><img src="https://source.android.com/static/docs/core/architecture/images/add-sys-prop-decision-tree.png" alt="Decision tree for determining the scope of access" title="Decision tree to determine scope of access to system properties" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> Decision tree for determining scope of access to system properties</p> <h2 id="step3-add-levels-to-system">Step 3: Add to system/sepolicy</h2> <p>When accessing sysprop, SELinux controls the accessibility of processes. After you determine what level of accessibility is required, define property contexts under <code translate="no" dir="ltr">system/sepolicy</code>, along with additional <em>allow</em> and <em>neverallow</em> rules about what the processes are (and aren't) allowed to read or write.</p> <p>First, define the property context in the <code translate="no" dir="ltr">system/sepolicy/public/property.te</code> file. If the property is system-internal, define it in the <code translate="no" dir="ltr">system/sepolicy/private/property.te</code> file. Use one of the<code translate="no" dir="ltr">system_[accessibility]_prop([context])</code> macros that provides the accessibility required of your system property. This is an example for the <code translate="no" dir="ltr">system/sepolicy/public/property.te</code> file:</p> 
+<pre>system_public_prop(audio_foo_prop)
+system_vendor_config_prop(audio_bar_prop)
+</pre> <p>Example to add in the <code translate="no" dir="ltr">system/sepolicy/private/property.te</code> file:</p> 
+<pre>system_internal_prop(audio_baz_prop)
+</pre> <p>Second, grant read and (or) write access to the property context. Use <code translate="no" dir="ltr">set_prop</code> and <code translate="no" dir="ltr">get_prop</code> macros to grant access, in either the <code translate="no" dir="ltr">system/sepolicy/public/{domain}.te</code> or <code translate="no" dir="ltr">system/sepolicy/private/{domain}.te</code> file. Use <code translate="no" dir="ltr">private</code> whenever possible; <code translate="no" dir="ltr">public</code> is suitable only if the <code translate="no" dir="ltr">set_prop</code> or <code translate="no" dir="ltr">get_prop</code> macro affects any domains outside the core domain.</p> <p>Example, in the <code translate="no" dir="ltr">system/sepolicy/private/audio.te</code> file:</p> 
+<pre>set_prop(audio, audio_foo_prop)
+set_prop(audio, audio_bar_prop)
+</pre> <p>Example, in the <code translate="no" dir="ltr">system/sepolicy/public/domain.te</code> file:</p> 
+<pre>get_prop(domain, audio_bar_prop)
+</pre> <p>Third, add some neverallow rules to further reduce the accessibility that's scoped by the macro. For example, assume that you've used <code translate="no" dir="ltr">system_restricted_prop</code> because your system properties must be read by vendor processes. If the read access isn't required by all vendor processes, and it's only required by a certain set of processes (such as <code translate="no" dir="ltr">vendor_init</code>), prohibit the vendor processes that don't need the read access.</p> <p>Use the following syntax for restricting write and read access:</p> <p>To restrict write access:</p> 
+<pre>neverallow [domain] [context]:property_service set;
+</pre> <p>To restrict read access:</p> 
+<pre>neverallow [domain] [context]:file no_rw_file_perms;
+</pre> <p>Place neverallow rules in the <code translate="no" dir="ltr">system/sepolicy/private/{domain}.te</code> file if the neverallow rule is bound to a specific domain. For broader neverallow rules, use general domains such as these wherever appropriate:</p> <ul> <li><code translate="no" dir="ltr">system/sepolicy/private/property.te</code></li> <li><code translate="no" dir="ltr">system/sepolicy/private/coredomain.te</code></li> <li><code translate="no" dir="ltr">system/sepolicy/private/domain.te</code></li> </ul> <p>In the <code translate="no" dir="ltr">system/sepolicy/private/audio.te</code> file, place the following:</p> 
+<pre>neverallow {
+    domain -init -audio
+} {audio_foo_prop audio_bar_prop}:property_service set;
+</pre> <p>In the <code translate="no" dir="ltr">system/sepolicy/private/property.te</code> file, place the following:</p> 
+<pre>neverallow {
+    domain -coredomain -vendor_init
+} audio_prop:file no_rw_file_perms;
+</pre> <p>Note that <code translate="no" dir="ltr">{domain -coredomain}</code> captures all vendor processes. So <code translate="no" dir="ltr">{domain -coredomain -vendor_init}</code> means "all vendor processes <em>except</em> <code translate="no" dir="ltr">vendor_init</code>."</p> <p>Finally, associate a system property with the property context. This ensures that the access that's granted and the neverallow rules that are applied to property contexts are applied to actual properties. To do this, add an entry to the <code translate="no" dir="ltr">property_contexts</code> file, a file that describes mapping between system properties and property contexts. In this file, you can specify either a single property, or a prefix for properties to be mapped into a context.</p> <p>This is the syntax for mapping a single property:</p> 
+<pre>[property_name] u:object_r:[context_name]:s0 exact [type]
+</pre> <p>This is the syntax for mapping a prefix:</p> 
+<pre>[property_name_prefix] u:object_r:[context_name]:s0 prefix [type]
+</pre> <p>You can optionally specify the type of the property, which can be one of the following:</p> <ul> <li><code translate="no" dir="ltr">bool</code></li> <li><code translate="no" dir="ltr">int</code></li> <li><code translate="no" dir="ltr">uint</code></li> <li><code translate="no" dir="ltr">double</code></li> <li><code translate="no" dir="ltr">enum [list of possible values...]</code></li> <li>
+<code translate="no" dir="ltr">string</code> (Use <code translate="no" dir="ltr">string</code> for list properties.)</li> </ul> <p>Ensure that every entry has its designated type whenever possible, as <code translate="no" dir="ltr">type</code> is enforced when setting <code translate="no" dir="ltr">property</code>. The following example shows how to write a mapping:</p> 
+<pre># binds a boolean property "ro.audio.status.enabled"
+# to the context "audio_foo_prop"
+ro.audio.status.enabled u:object_r:audio_foo_prop:s0 exact bool
+
+# binds a boolean property "vold.decrypt.status"
+# to the context "vold_foo_prop"
+# The property can only be set to one of these: on, off, unknown
+vold.decrypt.status u:object_r:vold_foo_prop:s0 exact enum on off unknown
+
+# binds any properties starting with "ro.audio.status."
+# to the context "audio_bar_prop", such as
+# "ro.audio.status.foo", or "ro.audio.status.bar.baz", and so on.
+ro.audio.status. u:object_r:audio_bar_prop:s0 prefix
+</pre> <p>When an exact entry and a prefix entry conflict, the exact entry takes precedence. For more examples, see <a href="https://android.googlesource.com/platform/system/sepolicy/+/android17-release/private/property_contexts"><code translate="no" dir="ltr">system/sepolicy/private/property_contexts</code></a>.</p> <h2 id="step4-determine-stability">Step 4: Determine stability requirements</h2> <p>Stability is another aspect of system properties, and it differs from accessibility. Stability is about whether or not a system property can be changed (for example renamed, or even removed) in the future. This is particularly important as Android OS becomes modular. With Treble, the system, vendor, and product partitions can be updated independently of one another. With Mainline, some parts of the OS are modularized as updatable modules (in APEXes or APKs).</p> <p>If a system property is for use across updatable pieces of software, for example across system and vendor partitions, it must be stable. However, if it's used only within, for example, a specific Mainline module, you can change its name, type, or property contexts, and even remove it.</p> <p>Ask the following questions to determine the stability of a system property:</p> <ul> <li>Is this system property intended to be configured by partners (or configured differently per device)? If yes, it must be stable.</li> <li>Is this AOSP-defined system property intended to be written to or read from code (not process) that exists in non-system partitions like <code translate="no" dir="ltr">vendor.img</code> or <code translate="no" dir="ltr">product.img</code>? If yes, it must be stable.</li> <li>Is this system property accessed across Mainline modules or across a Mainline module and the non-updatable part of the platform? If yes, it must be stable.</li> </ul> <p>For the stable system properties, formally define each as an API and use the API to access the system property, as explained in <a href="#step6-access-properties-runtime">Step 6</a>.</p> <aside class="note"><strong>Note:</strong><span> AOSP <strong>recommends</strong> that you define a system property as an API even if it doesn't need to be stable. Doing so clearly enumerates all the system properties that your module owns in a single view, and simplifies the process of promoting an unstable system property to a stable one. (The mechanism for distinguishing between stable and unstable system property definitions is explained in <a href="#step6-access-properties-runtime">Step 6</a>.)</span></aside> <h2 id="step5-set-properties-at-build">Step 5: Set properties at build time</h2> <p>Set properties at build time with makefile variables. Technically, the values are built into <code translate="no" dir="ltr">{partition}/build.prop</code>. Then <code translate="no" dir="ltr">init</code> reads <code translate="no" dir="ltr">{partition}/build.prop</code> to set the properties. There are two sets of such variables: <code translate="no" dir="ltr">PRODUCT_{PARTITION}_PROPERTIES</code> and <code translate="no" dir="ltr">TARGET_{PARTITION}_PROP</code>.</p> <p><code translate="no" dir="ltr">PRODUCT_{PARTITION}_PROPERTIES</code> contains a list of property values. The syntax is <code translate="no" dir="ltr">{prop}={value}</code> or <code translate="no" dir="ltr">{prop}?={value}</code>.</p> <p><code translate="no" dir="ltr">{prop}={value}</code> is a normal assignment which ensures that <code translate="no" dir="ltr">{prop}</code> is set to <code translate="no" dir="ltr">{value}</code>; only one such assignment is possible per a single property.</p> <p><code translate="no" dir="ltr">{prop}?={value}</code> is an optional assignment; <code translate="no" dir="ltr">{prop}</code> sets to <code translate="no" dir="ltr">{value}</code> only if there aren't any <code translate="no" dir="ltr">{prop}={value}</code> assignments. If multiple optional assignments exist, the first one wins.</p> 
+<pre># sets persist.traced.enable to 1 with system/build.prop
+PRODUCT_SYSTEM_PROPERTIES += persist.traced.enable=1
+
+# sets ro.zygote to zygote32 with system/build.prop
+# but only when there are no other assignments to ro.zygote
+# optional are useful when giving a default value to a property
+PRODUCT_SYSTEM_PROPERTIES += ro.zygote?=zygote32
+
+# sets ro.config.low_ram to true with vendor/build.prop
+PRODUCT_VENDOR_PROPERTIES += ro.config.low_ram=true
+</pre> <p><code translate="no" dir="ltr">TARGET_{PARTITION}_PROP</code> contains a list of files, which is directly emitted to <code translate="no" dir="ltr">{partition}/build.prop</code>. Each file contains a list of <code translate="no" dir="ltr">{prop}={value}</code> pairs.</p> 
+<pre># example.prop
+
+ro.cp_system_other_odex=0
+ro.adb.secure=0
+ro.control_privapp_permissions=disable
+
+# emits example.prop to system/build.prop
+TARGET_SYSTEM_PROP += example.prop
+</pre> <p>For more detail, see <a href="https://android.googlesource.com/platform/build/+/refs/heads/android17-release/core/sysprop.mk"><code translate="no" dir="ltr">build/make/core/sysprop.mk</code></a>.</p> <aside class="note"><strong>Note:</strong><span> <code translate="no" dir="ltr">build.prop</code> from vendor partitions and odm partitions are written under the context for <code translate="no" dir="ltr">vendor_init</code>, and <code translate="no" dir="ltr">build.prop</code> from other partitions are written under the context for <code translate="no" dir="ltr">init</code>.</span></aside> <h2 id="step6-access-properties-runtime">Step 6: Access properties at runtime</h2> <p>Properties can be read and written at runtime.</p> <h3 id="init-scripts">Init scripts</h3> <p>Init script files (usually *.rc files) can read a property by <code translate="no" dir="ltr">${prop}</code> or <code translate="no" dir="ltr">${prop:-default}</code>, can set an action which runs whenever a property becomes a specific value, and can write the properties using the <code translate="no" dir="ltr">setprop</code> command.</p> 
+<pre># when persist.device_config.global_settings.sys_traced becomes 1,
+# set persist.traced.enable to 1
+on property:persist.device_config.global_settings.sys_traced=1
+    setprop persist.traced.enable 1
+
+# when security.perf_harden becomes 0,
+# write /proc/sys/kernel/sample_rate to the value of
+# debug.sample_rate. If it's empty, write -100000 instead
+on property:security.perf_harden=0
+    write /proc/sys/kernel/sample_rate ${debug.sample_rate:-100000}
+</pre>
+<aside class="note"><strong>Note:</strong><span> similar to <code translate="no" dir="ltr">build.prop</code>, rc files under the <code translate="no" dir="ltr">vendor</code> and <code translate="no" dir="ltr">odm</code> partitions read and write using the same context as <code translate="no" dir="ltr">vendor_init</code>.</span></aside> <h3 id="shell-commands">getprop and setprop shell commands</h3> <p>You can use the <code translate="no" dir="ltr">getprop</code> or <code translate="no" dir="ltr">setprop</code> shell commands, respectively, to read or write the properties. For more details, invoke <code translate="no" dir="ltr">getprop --help</code> or <code translate="no" dir="ltr">setprop --help</code>.</p> 
+<pre>$ adb shell getprop ro.vndk.version
+$
+$ adb shell setprop security.perf_harden 0
+</pre> <h3 id="sysprop-as_api">Sysprop as API for C++/Java/Rust</h3> <p>With sysprop as API, you can define system properties and use auto-generated API which are concrete and typed. Setting <code translate="no" dir="ltr">scope</code> with <code translate="no" dir="ltr">Public</code> also makes generated APIs available to modules across boundaries, and ensures API stability. Here's a sample of a <code translate="no" dir="ltr">.sysprop</code> file, an <code translate="no" dir="ltr">Android.bp</code> module, and C++, Java and Rust code using them.</p> 
+<pre># AudioProps.sysprop
+# module becomes static class (Java) / namespace (C++) for serving API
+module: "android.sysprop.AudioProps"
+# owner can be Platform or Vendor or Odm
+owner: Platform
+# one prop defines one property
+prop {
+    prop_name: "ro.audio.volume.level"
+    type: Integer
+    scope: Public
+    access: ReadWrite
+    api_name: "volume_level"
+}
+…
+</pre>
+
+<pre>// Android.bp
+sysprop_library {
+    name: "AudioProps",
+    srcs: ["android/sysprop/AudioProps.sysprop"],
+    property_owner: "Platform",
+}
+
+// Rust, Java and C++ modules can link against the sysprop_library
+rust_binary {
+    rustlibs: ["libaudioprops_rust"],
+    …
+}
+
+java_library {
+    static_libs: ["AudioProps"],
+    …
+}
+
+cc_binary {
+    static_libs: ["libAudioProps"],
+    …
+}
+</pre>
+
+<pre>// Rust code accessing generated API.
+// Get volume. Use 50 as the default value.
+let vol = audioprops::volume_level()?.unwrap_or_else(50);
+</pre>
+
+<pre>// Java codes accessing generated API
+// get volume. use 50 as the default value.
+int vol = android.sysprop.AudioProps.volume_level().orElse(50);
+// add 10 to the volume level.
+android.sysprop.AudioProps.volume_level(vol + 10);
+</pre>
+
+<pre>// C++ codes accessing generated API
+// get volume. use 50 as the default value.
+int vol = android::sysprop::AudioProps::volume_level().value_or(50);
+// add 10 to the volume level.
+android::sysprop::AudioProps::volume_level(vol + 10);
+</pre> <p>For more information, see <a href="../sysprops-apis">Implement system properties as APIs</a>.</p> <h3 id="low-level-functions">C/C++, Java, and Rust low-level property functions and methods</h3> <p>When possible, use Sysprop as API even though low-level C/C++ or Rust functions or low-level Java methods are available to you.</p> <p><code translate="no" dir="ltr">libc</code>, <code translate="no" dir="ltr">libbase</code>, and <code translate="no" dir="ltr">libcutils</code> offer C++ system property functions. <code translate="no" dir="ltr">libc</code> has the underlying API, while the <code translate="no" dir="ltr">libbase</code> and <code translate="no" dir="ltr">libcutils</code> functions are wrappers. If it's possible, use the <code translate="no" dir="ltr">libbase</code> sysprop functions; they're the most convenient, and host binaries can use the <code translate="no" dir="ltr">libbase</code> functions. For more details, see <code translate="no" dir="ltr">sys/system_properties.h</code> (<code translate="no" dir="ltr">libc</code>), <code translate="no" dir="ltr">android-base/properties.h</code> (<code translate="no" dir="ltr">libbase</code>), and <code translate="no" dir="ltr">cutils/properties.h</code> (<code translate="no" dir="ltr">libcutils</code>).</p> <p>The <code translate="no" dir="ltr">android.os.SystemProperties</code> class offers Java system property methods.</p> <p>The <code translate="no" dir="ltr">rustutils::system_properties</code> module offers Rust system property functions and types.</p> <h2 id="add-vendor-properties">Appendix: Add vendor-specific properties</h2> <p>Partners (including Googlers working in the context of Pixel development) want to define hardware-specific (or device-specific) system properties. Vendor-specific properties are partner-owned properties that are unique to their own hardware or device, not to the platform. As these are hardware or device dependent, they're meant to be used within the <code translate="no" dir="ltr">/vendor</code> or <code translate="no" dir="ltr">/odm</code> partitions.</p> <p>Since Project Treble, the platform properties and vendor properties have been completely split to keep them from conflicting. The following describes how to define vendor properties, and tells which vendor properties must always be used.</p> <h3 id="namespaces">Namespace on property and context names</h3> <p>All vendor properties must start with one of the following prefixes to prevent collision between them and the properties of other partitions.</p> <ul> <li><code translate="no" dir="ltr">ctl.odm.</code></li> <li><code translate="no" dir="ltr">ctl.vendor.</code></li> <li><code translate="no" dir="ltr">ctl.start$odm.</code></li> <li><code translate="no" dir="ltr">ctl.start$vendor.</code></li> <li><code translate="no" dir="ltr">ctl.stop$odm.</code></li> <li><code translate="no" dir="ltr">ctl.stop$vendor.</code></li> <li><code translate="no" dir="ltr">init.svc.odm.</code></li> <li><code translate="no" dir="ltr">init.svc.vendor.</code></li> <li><code translate="no" dir="ltr">ro.odm.</code></li> <li><code translate="no" dir="ltr">ro.vendor.</code></li> <li><code translate="no" dir="ltr">odm.</code></li> <li><code translate="no" dir="ltr">persist.odm.</code></li> <li><code translate="no" dir="ltr">persist.vendor.</code></li> <li><code translate="no" dir="ltr">vendor.</code></li> </ul> <p>Note that <code translate="no" dir="ltr">ro.hardware.</code> is allowed as a prefix, but for only compatibility. Don't use it for normal properties.</p> <p>The following examples all use one of the preceding listed prefixes:</p> <ul> <li><code translate="no" dir="ltr">vendor.display.primary_red</code></li> <li><code translate="no" dir="ltr">persist.vendor.faceauth.use_disk_cache</code></li> <li><code translate="no" dir="ltr">ro.odm.hardware.platform</code></li> </ul> <p>All vendor property contexts must start with <code translate="no" dir="ltr">vendor_</code>. This is also for compatibility. The following are examples:</p> <ul> <li>
+<code translate="no" dir="ltr">vendor_radio_prop</code>.</li> <li>
+<code translate="no" dir="ltr">vendor_faceauth_prop</code>.</li> <li>
+<code translate="no" dir="ltr">vendor_usb_prop</code>.</li> </ul> <p>It's the vendor's responsibility to name and maintain properties, so follow the format suggested in <a href="#step2-determine-access-levels">Step 2</a>, in addition to the vendor namespaces requirements.</p> <h3 id="vendor-sepolicies">Vendor-specific SEPolicy rules and property_contexts</h3> <p>Vendor properties can be defined by <code translate="no" dir="ltr">vendor_internal_prop</code> macro. Put the vendor-specific rules you define in the <code translate="no" dir="ltr">BOARD_VENDOR_SEPOLICY_DIRS</code> directory. For example, suppose that you're defining a vendor faceauth property in coral.</p> <p>In the <code translate="no" dir="ltr">BoardConfig.mk</code> file (or in any <code translate="no" dir="ltr">BoardConfig.mk</code> includes), put the following:</p> 
+<pre>BOARD_VENDOR_SEPOLICY_DIRS := device/google/coral-sepolicy
+</pre> <p>In the <code translate="no" dir="ltr">device/google/coral-sepolicy/private/property.te</code> file, put the following:</p> 
+<pre>vendor_internal_prop(vendor_faceauth_prop)
+</pre> <p>In the <code translate="no" dir="ltr">device/google/coral-sepolicy/private/property_contexts</code> file, put the following:</p> 
+<pre>vendor.faceauth.trace u:object_r:vendor_faceauth_prop:s0 exact bool
+</pre> <h3 id="limits-of-vendor-props">Limitations of vendor properties</h3> <p>Because the system and product partitions can't depend on the vendor, never allow the vendor properties to be accessed from the <code translate="no" dir="ltr">system</code>, <code translate="no" dir="ltr">system-ext</code>, or <code translate="no" dir="ltr">product</code> partitions.</p> <h2 id="rename-existing-props">Appendix: Rename existing properties</h2> <p>When you must deprecate a property and move to a new one, use <a href="../sysprops-apis#defining_system_properties_as_apis">Sysprop as APIs</a> to rename your existing properties. This maintains backward compatibility by specifying both the legacy name and the new property name. Specifically, you can set the legacy name by the <code translate="no" dir="ltr">legacy_prop_name</code> field in the <code translate="no" dir="ltr">.sysprop</code> file. The generated API tries to read <code translate="no" dir="ltr">prop_name</code>, and uses <code translate="no" dir="ltr">legacy_prop_name</code> if <code translate="no" dir="ltr">prop_name</code> doesn't exist.</p> <p>For example, the following steps rename <code translate="no" dir="ltr">awesome_feature_foo_enabled</code> to <code translate="no" dir="ltr">foo.awesome_feature.enabled</code>.</p> <p>In the <code translate="no" dir="ltr">foo.sysprop</code> file</p> 
+<pre>module: "android.sysprop.foo"
+owner: Platform
+prop {
+    api_name: "is_awesome_feature_enabled"
+    type: Boolean
+    scope: Public
+    access: Readonly
+    prop_name: "foo.awesome_feature.enabled"
+    legacy_prop_name: "awesome_feature_foo_enabled"
+}
+</pre> <p>In C++ code</p> 
+<pre>// is_awesome_feature_enabled() reads "foo.awesome_feature.enabled".
+// If it doesn't exist, reads "awesome_feature_foo_enabled" instead
+using android::sysprop::foo;
+
+bool enabled = foo::is_awesome_feature_enabled().value_or(false);
+</pre> <p>Note the following caveats:</p> <ul> <li><p>First, you can't change the type of the sysprop. For example, you can't make an <code translate="no" dir="ltr">int</code> prop into a <code translate="no" dir="ltr">string</code> prop. You can only change the name.</p></li> <li><p>Second, only the read API falls back to the legacy name. The write API doesn't fall back. If the sysprop is a writable one, you can't rename it.</p></li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/configuration/add-system-properties" class="_attribution-link">https://source.android.com/docs/core/architecture/configuration/add-system-properties</a>
+  </p>
+</div>

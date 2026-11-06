@@ -1,0 +1,17 @@
+<h1>Implement haptics</h1>  <p>Device manufacturers are generally considered the owners of the private assets created for each device. As such, their engineering efforts are often focused on a <em>per-device basis</em>; little to no effort goes to the consistency of other devices in the ecosystem.</p> <p>In direct contrast, developers strive to build apps that work on <em>all</em> Android phones in the ecosystem, regardless of each device's technical specifications. This difference in approach can cause a fragmentation problem, for example, the hardware capabilities of certain phones don't match expectations set by the app developers. So if the haptics APIs work on some Android phones but not others, the result is an inconsistent ecosystem. This is why hardware configuration plays a critical role in ensuring that manufacturers can implement Android haptics APIs on <em>every</em> device.</p> <p>This page provides a step-by-step checklist to set up hardware compliance for the best use of the Android haptics APIs.</p> <p>The following figure illustrates building common knowledge between device manufacturers and developers, which is a critical step in creating a cohesive ecosystem:</p> <p><img src="https://source.android.com/static/docs/core/interaction/haptics/images/haptics_sac_1.png" alt="Diagram of haptics use cases for app developers and device
+manufacturers" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> Building knowledge between device manufacturers and developers</p> <h2 id="haptics-checklist">Haptics implementation checklist</h2> <ol> <li>
+<p><a href="haptics-constants-primitives#implement-constants">Implement constants</a></p> <ul> <li>List of constants to implement haptics.</li> </ul>
+</li> <li>
+<p><a href="haptics-constants-primitives#implement-primitives">Implement primitives</a></p> <ul> <li>Implementation guidance for HAL composition primitives.</li> </ul>
+</li> <li>
+<p><a href="haptics-map-constants">Map constants between HAL and API</a></p> <ul> <li>Mapping recommendations between public API constants (named <em>placeholders</em> in the framework) and HAL constants, which implement the placeholders.</li> <li>See <a href="haptics-ux-design">Design principles to guide the recommended mapping</a> to learn more about this process.</li> </ul>
+</li> <li>
+<p><a href="haptics-pwle">Implement piecewise linear envelope (PWLE) effects</a></p> <ul> <li>Implementation guidance for amplitude and frequency envelopes.</li> </ul>
+</li> <li>
+<p><a href="haptics-assess-hardware">Assess the hardware</a></p> <ul> <li>Instructions on target haptic effects. Use these instructions to perform quick checks on your hardware.</li> </ul>
+</li> </ol> <aside class="note"><strong>Note:</strong><span> You can learn more about building common knowledge between device manufacturers and developers in <a href="https://www.youtube.com/watch">Advanced Haptics: The When, What, and How of Haptic APIs</a>.</span></aside><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/interaction/haptics/haptics-implement" class="_attribution-link">https://source.android.com/docs/core/interaction/haptics/haptics-implement</a>
+  </p>
+</div>

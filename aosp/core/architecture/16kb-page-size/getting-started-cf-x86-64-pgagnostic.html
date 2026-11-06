@@ -1,0 +1,42 @@
+<h1>Simulate Cuttlefish with 16 KB page size on x86_64</h1>  <p>This setup requires an <code translate="no" dir="ltr">x86_64</code> Linux host. This page shows how to build and start Cuttlefish with 16 KB page size support on <code translate="no" dir="ltr">x86_64</code>. The instructions on this page assume that Cuttlefish packages are installed in your machine. For instructions to install them, see Step 1 of <a href="../../../devices/cuttlefish/get-started#launch">Install Cuttlefish</a>.</p> <p>You can launch Cuttlefish by either <a href="#download-build-artifacts">downloading the prebuilt artifacts</a> directly from the Android Continuous Integration site or <a href="#sync-build">build them from AOSP</a> if you need to modify the source code.</p> <aside class="special"><strong>Important:</strong><span> Cuttlefish with 16 KB page size support on x86_64 simulates a 16 KB page size kernel and userspace due x86_64 arch does not support 16 KB page size.</span></aside> <h2 id="kernel-changes">Kernel implementation</h2> <p>Support for emulating <code translate="no" dir="ltr">x86_64</code> 16 KB pages is added in the Android 14 6.6 GKI in the <a href="https://android-review.googlesource.com/q/hashtag:page_size_emulation"><code translate="no" dir="ltr">page_size_emulation</code> patch series</a>. Passing <code translate="no" dir="ltr">page_shift=14</code> on the command-line enables this emulation. <code translate="no" dir="ltr">x86_64</code> targets with the <code translate="no" dir="ltr">_16k</code> suffix (or old targets with the <code translate="no" dir="ltr">_pgagnostic</code> suffix), such as <code translate="no" dir="ltr">aosp_cf_x86_64_phone_pgagnostic</code>, pass this option by default and work in 16 KB mode by default.</p> <h2 id="download-build-artifacts">Launch Cuttlefish by downloading the artifacts</h2> <p>Navigate to <a href="https://ci.android.com">Android Continuous Integration site</a> and enter <code translate="no" dir="ltr">aosp-main-throttled</code> as the branch name. Click the latest build for the <code translate="no" dir="ltr">aosp_cf_x86_64_only_phone_pgagnostic</code> target. Now, follow the instructions from Step 5 of <a href="../../../devices/cuttlefish/get-started#launch">Install Cuttlefish</a>.</p> <h2 id="sync-build">Launch Cuttlefish by building from AOSP</h2> <p>Build and launch Cuttlefish with a page-agnostic target:</p> 
+<pre>$ mkdir android-latest-release &amp;&amp; cd android-latest-release
+$ repo init -u https://android.googlesource.com/platform/manifest -b android-latest-release
+$ repo sync -c -j32
+
+# Build cf agnostic target.
+$ source build/envsetup.sh
+$ lunch aosp_cf_x86_64_only_phone_pgagnostic-aosp_current-userdebug
+$ m
+
+# Launch cf with a kernel with 16 KB page size support.
+$ launch_cvd
+...
+...
+VIRTUAL_DEVICE_DISPLAY_POWER_MODE_CHANGED
+virtio_input_hid_handle_status: unknown type 20
+virtio_input_hid_handle_status: unknown type 20
+virtio_input_hid_handle_status: unknown type 20
+virtio_input_hid_handle_status: unknown type 20
+Generating new secret with slot ID: 4
+VIRTUAL_DEVICE_BOOT_STARTED
+VIRTUAL_DEVICE_NETWORK_MOBILE_CONNECTED
+</pre> <h2 id="verify-page-size">Verify page size and boot</h2> <p>To verify page size and boot status:</p> <ol> <li>
+<p>Access the shell as root:</p> 
+<pre>$ adb root
+adbd is already running as root
+$ adb shell
+vsoc_x86_64_pgagnostic:/ #
+</pre>
+</li> <li>
+<p>Verify page size and boot status:</p> 
+<pre>vsoc_x86_64_pgagnostic::/ # getconf PAGE_SIZE
+16384
+vsoc_x86_64_pgagnostic::/ # getprop | grep sys.boot.completed
+sys.boot_completed: 1
+</pre>
+</li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/16kb-page-size/getting-started-cf-x86-64-pgagnostic" class="_attribution-link">https://source.android.com/docs/core/architecture/16kb-page-size/getting-started-cf-x86-64-pgagnostic</a>
+  </p>
+</div>

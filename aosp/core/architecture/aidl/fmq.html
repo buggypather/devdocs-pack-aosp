@@ -1,0 +1,46 @@
+<h1>Fast Message Queue with AIDL</h1>  <p>As of Android 12, <a href="../hidl/fmq">Fast Message Queue (FMQ)</a> can be used with AIDL interfaces using the NDK backend. This lets processes communicate without the overhead and restrictions of binder transactions after some short setup. Using <a href="stable-aidl">stable AIDL</a> allows communication between system and vendor processes.</p> <h2 id="payload-types">Supported payload types</h2> <ul> <li>
+<a href="aidl-annotations#fixedsize"><code translate="no" dir="ltr">FixedSize</code></a> AIDL <code translate="no" dir="ltr">parcelable</code> types (not available from the <code translate="no" dir="ltr">cpp</code> backend)</li> <li>AIDL <code translate="no" dir="ltr">union</code> types (not available from the <code translate="no" dir="ltr">cpp</code> backend)</li> <li>AIDL <code translate="no" dir="ltr">enum</code> types</li> <li><a href="aidl-backends#types">AIDL integral types</a></li> </ul> <p>The messages sent between processes in the shared memory message queue must have the same memory layout across process boundaries and can't contain pointers. Attempting to create an <code translate="no" dir="ltr">AidlMessageQueue</code> with a type that isn't supported causes a compilation error. The AIDL <code translate="no" dir="ltr">parcelable</code> and <code translate="no" dir="ltr">union</code> types in the <code translate="no" dir="ltr">cpp</code> backend can't be used with Fast Message Queue because they inherit from <code translate="no" dir="ltr">android::Parcelable</code>, which has virtual functions.</p> <aside class="note"><strong>Note:</strong><span> There is no Fast Message Queue library for Java. The MQDescriptor is available in the AIDL Java backend to enable forwarding it for use with the C++ backends.</span></aside> <h2 id="queue-types">Supported queue types</h2> <p>The same <a href="../hidl/fmq#flavors">queue types</a> from HIDL, often called flavors, are supported with AIDL. These are used as template arguments for the queues and descriptors.</p> <table> <tr>
+<th>HIDL types</th>
+<th>AIDL types</th>
+</tr> <tr>
+<td><code translate="no" dir="ltr">android::hardware::kSynchronizedReadWrite</code></td> <td><code translate="no" dir="ltr">android.hardware.common.fmq.SynchronizedReadWrite</code></td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">android::hardware::kUnsynchronizedWrite</code></td> <td><code translate="no" dir="ltr">android.hardware.common.fmq.UnsynchronizedWrite</code></td>
+</tr> </table> <h2 id="use">How to use</h2> <p>Define the AIDL interface that passes the <code translate="no" dir="ltr">MQDescriptor</code> to the other process. <code translate="no" dir="ltr">MQDescriptor</code> can be used anywhere a parcelable can be.</p> <p>The required template arguments for <code translate="no" dir="ltr">MQDescriptor</code> are payload type and queue flavor.</p> 
+<pre>import android.hardware.common.fmq.MQDescriptor
+import android.hardware.common.fmq.SynchronizedReadWrite
+
+void getQueue(out MQDescriptor&lt;int, SynchronizedReadWrite&gt; mqDesc);
+</pre> <p>The process of setting up each side of the message queue is nearly identical to the <a href="../hidl/fmq#setup">process using HIDL</a>, just using the AIDL types.</p> 
+<pre>#include &lt;fmq/AidlMessageQueue.h&gt;
+...
+using ::android::AidlMessageQueue;
+using ::aidl::android::hardware::common::fmq::MQDescriptor;
+using ::aidl::android::hardware::common::fmq::SynchronizedReadWrite;
+...
+ndk::ScopedAStatus MyInterface::getQueue(MQDescriptor&lt;int32_t, SynchronizedReadWrite&gt;* mqDesc) {
+    *mqDesc = mFmqSynchronized-&gt;dupeDesc();
+    return ndk::ScopedAStatus::ok();
+}
+...
+// Create the first side of the queue before servicing getQueue() in this example
+mFmqSynchronized =
+  new AidlMessageQueue&lt;int32_t, SynchronizedReadWrite&gt;(kNumElementsInQueue);
+</pre> <p>The receiving process creates the other side of the queue with the descriptor received from the AIDL interface.</p> 
+<pre>MQDescriptor&lt;int32_t, SynchronizedReadWrite&gt; desc;
+auto ret = service-&gt;getQueue(true, &amp;desc);
+if (!ret.isOk()) {
+   ...
+}
+// By default the constructor will reset the read and write pointers of the queue.
+// Add a second `false` argument to avoid resetting the pointers.
+mQueue = new (std::nothrow) AidlMessageQueue&lt;int32_t, SynchronizedReadWrite&gt;(desc);
+if (!mQueue-&gt;isValid()) {
+   ...
+}
+</pre> <p>Using the <code translate="no" dir="ltr">AidlMessageQueue</code> after setup is the same as the HIDL <code translate="no" dir="ltr">MessageQueue</code>. All of the APIs described at <a href="../hidl/fmq#using">Use the MessageQueue</a> are fully supported with <code translate="no" dir="ltr">AidlMessageQueue</code> with one exception:</p> <p><code translate="no" dir="ltr">const MQDescriptor&lt;T, flavor&gt;* getDesc()</code> is replaced by <code translate="no" dir="ltr">MQDescriptor&lt;T, U&gt; dupeDesc()</code> which returns the AIDL <code translate="no" dir="ltr">MQDescriptor</code>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/aidl/fmq" class="_attribution-link">https://source.android.com/docs/core/architecture/aidl/fmq</a>
+  </p>
+</div>

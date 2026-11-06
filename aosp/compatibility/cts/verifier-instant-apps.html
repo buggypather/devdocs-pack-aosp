@@ -1,0 +1,25 @@
+<h1>CTS Verifier for Instant Apps</h1>  <p> CTS Verifier for Instant Apps increases Android Compatibility test coverage for Instant Apps by using CTS Verifier to test features that can't be fully automated due to OEM- specific UIs, such as system UIs. </p> <h3 id="requirements">Requirements</h3> <p> Before running CTS Verifier for Instant Apps, ensure that you have the following equipment: </p>
+<ul> <li>Android device that has verified Android API compatibility by successfully passing the CTS. This is the device-under-test (DUT). </li>
+<li>Linux computer with USB 2.0 compatible port. All connections to the DUT are through this port. </li>
+</ul> <h3 id="installing-instant-app-on-dut">Install Instant Apps on DUT</h3> <p> <code translate="no" dir="ltr">CtsVerifierInstantApp.apk</code> and the CTS verifier are included in <code translate="no" dir="ltr">android-cts-verifier.zip</code>, which can be found by logging in to the <a href="https://partner.android.com/build/builds;branch=git_qt-release;product=aosp_arm"> Q-EAP dashboard</a>. </p> 
+<p> <img src="https://source.android.com/static/docs/compatibility/cts/images/CTS_Verifier_Instant1.png" class="android-image-dark-theme-background" alt="Test initiation" width="500" id="instant1"> </p>
+<p class="img-caption"> <strong>Figure 1.</strong> Installing Instant App on DUT </p> <p> The partners can manually build the CTS Verifier to <a href="development">build CTS</a> to incorporate or test out new fixes. To manually build <code translate="no" dir="ltr">CtsVerifierInstantApp.apk</code>. issue the following command on the host: </p> 
+<pre>make CtsVerifierInstantApp</pre> <p> To install <code translate="no" dir="ltr">CtsVerifierInstantApp.apk</code>, issue the following commands on host. </p> 
+<pre>adb install -r --instant CtsVerifierInstantApp.apk</pre> 
+<pre>adb install -r --instant /path/to/CtsVerifierInstantApp.apk</pre> <h3 id="running">Run tests</h3> <p> The three system UI tests are displayed in the home screen under the Instant Apps test category. </p> 
+<p> <img src="https://source.android.com/static/docs/compatibility/cts/images/CTS_Verifier_Instant2.png" class="android-image-dark-theme-background" alt="Test initiation" width="500" id="instant2"> </p>
+<p class="img-caption"> <strong>Figure 2.</strong> Home screen </p> <p> When you tap a test under the Instant Apps test category, a test screen opens for the test. The test screen contains the following: </p>
+<ul> <li>Instructions </li>
+<li>
+<strong>Start Test</strong> button </li>
+<li>Three standard CTS Verifier buttons <ul> <li>Pass </li>
+<li>Help </li>
+<li>Fail </li> </ul> </li> </ul> <p> Tapping the <strong>Start Test</strong> button launches the sample Instant App. </p> <p> <img src="https://source.android.com/static/docs/compatibility/cts/images/CTS_Verifier_Instant3.png" class="android-image-dark-theme-background screenshot" alt="Test initiation" width="300" id="instant3"> </p>
+<p class="img-caption"> <strong>Figure 3.</strong> Test screen </p> <p> The first time you tap the <strong>Start Test</strong>, an alert dialog opens with instructions for installing the sample Instant App (Figure 4). If the sample Instant App is already installed, this dialog isn't shown for other instant app tests. </p> <p> <img src="https://source.android.com/static/docs/compatibility/cts/images/CTS_Verifier_Instant4.png" class="android-image-dark-theme-background screenshot" alt="Test initiation" width="300" id="instant4"> </p>
+<p class="img-caption"> <strong>Figure 4.</strong> Install instruction dialog </p> <p> Tapping the <strong>Help</strong> button opens a pop-up dialog with description of the test. </p> <p> <img src="https://source.android.com/static/docs/compatibility/cts/images/CTS_Verifier_Instant5.png" class="android-image-dark-theme-background screenshot" alt="Test initiation" width="300" id="instant5"> </p>
+<p class="img-caption"> <strong>Figure 5.</strong> Help pop-up dialog </p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/compatibility/cts/verifier-instant-apps" class="_attribution-link">https://source.android.com/docs/compatibility/cts/verifier-instant-apps</a>
+  </p>
+</div>

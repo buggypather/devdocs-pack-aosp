@@ -1,0 +1,790 @@
+<h1>Spectatio: Automotive test framework</h1>  <p>Spectatio is an open source test framework developed for testing Android Automotive OS (AAOS) on real and virtual devices. Spectatio provides APIs for testing apps on an automotive device and is an extendable and scalable solution used for verifying the capability and performance of AAOS and its apps.</p> <h2 id="spectatio-design">High-level design</h2> <p>The Spectatio framework is adaptable and expandable for various AAOS UI implementations. It's used for testing the capability and performance of AAOS on device hardware, emulators, and virtualized environments.</p> <p>The following figure explains the high-level design of the Spectatio framework.</p> <p><img src="https://source.android.com/static/docs/automotive/images/spectatio-design.png" alt="Spectatio framework high-level design" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> Spectatio framework high-level design.</p> <p>Built on top of <a href="https://developer.android.com/training/testing/ui-automator">UI Automator</a>, the Spectatio framework provides a set of APIs to build UI tests that interact with user and system apps on AAOS. Automotive tests use the APIs provided by the Spectatio framework for testing, which makes these tests independent of the device under test (DUT) and scalable to test varied devices, if supported.</p> <p>Figure 1 shows that the Spectatio framework is modularized based on reference apps such as Dialer, Medicenter, and Settings using app-specific interfaces and helpers, making it easily extendable for new apps. The Spectatio framework reuses the common standard and utility helper classes. The <a href="https://cs.android.com/android/platform/superproject/+/main:platform_testing/libraries/automotive-helpers/standard-app-helper/src/android/platform/helpers/AbstractAutoStandardAppHelper.java">standard helper class</a> is the parent class for all the app helper functions and provides standard functions that are device specific or applicable across apps. The <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:platform_testing/libraries/automotive-helpers/utility-helper/src/android/platform/helpers/">utility helper classes</a> provide utilities such as reading or writing files from the device.</p> <h2 id="spectatio-arch">Architecture</h2> <p>To provide a set of APIs to build UI tests, the Spectatio framework implements app-specific interfaces and helpers while extending the existing standard helper class and importing the utility helper classes.</p> <p>Figure 2 illustrates the high-level architecture of the Spectatio framework and all the entities involved in implementing APIs for testing an app.</p> <p><img src="https://source.android.com/static/docs/automotive/images/spectatio-arch.png" alt="Spectatio framework high-level architecture" class="android-image-dark-theme-background"> </p> <p><strong>Figure 2.</strong> Spectatio framework high-level architecture.</p> <p>The app helper interface provides a blueprint for the implementation of an app helper. It consists of various helper functions that are needed for testing apps. Each app has its own interface, such as <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:platform_testing/libraries/app-helpers/interfaces/auto/src/android/platform/helpers/IAutoSettingHelper.java"><code translate="no" dir="ltr">IAutoSettingHelper</code></a> and <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:platform_testing/libraries/app-helpers/interfaces/auto/src/android/platform/helpers/IAutoDialHelper.java"><code translate="no" dir="ltr">IAutoDialHelper</code></a>. For more information and a list of interface functions, see the <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:platform_testing/libraries/app-helpers/interfaces/auto/src/android/platform/helpers/">app helper interface functions</a> on AOSP.</p> <p>The standard helper class consists of standard attributes and functions that are required for device setup but aren’t specific to any app, such as <code translate="no" dir="ltr">pressHome</code> and <code translate="no" dir="ltr">scroll</code>. The standard helper class is defined in <a href="https://cs.android.com/android/platform/superproject/+/main:platform_testing/libraries/automotive-helpers/standard-app-helper/src/android/platform/helpers/AbstractAutoStandardAppHelper.java"><code translate="no" dir="ltr">AbstractAutoStandardAppHelper.java</code></a>.</p> <p>The <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:platform_testing/libraries/automotive-helpers/utility-helper/src/android/platform/helpers/">utility helper classes</a> are used by the framework. For example, <a href="https://cs.android.com/android/platform/superproject/+/main:platform_testing/libraries/automotive-helpers/utility-helper/src/android/platform/helpers/AutoJsonUtility.java"><code translate="no" dir="ltr">AutoJsonUtility.java</code></a> is a utility class that loads the given device JSON configuration file and updates the framework configurations at runtime.</p> <p>The app helper implementation module is the core of the Spectatio framework. It contains the implementation for the helper functions defined in the app helper interface, which are required for testing apps on an automotive device. Each app has its own implementation, such as <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:platform_testing/libraries/automotive-helpers/settings-app-helper/src/android/platform/helpers/SettingHelperImpl.java"><code translate="no" dir="ltr">SettingHelperImpl</code></a> and <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:platform_testing/libraries/automotive-helpers/dial-app-helper/src/android/platform/helpers/DialHelperImpl.java"><code translate="no" dir="ltr">DialHelperImpl</code></a>, used by the Automotive tests for testing the apps. For more information and a list of implementations, see the <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:platform_testing/libraries/automotive-helpers/">app helper implementation functions</a> 'on AOSP.</p> <p><a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:platform_testing/tests/automotive/">Automotive Tests</a> use the app helper implementation functions to test various operations related to the app. Use the <a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r4:platform_testing/libraries/app-helpers/core/src/android/platform/helpers/HelperAccessor.java"><code translate="no" dir="ltr">HelperAccessor</code></a> class to gain access to the app helper implementation functions.</p> <p>The following code shows the setup, cleanup, and execution of a sample automotive test.</p> 
+<pre>@RunWith(AndroidJUnit4.class)
+public class AutoApplicationTest {
+  static HelperAccessor&lt;IAutoApplicationHelper&gt; autoApplicationHelper =
+          new HelperAccessor&lt;&gt;(IAutoApplicationHelper.class);
+
+  public AutoApplicationTest() {
+    // constructor
+    // Initialize any attributes that are required for the test execution
+  }
+
+  @Before
+  public void beforeTest() {
+    // Initial setup before each test
+    // For example - open the app
+    autoApplicationHelper.open();
+  }
+
+  @After
+  public void afterTest() {
+    // Cleanup after each test.
+    // For example - exit the app
+    autoApplicationHelper.exit();
+  }
+
+  @Test
+  public void testApplicationFeature() {
+    // Test
+    // For example - Test if app is open
+    assertTrue("Application is not open.", autoApplicationHelper.isOpen());
+  }
+}
+</pre> <h2 id="spectatio-custom">Customization</h2> <p>The Spectatio framework is independent of the device UI, so it’s scalable for testing devices with varied UIs and hardware. To achieve this scalability, Spectatio uses default device configurations based on the reference device. To support non-default device configurations, the framework uses a JSON configuration file at runtime to set the desired UI changes for the device. A JSON configuration file supports UI elements like <code translate="no" dir="ltr">TEXT</code>, <code translate="no" dir="ltr">DESCRIPTION</code>, and <code translate="no" dir="ltr">RESOURCE_ID</code>, along with <code translate="no" dir="ltr">path</code> settings and must contain only the information about the UI changes for the DUT. The rest of the UI elements use the default configuration values provided in the framework.</p> <h3 id="default">Default device configurations</h3> <p>The following sample JSON configuration file shows the available device configurations and their default values.</p> <div>  <h4 class="showalways" id="click-here-to-display-a-sample-json-configuration-file">Click here to display a sample JSON configuration file</h4> 
+<pre>    {
+        "SETTINGS": {
+                "APPLICATION_CONFIG": {
+                        "SETTINGS_TITLE_TEXT": "Settings",
+                        "SETTINGS_PACKAGE": "com.android.car.settings",
+                        "SETTINGS_RRO_PACKAGE": "com.android.car.settings.googlecarui.rro",
+                        "OPEN_SETTINGS_COMMAND": "am start -a android.settings.SETTINGS",
+                        "OPEN_QUICK_SETTINGS_COMMAND": "am start -n com.android.car.settings/com.android.car.settings.common.CarSettingActivity"
+                },
+                "QUICK_SETTINGS": {
+                        "OPEN_MORE_SETTINGS": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "toolbar_menu_item_1",
+                                "PACKAGE": "com.android.car.settings"
+                        },
+                        "NIGHT_MODE": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Night mode"
+                        }
+                },
+                "DISPLAY": {
+                        "PATH": "Settings &gt; Display",
+                        "OPTIONS": [
+                                "Brightness level"
+                        ],
+                        "BRIGHTNESS_LEVEL": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "seekbar",
+                                "PACKAGE": "com.android.car.settings"
+                        }
+                },
+                "SOUND": {
+                        "PATH": "Settings &gt; Sound",
+                        "OPTIONS": [
+                                "Media volume",
+                                "Alarm volume"
+                        ]
+                },
+                "NETWORK_AND_INTERNET": {
+                        "PATH": "Settings &gt; Network &amp; internet",
+                        "OPTIONS": [
+                        ],
+                        "TOGGLE_WIFI": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "master_switch",
+                                "PACKAGE": "com.android.car.settings"
+                        }
+                },
+                "BLUETOOTH": {
+                        "PATH": "Settings &gt; Bluetooth",
+                        "OPTIONS": [
+                        ],
+                        "TOGGLE_BLUETOOTH": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "car_ui_toolbar_menu_item_switch",
+                                "PACKAGE": "com.android.car.settings"
+                        }
+                },
+                "APPS_AND_NOTIFICATIONS": {
+                        "PATH": "Settings &gt; Apps &amp; notifications",
+                        "OPTIONS": [
+                        ],
+                        "SHOW_ALL_APPS": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Show all apps"
+                        },
+                        "ENABLE_DISABLE_BUTTON": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "car_ui_toolbar_menu_item_text",
+                                "PACKAGE": "com.android.car.settings"
+                        },
+                        "DISABLE_BUTTON_TEXT": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Disable"
+                        },
+                        "ENABLE_BUTTON_TEXT": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Enable"
+                        },
+                        "DISABLE_APP_BUTTON": {
+                                "TYPE": "TEXT",
+                                "VALUE": "DISABLE APP"
+                        },
+                        "FORCE_STOP_BUTTON": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Force stop"
+                        },
+                        "OK_BUTTON": {
+                                "TYPE": "TEXT",
+                                "VALUE": "OK"
+                        },
+                        "PERMISSIONS_MENU": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Permissions"
+                        },
+                        "ALLOW_BUTTON": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Allow"
+                        },
+                        "DENY_BUTTON": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Deny"
+                        },
+                        "DENY_ANYWAY_BUTTON": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Deny anyway"
+                        }
+                },
+                "DATE_AND_TIME": {
+                        "PATH": "Settings &gt; Date &amp; time",
+                        "OPTIONS": [
+                                "Automatic date &amp; time",
+                "Automatic time zone"
+                        ],
+                        "AUTOMATIC_DATE_AND_TIME": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Automatic date &amp; time"
+                        },
+                        "AUTOMATIC_TIME_ZONE": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Automatic time zone"
+                        },
+                        "SET_DATE": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Set date"
+                        },
+                        "SET_TIME": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Set time"
+                        },
+                        "SELECT_TIME_ZONE": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Select time zone"
+                        },
+                        "USE_24_HOUR_FORMAT": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Use 24-hour format"
+                        },
+                        "OK_BUTTON": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "toolbar_menu_item_0",
+                                "PACKAGE": "com.android.car.settings"
+                        },
+                        "NUMBER_PICKER_WIDGET": {
+                                "TYPE": "CLASS",
+                                "VALUE": "android.widget.NumberPicker"
+                        },
+                        "EDIT_TEXT_WIDGET": {
+                                "TYPE": "CLASS",
+                                "VALUE": "android.widget.EditText"
+                        }
+                },
+                "USERS": {
+                        "PATH": "Settings &gt; Users",
+                        "OPTIONS": [
+                                "Guest"
+                        ]
+                },
+                "ACCOUNTS": {
+                        "PATH": "Settings &gt; Accounts",
+                        "OPTIONS": [
+                                "Automatically sync data"
+                        ],
+                        "ADD_ACCOUNT": {
+                                "TYPE": "TEXT",
+                                "VALUE": "ADD ACCOUNT"
+                        },
+                        "ADD_GOOGLE_ACCOUNT": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Google"
+                        },
+                        "SIGN_IN_ON_CAR_SCREEN": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Sign in on car screen"
+                        },
+                        "GOOGLE_SIGN_IN_SCREEN": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Sign in to your Google Account"
+                        },
+                        "ENTER_EMAIL": {
+                                "TYPE": "CLASS",
+                                "VALUE": "android.widget.EditText"
+                        },
+                        "ENTER_PASSWORD": {
+                                "TYPE": "CLASS",
+                                "VALUE": "android.widget.EditText"
+                        },
+                        "NEXT_BUTTON": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Next"
+                        },
+                        "DONE_BUTTON": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Done"
+                        },
+                        "REMOVE_BUTTON": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Remove"
+                        },
+                        "REMOVE_ACCOUNT_BUTTON": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Remove Account"
+                        }
+                },
+                "SYSTEM": {
+                        "PATH": "Settings &gt; System",
+                        "OPTIONS": [
+                                "About", "Legal information"
+                        ],
+                        "ABOUT_MENU": {
+                                "TYPE": "TEXT",
+                                "VALUE": "About"
+                        },
+                        "RESET_OPTIONS_MENU": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Reset options"
+                        },
+                        "LANGUAGES_AND_INPUT_MENU": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Languages &amp; input"
+                        },
+                        "DEVICE_MODEL": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Model"
+                        },
+                        "ANDROID_VERSION": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Android version"
+                        },
+                        "ANDROID_SECURITY_PATCH_LEVEL": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Android security patch level"
+                        },
+                        "KERNEL_VERSION": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Kernel version"
+                        },
+                        "BUILD_NUMBER": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Build number"
+                        },
+                        "RECYCLER_VIEW_WIDGET": {
+                                "TYPE": "CLASS",
+                                "VALUE": "androidx.recyclerview.widget.RecyclerView"
+                        },
+                        "RESET_NETWORK": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Reset network"
+                        },
+                        "RESET_SETTINGS": {
+                                "TYPE": "TEXT",
+                                "VALUE": "RESET SETTINGS"
+                        },
+                        "RESET_APP_PREFERENCES": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Reset app preferences"
+                        },
+                        "RESET_APPS": {
+                                "TYPE": "TEXT",
+                                "VALUE": "RESET APPS"
+                        },
+                        "LANGUAGES_MENU": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Languages"
+                        },
+                        "LANGUAGES_MENU_IN_SELECTED_LANGUAGE": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Idiomas"
+                        }
+                },
+                "SECURITY": {
+                        "PATH": "Settings &gt; Security",
+                        "OPTIONS": [
+                        ],
+                        "TITLE": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "car_ui_toolbar_title",
+                                "PACKAGE": "com.android.car.settings.googlecarui.rro"
+                        },
+                        "CHOOSE_LOCK_TYPE": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Choose a lock type"
+                        },
+                        "LOCK_TYPE_PASSWORD": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Password"
+                        },
+                        "LOCK_TYPE_PIN": {
+                                "TYPE": "TEXT",
+                                "VALUE": "PIN"
+                        },
+                        "LOCK_TYPE_NONE": {
+                                "TYPE": "TEXT",
+                                "VALUE": "None"
+                        },
+                        "CONTINUE_BUTTON": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Continue"
+                        },
+                        "CONFIRM_BUTTON": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Confirm"
+                        },
+                        "ENTER_PASSWORD": {
+                                "TYPE": "CLASS",
+                                "VALUE": "android.widget.EditText"
+                        },
+                        "PIN_PAD": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "pin_pad",
+                                "PACKAGE": "com.android.car.settings"
+                        },
+                        "ENTER_PIN_BUTTON": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "key_enter",
+                                "PACKAGE": "com.android.car.settings"
+                        },
+                        "REMOVE_BUTTON": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Remove"
+                        }
+                }
+        },
+        "PHONE": {
+                "APPLICATION_CONFIG": {
+                        "DIAL_PACKAGE": "com.android.car.dialer",
+                        "PHONE_ACTIVITY": "com.android.car.dialer/.ui.TelecomActivity",
+                        "OPEN_DIAL_PAD_COMMAND": "am start -a android.intent.action.DIAL"
+                },
+                "IN_CALL_VIEW": {
+                        "DIALED_CONTACT_TITLE": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "user_profile_title",
+                                "PACKAGE": "com.android.car.dialer"
+                        },
+                        "DIALED_CONTACT_NUMBER": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "user_profile_phone_number",
+                                "PACKAGE": "com.android.car.dialer"
+                        },
+                        "END_CALL": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "end_call_button",
+                                "PACKAGE": "com.android.car.dialer"
+                        },
+                        "MUTE_CALL": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "mute_button",
+                                "PACKAGE": "com.android.car.dialer"
+                        },
+                        "SWITCH_TO_DIAL_PAD": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "toggle_dialpad_button",
+                                "PACKAGE": "com.android.car.dialer"
+                        },
+                        "CHANGE_VOICE_CHANNEL": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "voice_channel_view",
+                                "PACKAGE": "com.android.car.dialer"
+                        },
+                        "VOICE_CHANNEL_CAR": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Car speakers"
+                        },
+                        "VOICE_CHANNEL_PHONE": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Phone"
+                        }
+                },
+                "DIAL_PAD_VIEW": {
+                        "DIAL_PAD_MENU": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Dial Pad"
+                        },
+                        "DIAL_PAD_FRAGMENT": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "dialpad_fragment",
+                                "PACKAGE": "com.android.car.dialer"
+                        },
+                        "DIALED_NUMBER": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "title",
+                                "PACKAGE": "com.android.car.dialer"
+                        },
+                        "MAKE_CALL": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "call_button",
+                                "PACKAGE": "com.android.car.dialer"
+                        },
+                        "DELETE_NUMBER": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "delete_button",
+                                "PACKAGE": "com.android.car.dialer"
+                        }
+                },
+                "CONTACTS_VIEW": {
+                        "CONTACTS_MENU": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Contacts"
+                        },
+                        "CONTACT_INFO": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "call_action_id",
+                                "PACKAGE": "com.android.car.dialer"
+                        },
+                        "CONTACT_NAME": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "title",
+                                "PACKAGE": "com.android.car.dialer"
+                        },
+                        "CONTACT_DETAIL": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "show_contact_detail_id",
+                                "PACKAGE": "com.android.car.dialer"
+                        },
+                        "ADD_CONTACT_TO_FAVORITE": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "contact_details_favorite_button",
+                                "PACKAGE": "com.android.car.dialer"
+                        },
+                        "SEARCH_CONTACT": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "menu_item_search",
+                                "PACKAGE": "com.android.car.dialer"
+                        },
+                        "CONTACT_SEARCH_BAR": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "car_ui_toolbar_search_bar",
+                                "PACKAGE": "com.android.car.dialer"
+                        },
+                        "SEARCH_RESULT": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "contact_name",
+                                "PACKAGE": "com.android.car.dialer"
+                        },
+                        "CONTACT_SETTINGS": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "menu_item_setting",
+                                "PACKAGE": "com.android.car.dialer"
+                        },
+                        "CONTACT_ORDER": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Contact order"
+                        },
+                        "SORT_BY_FIRST_NAME": {
+                                "TYPE": "TEXT",
+                                "VALUE": "First name"
+                        },
+                        "SORT_BY_LAST_NAME": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Last Name"
+                        },
+                        "CONTACT_TYPE_WORK": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Work"
+                        },
+                        "CONTACT_TYPE_MOBILE": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Mobile"
+                        },
+                        "CONTACT_TYPE_HOME": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Home"
+                        }
+                },
+                "CALL_HISTORY_VIEW": {
+                        "CALL_HISTORY_MENU": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Recents"
+                        },
+                        "CALL_HISTORY_INFO": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "call_action_id",
+                                "PACKAGE": "com.android.car.dialer"
+                        }
+                },
+                "FAVORITES_VIEW": {
+                        "FAVORITES_MENU": {
+                                "TYPE": "TEXT",
+                                "VALUE": "Favorites"
+                        }
+                }
+        },
+        "NOTIFICATIONS": {
+                "APPLICATION_CONFIG": {
+                        "OPEN_NOTIFICATIONS_COMMAND": "service call statusbar 1"
+                },
+                "EXPANDED_NOTIFICATIONS_SCREEN": {
+                        "NOTIFICATION_VIEW": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "notification_view",
+                                "PACKAGE": "com.android.systemui"
+                        },
+                        "CLEAR_ALL_BUTTON": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "clear_all_button",
+                                "PACKAGE": "com.android.systemui"
+                        },
+                        "STATUS_BAR": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "car_top_navigation_bar_container",
+                                "PACKAGE": "com.android.systemui"
+                        },
+                        "APP_ICON": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "app_icon",
+                                "PACKAGE": "com.android.systemui"
+                        },
+                        "APP_NAME": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "header_text",
+                                "PACKAGE": "com.android.systemui"
+                        },
+                        "NOTIFICATION_TITLE": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "notification_body_title",
+                                "PACKAGE": "com.android.systemui"
+                        },
+                        "NOTIFICATION_BODY": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "notification_body_content",
+                                "PACKAGE": "com.android.systemui"
+                        },
+                        "CARD_VIEW": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "card_view",
+                                "PACKAGE": "com.android.systemui"
+                        }
+                }
+        },
+        "MEDIA_CENTER": {
+                "APPLICATION_CONFIG": {
+                        "MEDIA_CENTER_PACKAGE": "com.android.car.media",
+                        "MEDIA_ACTIVITY": "com.android.bluetooth/com.android.bluetooth.avrcpcontroller.BluetoothMediaBrowserService"
+                },
+                "MEDIA_CENTER_SCREEN": {
+                        "PLAY_PAUSE_BUTTON": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "play_pause_stop",
+                                "PACKAGE": "com.android.car.media"
+                        },
+                        "NEXT_BUTTON": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "skip_next",
+                                "PACKAGE": "com.android.car.media"
+                        },
+                        "PREVIOUS_BUTTON": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "skip_prev",
+                                "PACKAGE": "com.android.car.media"
+                        },
+                        "SHUFFLE_BUTTON": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "overflow_on",
+                                "PACKAGE": "com.android.car.media"
+                        },
+                        "PLAY_QUEUE_BUTTON": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "play_queue",
+                                "PACKAGE": "com.android.car.media"
+                        },
+                        "MINIMIZED_MEDIA_CONTROLS": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "minimized_playback_controls",
+                                "PACKAGE": "com.android.car.media"
+                        },
+                        "TRACK_NAME": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "title",
+                                "PACKAGE": "com.android.car.media"
+                        },
+                        "TRACK_NAME_MINIMIZED_CONTROL": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "minimized_control_bar_title",
+                                "PACKAGE": "com.android.car.media"
+                        },
+                        "BACK_BUTTON": {
+                                "TYPE": "DESCRIPTION",
+                                "VALUE": "Back"
+                        }
+                },
+                "MEDIA_CENTER_ON_HOME_SCREEN": {
+                        "PLAY_PAUSE_BUTTON": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "play_pause_stop",
+                                "PACKAGE": "com.android.car.carlauncher"
+                        },
+                        "NEXT_BUTTON": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "skip_next",
+                                "PACKAGE": "com.android.car.carlauncher"
+                        },
+                        "PREVIOUS_BUTTON": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "skip_prev",
+                                "PACKAGE": "com.android.car.carlauncher"
+                        },
+                        "TRACK_NAME": {
+                                "TYPE": "RESOURCE_ID",
+                                "VALUE": "title",
+                                "PACKAGE": "com.android.car.carlauncher"
+                        }
+                }
+        }
+}
+  </pre>  </div> <h3 id="nondefault">Alternative device configurations</h3> <p>The following code sample shows an example of the JSON configuration file where default settings are overridden by the settings on the DUT. In this example:</p> <ul> <li><p>Internet settings are named <strong>Network &amp; internet</strong> on reference devices and <strong>Connectivity</strong> on the DUT.</p></li> <li><p>The date and time settings are available at <strong>Settings &gt; Date and time</strong> for reference devices and at <strong>Settings &gt; System &gt; Date and time</strong> for the DUT.</p></li> </ul> 
+<pre>// Default configuration file
+{
+    ....
+    "SECURITY_SETTINGS_SCROLL_ELEMENT": {
+      "TYPE": "RESOURCE_ID",
+      "VALUE": "fragment_container",
+    },
+    ....
+}
+
+// JSON configuration file for non-reference device
+{
+    ....
+    "SECURITY_SETTINGS_SCROLL_ELEMENT": {
+      "TYPE": "RESOURCE_ID",
+      "VALUE": "car_ui_recycler_view"
+    },
+    ....
+}
+</pre> <p>When the JSON configuration file is ready, it's provided at runtime as shown in the following code block:</p> 
+<pre># Push The JSON configuration file to the device
+adb -s DEVICE-SERIAL push PATH-OF-JSON-FILE /data/local/tmp/runtimeSpectatioConfig.json
+</pre> <p>In this command:</p> <ul> <li><p><var translate="no">DEVICE-SERIAL</var>: Serial ID of the DUT. This parameter isn`t required if only one device is connected to the host.</p></li> <li><p><var translate="no">PATH-TO-JSON-FILE</var>: Path of the JSON file on the host machine.</p></li> </ul> <aside class="note"><strong>Note:</strong><span> If the JSON configuration path isn't provided at runtime, the framework uses the default values for executing the tests.</span></aside> <h2 id="configuration_format">Configuration format</h2> <p>There are five top-level objects in the configuration, with the following keys and values:</p> <table class="alternating-odd-rows green"> <th width="35%">Object</th> <th>Description</th> <tr> <td><code translate="no" dir="ltr">PACKAGES</code></td> <td>An object describing the main package for various apps, which are used to determine when that app is in the foreground.</td> </tr> <tr> <td><code translate="no" dir="ltr">ACTIONS</code></td> <td>An object indicating action types and parameters for various actions. For example, whether to use buttons or a gesture to scroll.</td> </tr> <tr> <td><code translate="no" dir="ltr">COMMANDS</code></td> <td>An object specifying commands that perform various actions.</td> </tr> <tr> <td><code translate="no" dir="ltr">UI_ELEMENTS</code></td> <td>An object used to construct UI Automator `BySelectors` that select UI Elements (described in detail below).</td> </tr> <tr> <td><code translate="no" dir="ltr">WORKFLOWS</code></td> <td>Sequences of actions that accomplish high-level tasks (described in detail below).</td> </tr> </table> <h3 id="ui_elements">UI elements</h3> <p>Each UI element has a <code translate="no" dir="ltr">TYPE</code> which specifies what UI Automator will look for to identify the element (such as resource ID, text, and description) and configuration values associated with that type. In general, whenever a helper identifies an element on the screen using this configuration, it gets exactly one element. If multiple elements match the configuration, an arbitrary one is used in the test. Therefore, the configuration should (generally) be written specifically enough that it narrows down to one element in the relevant context.</p> <h3 id="text">TEXT</h3> <p>This is the simplest UI element type. The UI element is identified by its text, and requires an exact match.</p> 
+<pre>    "CALL_HISTORY_MENU": {
+      "TYPE": "TEXT",
+      "VALUE": "Recents"
+    }
+</pre> <h3 id="text_contains">TEXT_CONTAINS</h3> <p>Same as <code translate="no" dir="ltr">TEXT</code>, except that the specified <code translate="no" dir="ltr">VALUE</code> only need appear somewhere in the text of the element to be matched.</p> 
+<pre>    "PRIVACY_CALENDAR": {
+      "TYPE": "TEXT_CONTAINS",
+      "VALUE": "Calendar"
+    }
+</pre> <h3 id="description">DESCRIPTION</h3> <p>Identify the element by its content description attribute, requiring an exact match.</p> 
+<pre>    "APP_GRID_SCROLL_BACKWARD_BUTTON": {
+      "TYPE": "DESCRIPTION",
+      "VALUE": "Scroll up"
+    }
+</pre> <h3 id="resource_id">RESOURCE_ID</h3> <p>Identify the element by its resource ID, optionally also checking the package component of that ID. The <code translate="no" dir="ltr">PACKAGE</code> key is optional; if omitted, any package will match, and only the portion of the ID following <code translate="no" dir="ltr">:id/</code> will be considered.</p> <aside class="note"><strong>Note:</strong><span> Resource IDs are strongly discouraged as a matching criteria, because they often change from build to build without warning.</span></aside>
+<pre>    "APP_LIST_SCROLL_ELEMENT": {
+      "TYPE": "RESOURCE_ID",
+      "VALUE": "apps_grid",
+      "PACKAGE": "com.android.car.carlauncher"
+    }
+</pre> <h3 id="clickable_scrollable">CLICKABLE, SCROLLABLE</h3> <p>Identify the element based on whether it is (or isn't) clickable or scrollable. These are very broad element types, and should generally only be used in a <code translate="no" dir="ltr">MULTIPLE</code> to help narrow down another element type. The <code translate="no" dir="ltr">FLAG</code> key is optional, and defaults to <code translate="no" dir="ltr">true</code>.</p> 
+<pre>    "SAMPLE_ELEMENT": {
+      "TYPE": "CLICKABLE",
+      "FLAG": false
+    }
+</pre> <h3 id="class">CLASS</h3> <p>Identify the element based on its class.</p> 
+<pre>    "SECURITY_SETTINGS_ENTER_PASSWORD": {
+      "TYPE": "CLASS",
+      "VALUE": "android.widget.EditText"
+    }
+</pre> <h3 id="has_ancestor">HAS_ANCESTOR</h3> <p>Identify the element by looking up the widget hierarchy at its ancestors. The <code translate="no" dir="ltr">ANCESTOR</code> key holds an object that identifies the ancestor. The <code translate="no" dir="ltr">DEPTH</code> key specifies how far up the hierarchy to look. <code translate="no" dir="ltr">DEPTH</code> is optional and has a default value of <code translate="no" dir="ltr">1</code>.</p> 
+<pre>      "SAMPLE_ELEMENT": {
+      "TYPE": "HAS_ANCESTOR",
+      "DEPTH": 2,
+      "ANCESTOR": {
+        "TYPE": "CLASS",
+        "VALUE": "android.view.ViewGroup"
+      }
+    }
+</pre> <h3 id="has_descendant">HAS_DESCENDANT</h3> <p>Identify the element by looking down the hierarchy at its children. The <code translate="no" dir="ltr">DESCENDANT</code> key holds an object that specifies the child to look for. The <code translate="no" dir="ltr">DEPTH</code> key specifies how far up the hierarchy to look. <code translate="no" dir="ltr">DEPTH</code> is optional and has a default value of <code translate="no" dir="ltr">1</code>.</p> 
+<pre>      "SAMPLE_ELEMENT": {
+      "TYPE": "HAS_DESCENDANT",
+      "DEPTH": 2,
+      "DESCENDANT": {
+        "TYPE": "CLASS",
+        "VALUE": "android.view.ViewGroup"
+      }
+    }
+</pre> <h3 id="multiple">MULTIPLE</h3> <p>Identify the element based on multiple simultaneous conditions, all of which must be met.</p> 
+<pre>      "APP_INFO_SETTINGS_PERMISSION_MANAGER": {
+      "TYPE": "MULTIPLE",
+      "SPECIFIERS": [
+        {
+          "TYPE": "CLASS",
+          "VALUE": "android.widget.RelativeLayout"
+        },
+        {
+          "TYPE": "HAS_DESCENDANT",
+          "MAX_DEPTH": 2,
+          "DESCENDANT": {
+            "TYPE": "TEXT",
+            "VALUE": "Permission manager"
+          }
+        }
+      ]
+    }
+</pre> <p>In this example, the configuration identifies a <code translate="no" dir="ltr">RelativeLayout</code> that has a descendant at depth <code translate="no" dir="ltr">2</code>, which has the text <code translate="no" dir="ltr">Permission manager</code>.</p> <h2 id="workflows">Workflows</h2> <p>A workflow represents a sequence of actions used to accomplish a particular task, which may differ enough from device type to device type and is more flexible to represent in configuration than in code.</p> 
+<pre>    "WORKFLOWS": {
+    "OPEN_SOUND_SETTINGS_WORKFLOW": [
+      {
+        "NAME": "Go to Home",
+        "TYPE": "PRESS",
+        "CONFIG": {
+          "TEXT": "HOME"
+        }
+      },
+      {
+        "NAME": "Open Settings",
+        "TYPE": "COMMAND",
+        "CONFIG": {
+          "TEXT": "am start -a android.settings.SETTINGS"
+        }
+      },
+      {
+        "NAME": "Open Sound Settings",
+        "TYPE": "SCROLL_TO_FIND_AND_CLICK",
+        "CONFIG": {
+          "UI_ELEMENT": {
+            "TYPE": "TEXT",
+            "VALUE": "Sound"
+          }
+        },
+        "SCROLL_CONFIG": {
+          "SCROLL_ACTION": "USE_GESTURE",
+          "SCROLL_DIRECTION": "VERTICAL",
+          "SCROLL_ELEMENT": {
+            "TYPE": "RESOURCE_ID",
+            "VALUE": "car_ui_recycler_view"
+          }
+        }
+      }
+    ]
+  }
+</pre> <p>Each workflow is a key-value pair where the key is the name of the workflow and the value is an array of actions to perform. Each action has a <code translate="no" dir="ltr">NAME</code>, a <code translate="no" dir="ltr">TYPE</code>, (usually) a <code translate="no" dir="ltr">CONFIG</code>, and (sometimes) a <code translate="no" dir="ltr">SWIPE_CONFIG</code> or <code translate="no" dir="ltr">SCROLL_CONFIG</code>. For most TYPEs, the <code translate="no" dir="ltr">CONFIG</code> is an object with a <code translate="no" dir="ltr">UI_ELEMENT</code> key whose value takes the same form as a UI element entry (see above). Those TYPEs are:</p> <table class="columns"> <tr> <td width="35%">PRESS<br>LONG_PRESS<br>CLICK<br>LONG_CLICK<br>CLICK_IF_EXIST </td> <td>HAS_UI_ELEMENT_IN_FOREGROUND<br>SCROLL_TO_FIND_AND_CLICK<br> SCROLL_TO_FIND_AND_CLICK_IF_EXIST<br>SWIPE_TO_FIND_AND_CLICK<br> SWIPE_TO_FIND_AND_CLICK_IF_EXIST</td> </tr> </table> <p>For the other TYPEs, the configuration details are:</p> <table class="alternating-odd-rows green"> <th width="35%">Object</th> <th>Description</th> <tr> <td><code translate="no" dir="ltr">COMMAND</code></td> <td>An object with a <code translate="no" dir="ltr">TEXT</code> value containing the command to execute.</td> </tr> <tr> <td><code translate="no" dir="ltr">HAS_PACKAGE_IN_FOREGROUND</code></td> <td>An object with a <code translate="no" dir="ltr">TEXT</code> value containing the package.</td> </tr> <tr> <td><code translate="no" dir="ltr">SWIPE</code></td> <td>Omit the <code translate="no" dir="ltr">CONFIG key</code> for a <code translate="no" dir="ltr">SWIPE</code> action. This uses only <code translate="no" dir="ltr">SWIPE_CONFIG</code>
+</td> </tr> <tr> <td><code translate="no" dir="ltr">WAIT_MS</code></td> <td>An object with a <code translate="no" dir="ltr">TEXT</code> value containing the number of milliseconds to wait.</td> </tr> </table> <p>Scroll- and swipe-related actions require additional configuration, as follows:</p> <h3 id="scroll_config">SCROLL_CONFIG</h3> <table class="alternating-odd-rows green"> <th width="35%">Object</th> <th>Description</th> <tr> <td><code translate="no" dir="ltr">SCROLL_ACTION</code></td> <td>Either <code translate="no" dir="ltr">USE_GESTURE</code> or <code translate="no" dir="ltr">USE_BUTTON</code>
+</td> </tr> <tr> <td><code translate="no" dir="ltr">SCROLL_DIRECTION</code></td> <td>Either <code translate="no" dir="ltr">HORIZONTAL</code> or <code translate="no" dir="ltr">VERTICAL</code>
+</td> </tr> <tr> <td><code translate="no" dir="ltr">SCROLL_ELEMENT</code></td> <td>An object indicating the container to scroll, using the same form as a UI Element configuration (see above).</td> </tr> <tr> <td>
+<code translate="no" dir="ltr">SCROLL_FORWARD</code>, <code translate="no" dir="ltr">SCROLL_BACKWARD</code>
+</td> <td>The forward and backward scroll buttons (required when <code translate="no" dir="ltr">SCROLL_ACTION</code> is <code translate="no" dir="ltr">USE_BUTTON</code>).</td> </tr> <tr> <td><code translate="no" dir="ltr">SCROLL_MARGIN</code></td> <td>If <code translate="no" dir="ltr">SCROLL_ACTION</code> is <code translate="no" dir="ltr">USE_GESTURE</code>, the distance from the edge of the container to start and stop the drag that will be used to perform the scroll (<em>Optional,</em> default = 10).</td> </tr> <tr> <td><code translate="no" dir="ltr">SCROLL_WAIT_TIME</code></td> <td>If <code translate="no" dir="ltr">SCROLL_ACTION</code> is <code translate="no" dir="ltr">USE_GESTURE</code>, the time in milliseconds to wait between scroll gestures when searching for an object to click. (<em>Optional,</em> default = 1).</td> </tr> </table> <h3 id="swipe_config">SWIPE_CONFIG</h3> <table class="alternating-odd-rows green"> <th width="35%">Object</th> <th>Description</th> <tr> <td><code translate="no" dir="ltr">SWIPE_DIRECTION</code></td> <td>Either <code translate="no" dir="ltr">TOP_TO_BOTTOM</code>, <code translate="no" dir="ltr">BOTTOM_TO_TOP</code>, <code translate="no" dir="ltr">LEFT_TO_RIGHT</code>, or <code translate="no" dir="ltr">RIGHT_TO_LEFT</code>
+</td> </tr> <tr> <td><code translate="no" dir="ltr">SWIPE_FRACTION</code></td> <td> <p><strong>One</strong> of the following:</p> <ul> <li>
+<code translate="no" dir="ltr">FULL</code>: Swipe gesture from screen edge to screen edge<br><br> <em>OR,</em> </li> <li>
+<code translate="no" dir="ltr">DEFAULT</code>: Screen edge to screen edge, with a five (5) pixel buffer on each side.<br><br> <em>OR,</em> </li> <li>
+<code translate="no" dir="ltr">THREE_QUARTER</code>, <code translate="no" dir="ltr">HALF</code>, or <code translate="no" dir="ltr">QUARTER</code>: Swipe gesture finishes five (5) pixels from the edge of the screen, and starts at the point such that it covers the indicated distance of the screen.</li> </ul> </td> </tr> <tr> <td><code translate="no" dir="ltr">NUMBER_OF_STEPS</code></td> <td>The number of steps to be used to perform the swipe. See <code translate="no" dir="ltr">
+  <a href="#">segmentSteps</a></code>. </td> </tr> </table> <h2 id="build-exec">Build and execute</h2> <p>The Spectatio framework is automatically built as part of the test APK. To build the test APK, the AOSP codebase must reside on the local workstation. After the test APK is built, the user must install the APK on the device and execute the test.</p> <p>The following code sample shows the building, installation, and execution of a test APK.</p> 
+<pre># Build Test APK
+make TEST-APK-NAME
+# Install Test APK
+adb -s DEVICE-SERIAL install -r PATH-FOR-BUILT-TEST-APK
+# Execute Test with the JSON file
+adb -s DEVICE-SERIAL shell am instrument -w -r -e debug false -e config-file-path /data/local/tmp/jsonFile.json -e class TEST-PACKAGE.TEST-CLASSNAME TEST-PACKAGE/androidx.test.runner.AndroidJUnitRunner</pre> <p>In these commands:</p> <ul> <li><p><var translate="no">TEST-APK-NAME</var>: The name of the app to be tested. For example, set <var translate="no">TEST-APK-NAME</var> to <code translate="no" dir="ltr">AndroidAutomotiveSettingsTests</code> to test the Wi-Fi settings as specified in the <a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r4:platform_testing/tests/automotive/functional/settings/Android.bp"><code translate="no" dir="ltr">Android.bp</code></a> file. The name of the APK can be found in the respective <code translate="no" dir="ltr">Android.bp</code> file for the <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:platform_testing/tests/automotive/">Automotive test</a>.</p></li> <li><p><var translate="no">DEVICE-SERIAL</var>: The serial ID of the DUT. This parameter isn't required if only one device is connected to the host.</p></li> <li><p><code translate="no" dir="ltr">config-file-path</code>: Optional parameter that is required only to provide nondefault device UI configurations as specified in the <a href="spectatio#nondefault">JSON configuration file</a>. If not provided, the framework uses default values for executing the tests.</p></li> <li><p><var translate="no">PATH-FOR-BUILT-TEST-APK</var>: The path where the test APK is built when the <code translate="no" dir="ltr">make</code> command is executed.</p></li> <li><p><var translate="no">TEST-PACKAGE</var>: The name of the test package.</p></li> <li><p><var translate="no">TEST-CLASSNAME</var>: The name of the test class. For example, for the <a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r4:platform_testing/tests/automotive/functional/settings/src/android/platform/tests/WifiSettingTest.java)">Wifi Settings</a> test, the test package is <a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r4:platform_testing/tests/automotive/functional/settings/src/android/platform/tests/WifiSettingTest.java;bpv=1;bpt=1;l=17"><code translate="no" dir="ltr">android.platform.tests</code></a> and the test class name is <a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r4:platform_testing/tests/automotive/functional/settings/src/android/platform/tests/WifiSettingTest.java;bpv=1;bpt=1;l=36"><code translate="no" dir="ltr">WifiSettingTest</code></a>.</p></li> </ul> <h2 id="automotive_snippet_library">Automotive Snippet Library</h2> <p>The Automotive Snippet Library is a set of Android Test libraries for the Android Open Source Project (AOSP) designed to interact with automotive apps and services. It leverages Spectatio with a convenient mechanism for executing remote procedure calls (RPCs) from a host (test) machine to an Android-powered device.</p> <h3 id="get_started">Get started</h3> <p>Before you start, review these sections.</p> <h4 id="prerequisites">Prerequisites</h4> <ul> <li>Python 3.x installed on the host machine.</li> <li>AOSP environment setup with necessary build tools.</li> <li>An Android automotive device (emulator or physical device) with adb access.</li> </ul> <h4 id="compilation">Compilation</h4> <p>To compile the various snippets provided by the Automotive Snippet Library, you can use the provided <a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r4:platform_testing/tests/automotive/functional/settings/Android.bp"><code translate="no" dir="ltr">android.bp</code></a> file. Following commands in the previous section to compile the APK.</p> <h4 id="deployment">Deployment</h4> <p>After successfully compiling the snippet libraries, deploy the resulting APKs to the target device using the <code translate="no" dir="ltr">adb install</code> command mentioned in the previous section.</p> <h4 id="run_tests">Run tests</h4> <p>The snippet libraries expose several RPC methods to interact with the automotive system. These methods can be invoked through the Mobly framework from the host machine. Assuming you have the Mobly test environment set up, you can use the <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:external/python/mobly/tools/snippet_shell.py;l=1"><code translate="no" dir="ltr">snippet_shell.py</code></a> script to open an interactive Python shell, where you can manually invoke RPC methods on the device. Example invocation:</p> 
+<pre>python3 snippet_shell.py com.google.android.mobly.snippet.bundled -s &lt;serial&gt;
+</pre> <p>Replace <code translate="no" dir="ltr">&lt;serial&gt;</code> with the device serial number, which you can obtain with adb devices if multiple devices are connected.</p> <h4 id="included_libraries">Included libraries</h4> <p>The Automotive Snippet Library includes the following snippet libraries and helpers:</p> <ul> <li><p>AutomotiveSnippet: Provides APIs related to vehicle operations, such as dialing, volume control, vehicle hard keys, and media center interaction.</p></li> <li><p>PhoneSnippet: Provides telephony-related APIs, including call handling, contacts browsing, and SMS operations.</p></li> </ul> <p>The Automotive snippet and the PhoneSnippet share some common logic. Specifically, you can invade Bluetooth-related RCP calls to pair an automotive and a phone device. This <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:platform_testing/tests/automotive/mobly_tests/pairing/bt_discovery_test.py"><code translate="no" dir="ltr">bt_discovery_test</code></a> shows how.</p> <ul> <li>
+<var translate="no">TEST-CLASSNAME</var>: The name of the test class. For example, for the <a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r4:platform_testing/tests/automotive/functional/settings/src/android/platform/tests/WifiSettingTest.java">Wifi Settings</a> test, the test package is <a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r4:platform_testing/tests/automotive/functional/settings/src/android/platform/tests/WifiSettingTest.java;bpv=1;bpt=1;l=17"><code translate="no" dir="ltr">android.platform.tests</code></a> and the test class name is <a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r4:platform_testing/tests/automotive/functional/settings/src/android/platform/tests/WifiSettingTest.java;bpv=1;bpt=1;l=36"><code translate="no" dir="ltr">WifiSettingTest</code></a>.</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/tools/spectatio" class="_attribution-link">https://source.android.com/docs/automotive/tools/spectatio</a>
+  </p>
+</div>

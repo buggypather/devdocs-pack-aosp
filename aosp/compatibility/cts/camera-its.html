@@ -1,0 +1,276 @@
+<h1>Camera ITS overview</h1>  <p>Camera Image Test Suite (ITS) is a framework for running tests on images produced by an Android camera. The general goal of each test in ITS is to configure the camera in a specific manner, capture one or more shots, and examine the shots to see if they contain the expected image data. Many of the tests require the camera to be pointed at a specific target chart or be illuminated at a specific intensity.</p> <p>ITS is located in the CTS Verifier test harness in <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:cts/apps/CameraITS/"><code translate="no" dir="ltr">cts/apps/CameraITS</code></a>. Devices must pass the ITS tests corresponding to the supported features advertised by the camera framework for third party apps as a subset of CTS.</p> <h2 id="setup">Setup</h2> <p>To run ITS tests, the following must be set up:</p> <ul> <li>A device under test (DUT)</li> <li>A host machine (for example, a Linux desktop or laptop)</li> <li>A scene that the camera photographs</li> </ul> <h3 id="dut_setup">Device under test (DUT) setup</h3> <p>To set up a DUT, follow these steps:</p> <ol> <li>Connect the DUT to a host machine over USB.</li> <li>Configure developer options on the DUT: <ul> <li>Turn ON <strong>Stay awake</strong> and <strong>USB debugging</strong>.</li> <li>Turn OFF <strong>Automatic system updates</strong> and <strong>Verify apps over USB</strong>.</li> </ul>
+</li> <li>Grant permissions for the host to access the DUT over ADB.</li> <li>
+<p>Install the CTS Verifier app (<code translate="no" dir="ltr">CtsVerifier.apk</code>) onto the device. For more information, see <a href="verifier">Using CTS Verifier</a>.</p> 
+<pre>extract root/out/host/linux-x86/cts-verfier/android-cts-verifier.zip
+cd android-cts-verifier
+adb install -r -g CtsVerifier.apk</pre>
+<aside class="note"><strong>Note:</strong><span> If installing the app from a CTS Verifier bundle (<code translate="no" dir="ltr">android-cts-verifier.zip</code>) rather than from a full Android source tree, both <code translate="no" dir="ltr">CtsVerifier.apk</code> and the <code translate="no" dir="ltr">CameraITS/</code> directory can be found at the top level of the zipped <code translate="no" dir="ltr">android-cts-verifier</code> folder.</span></aside>
+</li> <li><p>On the DUT, launch the default camera app and clear all the windows that appear upon launch to avoid interference during testing.</p></li> </ol> <h3 id="host_setup">Host setup</h3> <p>ITS requires the host machine to be connected to the DUT through USB, be able to use ADB for device control and communication, and have the required software installed.</p> <p>To set up your host machine, ensure the following software is installed.</p> <h4 id="android_sdk_platform_tools">Android SDK Platform Tools</h4> <p>The Android SDK Platform tools must be installed and ADB must be in the executable path of the shell or terminal that is running on the host machine. For the public released version of the Android SDK Platform tools, see <a href="https://developer.android.com/tools/releases/platform-tools">SDK Platform Tools release notes</a>.</p> <h4 id="python">Python</h4> <p>Python must be installed on the host machine. We recommend using a bundled Python distribution to ensure support for compatible versions. For details on which Python and package versions to install for a specific release, see the Camera ITS release notes for the corresponding release.</p> <h4 id="mobly">Mobly</h4> <p>For Android 12 and higher, install the Mobly test framework. Mobly lets you set up a DUT and chart tablet in the <code translate="no" dir="ltr">its_base_test</code> class. To install the Mobly test framework, run:</p> 
+<pre>pip install mobly</pre> <h4 id="environment_setup">Environment setup</h4> <p>To set up the test environment, run:</p> 
+<pre>cd CameraITS
+source build/envsetup.sh</pre> <p>This command checks the Python installation, sets up the <code translate="no" dir="ltr">PYTHONPATH</code> environment variable, and runs unit tests on the <code translate="no" dir="ltr">utils/*.py</code> modules. If no errors are printed to the terminal, the environment is ready to run the ITS tests.</p> <h3 id="scene-setup">Scene setup</h3> <p>To set up the scenes, we recommend using the <a href="camera-its-box">Camera ITS-in-a-box</a> setup for ease in automation, reliability, and efficiency in testing. The ITS-in-a-box test rigs support all the lighting, centering, and chart changing requirements for ITS. Also, ITS-in-a-box is required for <a href="camera-its-tests#scene_extensions">camera extensions</a> testing.</p> <p>For manual testing, ensure the following:</p> <ul> <li>The DUT is on a tripod</li> <li>The DUT is pointed at the correct scene for each test. (The ITS test script provide prompts to change the scene setup before starting tests in a new scene.)</li> <li>The DUT is connected to the host machine over USB.</li> <li>The DUT doesn't move during the test run.</li> <li>The scene is illuminated with a steady, non-fluctuating light source. (Don't use a fluorescent light because this introduces flicker.)</li> </ul> <p>The ITS test script displays a prompt asking the user to change the scene setup before starting tests in a new scene.</p> <p>The phone orientation must be set so that the camera takes images with no rotation. The easiest way to check this is with the face scenes in scene2. Most phones have the phone in landscape orientation with the phone rotated counter-clockwise for the rear camera and rotated clockwise for the front camera.</p> <p>To check the DUT and chart alignment, run <code translate="no" dir="ltr">tools/check_alignment.py</code> to output the x,y coordinates for the center of the chart versus the center of the image, and annotate a captured image with the two centers for optimum alignment.</p> <h2 id="config-files">Configuration files</h2> <p>Using the Mobly framework, you must create a <code translate="no" dir="ltr">config.yml</code> configuration file to define the Mobly testbed. The following are examples for different use cases.</p> <h3 id="table-based-tests">Tablet-based scenes config.yml file</h3> <p>The following is an example <code translate="no" dir="ltr">config.yml</code> file for tablet-based scenes. For tablet-based testing, the keyword <code translate="no" dir="ltr">TABLET</code> must be in the testbed name. During initialization, the Mobly test runner initializes the parameters in the file and passes them to the individual tests.</p> 
+<pre>TestBeds:
+  - Name: TEST_BED_TABLET_SCENES
+    # Test configuration for scenes[0:4, 6, _change]
+    Controllers:
+        AndroidDevice:
+          - serial: 8A9X0NS5Z
+            label: dut
+          - serial: 5B16001229
+            label: tablet
+
+    TestParams:
+      brightness: 192
+      chart_distance: 22.0
+      debug_mode: "False"  # "True" or "False"; quotes needed
+      lighting_cntl: &lt;controller-type&gt;  # "arduino" or "None"; quotes needed
+      lighting_ch: &lt;controller-channel&gt;
+      camera: 0
+      foldable_device: "False". # set "True" if testing foldable
+      scene: &lt;scene-name&gt;  # if &lt;scene-name&gt; runs all scenes
+</pre> <p>To invoke the test bed, run <code translate="no" dir="ltr">tools/run_all_tests.py</code>. If there are no command line values specifying cameras or scenes, the test is run with the <code translate="no" dir="ltr">config.yml</code> file values. If there are command line values for cameras or scenes, these override the values in the <code translate="no" dir="ltr">TestParams</code> section of the <code translate="no" dir="ltr">config.yml</code> file. For example:</p> 
+<pre>python tools/run_all_tests.py
+python tools/run_all_tests.py camera=1
+python tools/run_all_tests.py scenes=2,1,0
+python tools/run_all_tests.py camera=0 scenes=scene_tele
+python tools/run_all_tests.py camera=0.4 scenes=4,scene6_tele</pre> <h4 id="chart-scaling-param">chart_scaling parameter</h4> <p>In Android 17 and higher, the <code translate="no" dir="ltr">chart_scaling</code> parameter is included in <code translate="no" dir="ltr">config.yml</code> for <code translate="no" dir="ltr">TEST_BED_TABLET_SCENES</code>. This parameter addresses chart scaling issues for tele camera devices with a wider field of view (FoV), preventing scene cropping and enforcing proper device focus during testing.</p> <p>Supported values for <code translate="no" dir="ltr">chart_scaling</code> are <code translate="no" dir="ltr">1</code>, <code translate="no" dir="ltr">0.33</code>, <code translate="no" dir="ltr">0.5</code>, or <code translate="no" dir="ltr">0.67</code>, with <code translate="no" dir="ltr">None</code> as the default. This approach lets devices use an optimal scaling factor tailored to their specific requirements, maintaining functional testing across all devices.</p> <p>If <code translate="no" dir="ltr">chart_scaling</code> is set to <code translate="no" dir="ltr">None</code>, the tests automatically determine the scaling factor using <code translate="no" dir="ltr">chart_scaling_logic</code>. Otherwise, the value specified in <code translate="no" dir="ltr">config.yml</code> is used, or an error is flagged if the scaling is unavailable.</p> <p>The following is a sample <code translate="no" dir="ltr">config.yml</code> with the <code translate="no" dir="ltr">chart_scaling</code> parameter</p> 
+<pre>TestBeds:
+  -   Name: TEST_BED_TABLET_SCENES  # Need 'tablet' in name for tablet scenes
+    # Use TEST_BED_MANUAL for manual testing and remove below lines:
+    #     - serial &lt;tablet_id&gt;
+    #       label: tablet
+    # Test configuration for scenes[0:4, 6]
+    Controllers:
+        AndroidDevice:
+          -   serial: &lt;device-id&gt;  # quotes needed if serial id entirely numeric
+            label: dut
+          -   serial: &lt;tablet-id&gt;  # quotes needed if serial id entirely numeric
+            label: tablet
+    TestParams:
+      brightness: 192
+      chart_distance: 22.0
+      debug_mode: "False"  # quotes needed
+      lighting_cntl: &lt;controller-type&gt;  # can be arduino or "None"
+      lighting_ch: &lt;controller-channel&gt;
+      camera: &lt;camera-id&gt;
+      scene: &lt;scene-name&gt;  # if &lt;scene-name&gt; runs all scenes
+      foldable_device: "False"  # "True" if testing foldable device
+      chart_scaling: "None"  # use the values available for scene to be tested
+      resultstore_upload: "False"  # "True" if results should be uploaded to ResultStore
+</pre> <p>Test-side adjustments are required to enable Camera ITS chart scaling capabilities. If a test you are using doesn't support this, file a bug.</p> <p>The following is a sample test side change with the <code translate="no" dir="ltr">chart_scaling</code> parameter.</p> 
+<pre># load chart for scene
+      its_session_utils.load_scene(
+          cam, props, self.scene, self.tablet, self.chart_distance,
+          chart_scaling=self.chart_scaling)
+</pre> <h3 id="sensor-fusion-testing">sensor_fusion scene config.yml file</h3> <p>The following is an example <code translate="no" dir="ltr">config_yml</code> file for <code translate="no" dir="ltr">sensor_fusion</code> tests. For <code translate="no" dir="ltr">sensor_fusion</code> testing, the keyword <code translate="no" dir="ltr">SENSOR_FUSION</code> must be in the testbed name. Android 13 and higher support only the Arduino controller for sensor fusion because of preview and video stabilization testing. Android 12 supports Arduino and Canakit controllers.</p> 
+<pre>Testbeds
+  - Name: TEST_BED_SENSOR_FUSION
+    # Test configuration for sensor_fusion/test_sensor_fusion.py
+    Controllers:
+        AndroidDevice:
+          - serial: 8A9X0NS5Z
+            label: dut
+
+    TestParams:
+      fps: 30
+      img_size: 640,480
+      test_length: 7
+      debug_mode: "False"
+      chart_distance: 25
+      rotator_cntl: arduino
+      rotator_ch: 1
+      camera: 0
+</pre> <p>To run <code translate="no" dir="ltr">sensor_fusion</code> tests with the <a href="sensor-fusion-box-assembly">sensor fusion box</a>, run:</p> 
+<pre>python tools/run_all_tests.py scenes=sensor_fusion
+python tools/run_all_tests.py scenes=sensor_fusion camera=0
+python tools/run_all_tests.py scenes=scene_flash,feature_combination
+python tools/run_all_tests.py scenes=checkerboard camera=1</pre> <h3 id="multiple-testbeds">Multiple testbeds config.yml file</h3> <p>The following is an example <code translate="no" dir="ltr">config.yml</code> file with multiple testbeds, a tablet testbed and a <code translate="no" dir="ltr">sensor_fusion</code> testbed. The correct testbed is determined by the scenes tested.</p> 
+<pre>Testbeds
+  - Name: TEST_BED_TABLET_SCENES
+    # Test configuration for scenes[0:4, 6, _change]
+    Controllers:
+        AndroidDevice:
+          - serial: 8A9X0NS5Z
+            label: dut
+          - serial: 5B16001229
+            label: tablet
+
+    TestParams:
+      brightness: 192
+      chart_distance: 22.0
+      debug_mode: "False"
+      chart_loc_arg: ""
+      camera: 0
+      scene: &lt;scene-name&gt;           # if &lt;scene-name&gt; runs all scenes
+
+  - Name: TEST_BED_SENSOR_FUSION
+    # Test configuration for sensor_fusion/test_sensor_fusion.py
+    Controllers:
+        AndroidDevice:
+          - serial: 8A9X0NS5Z
+            label: dut
+
+    TestParams:
+      fps: 30
+      img_size: 640,480
+      test_length: 7
+      debug_mode: "False"
+      chart_distance: 25
+      rotator_cntl: arduino         # cntl can be arduino or canakit
+      rotator_ch: 1
+      camera: 0
+</pre> <h3 id="manual-testing">Manual testing config.yml file</h3> <p>The following is an example <code translate="no" dir="ltr">config.yml</code> file for manual testing. Android 14 and higher supports manual testing for all tests except for the <a href="camera-its-tests#scene_extensions"><code translate="no" dir="ltr">scene_extensions</code></a> tests. For manual testing, the keyword <code translate="no" dir="ltr">MANUAL</code> must be in the testbed name. Also, the <code translate="no" dir="ltr">AndroidDevice</code> section can't include a serial or label section for a tablet.</p> 
+<pre>TestBeds:
+  - Name: TEST_BED_MANUAL
+    Controllers:
+        AndroidDevice:
+          - serial: 8A9X0NS5Z
+            label: dut
+
+    TestParams:
+      debug_mode: "False"
+      camera: 0
+      scene: 1
+</pre> <h3 id="gen2-testing">Gen2 rig testing config.yml file</h3> <p>The following is an example <code translate="no" dir="ltr">config.yml</code> file of a <code translate="no" dir="ltr">TEST_BED_GEN2</code> testbed. Use this testbed for <code translate="no" dir="ltr">scene_ip</code> tests, which use a <a href="camera-its-box-gen2">Gen2 rig</a>. The following example shows the testbed parameters when the Gen2 rig is available and the <a href="camera-its-tests#scene_ip"><code translate="no" dir="ltr">scene_ip</code></a> tests aren't skipped.</p> 
+<pre>Testbeds
+  - Name: TEST_BED_GEN2
+    # Test configuration for scene_ip/test_default_jca_ip.py
+    Controllers:
+        AndroidDevice:
+          - serial: &lt;device-id&gt;  # quotes needed if serial id entirely numeric
+            label: dut
+    TestParams:
+      debug_mode: "False"  # quotes are needed here
+      chart_distance: 30
+      rotator_cntl: gen2_rotator   # gen2 rig specific. "None" if gen2 rig not available
+      rotator_ch: 0
+      camera: &lt;camera-id&gt;
+      foldable_device: "False"  # "True" if testing foldable device
+      tablet_device: "False"  # "True" if testing tablet device
+      lighting_cntl: gen2_lights  # gen2 rig specific. "None" if gen2 rig not available
+      lighting_ch: 1
+      scene: scene_ip
+</pre> <p>The following example shows testbed parameters when the Gen2 rig isn't available and the <code translate="no" dir="ltr">scene_ip</code> tests are skipped.</p> 
+<pre>Testbeds
+  - Name: TEST_BED_GEN2
+    # Test configuration for scene_ip/test_default_jca_ip.py
+    Controllers:
+        AndroidDevice:
+          - serial: &lt;device-id&gt;  # quotes needed if serial id entirely numeric
+            label: dut
+    TestParams:
+      debug_mode: "False"  # quotes are needed here
+      chart_distance: 30
+      rotator_cntl: "None"   # gen2 rig specific. "None" if gen2 rig not available
+      rotator_ch: &lt;controller-channel&gt;
+      camera: &lt;camera-id&gt;
+      foldable_device: "False"  # "True" if testing foldable device
+      tablet_device: "False"  # "True" if testing tablet device
+      lighting_cntl: "None"  # gen2 rig specific. "None" if gen2 rig not available
+      lighting_ch: &lt;controller-channel&gt;
+      scene: scene_ip
+</pre> <p>To run the scene_ip test, use one of the following commands:</p> 
+<pre>python tests/scene_ip/test_default_jca_ip.py -c config.yml
+python tools/run_all_tests.py camera=&lt;camera-id&gt; scenes=scene_ip</pre> <h2 id="running-its-tests">Running ITS tests</h2> <p>This section describes how to run ITS tests.</p> <h3 id="invoking-tests">Invoking tests</h3> <p>After the device, host machine (including environment), and physical scene are set up, run the ITS tests using the following process.</p> <aside class="note"><strong>Note:</strong><span> Apps using the camera can't be active while running ITS tests because the CTS Verifier app must be able to acquire camera control.</span></aside> <ol> <li><p>Open the CTS Verifier app. In the tests menu, select <strong>Camera ITS Test</strong>. For Android 17 and higher, the <code translate="no" dir="ltr">sensor_fusion</code> and <code translate="no" dir="ltr">feature_combination</code> tests are in an additional activity named <strong>Camera ITS Sensor Fusion Rig Test</strong>.</p></li> <li>
+<p>From the host machine, run the ITS tests from the <code translate="no" dir="ltr">CameraITS/</code> directory. For example, for a device with front and rear cameras, run the following command:</p> 
+<pre>python tools/run_all_tests.py</pre> <p>The script iterates through cameras and test scenes based on the <code translate="no" dir="ltr">config.yml</code> file. For debugging setups, we recommend running one of the <code translate="no" dir="ltr">scene2</code> scenes with a single test for fastest turnaround.</p> <p>For manual testing, before starting to run the set of ITS tests on each scene, the script takes a picture of the current scene, saves it as a JPEG, prints the path to the JPEG to the console, and asks the user to confirm if the image is okay. This <em>capture and confirm</em> flow loops until the user confirms the image is okay. The following are the messages in this flow.</p> 
+<pre>Preparing to run ITS on camera 0
+Start running ITS on camera:  0
+Press Enter after placing camera 0 to frame the test scene:
+scene1_1
+The scene setup should be: A grey card covering at least the   middle 30% of the scene
+Running vendor 3A on device
+Capture an image to check the test scene
+Capturing 1 frame with 1 format [yuv]
+Please check scene setup in /tmp/tmpwBOA7g/0/scene1_1.jpg
+Is the image okay for ITS scene1_1? (Y/N)
+</pre> <p>Each run of the script prints out a log showing either <code translate="no" dir="ltr">PASS</code>, <code translate="no" dir="ltr">FAIL</code>, <code translate="no" dir="ltr">FAIL*</code> or <code translate="no" dir="ltr">SKIP</code> for each ITS test. <code translate="no" dir="ltr">FAIL*</code> indicates the test failed but because the test isn't yet mandated, the test will report as a <code translate="no" dir="ltr">PASS</code> to CtsVerifier. <code translate="no" dir="ltr">SKIP</code> indicates the test was passed because the device didn't advertise the underlying capability being tested. For example, if a device doesn't advertise through the camera interfaces that it supports DNG, tests related to DNG file capture are skipped and counted as a <code translate="no" dir="ltr">PASS</code>.</p>
+</li> <li><p>To acknowledge that the tests have met the test requirements, tap the green check mark button. The <strong>Camera ITS Test</strong> entry in the CTS Verifier tests menu then becomes green and signifies the phone has passed Camera ITS.</p></li> </ol> <h3 id="reducing-test-time">Reducing test time</h3> <p>Camera ITS supports several features to optimize and reduce overall test execution time across devices and scenes.</p> <h4 id="sub-camera-testing">Sub-camera testing</h4> <p>One of the most effective methods for reducing camera test time, is to expose a single logical camera to third-party apps with the <a href="https://developer.android.com/reference/android/hardware/camera2/CameraMetadata#REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA">multi-camera API</a>. The multi-camera API defines a logical camera system consisting of a primary camera, generally the wide field-of-view camera, along with physical sub-cameras that operate at different zoom levels, generally the ultra-wide and telephoto cameras. Cameras using the multi-camera API reduce test time significantly compared to exposing cameras individually. While the main logical camera runs the full test suite, sub-cameras run a targeted subset of the overall test suite as shown in the following table:</p> <table> <thead> <tr> <th>Scene</th> <th>Sub-camera tests</th> </tr> </thead> <tbody> <tr> <td><strong>scene0</strong></td> <td>
+<code translate="no" dir="ltr">test_jitter</code>, <code translate="no" dir="ltr">test_solid_color_test_pattern</code>
+</td> </tr> <tr> <td><strong>scene1_1</strong></td> <td>
+<code translate="no" dir="ltr">test_burst_sameness_manual</code>, <code translate="no" dir="ltr">test_dng_noise_model</code>, <code translate="no" dir="ltr">test_exposure</code>, <code translate="no" dir="ltr">test_linearity</code>
+</td> </tr> <tr> <td><strong>scene1_2</strong></td> <td>
+<code translate="no" dir="ltr">test_raw_exposure</code>, <code translate="no" dir="ltr">test_raw_sensitivity</code>, <code translate="no" dir="ltr">test_yuv_plus_raw</code>
+</td> </tr> <tr> <td><strong>scene2_a</strong></td> <td>
+<code translate="no" dir="ltr">test_faces</code>, <code translate="no" dir="ltr">test_num_faces</code>
+</td> </tr> <tr> <td><strong>scene3</strong></td> <td><code translate="no" dir="ltr">test_flip_mirror</code></td> </tr> <tr> <td><strong>scene4</strong></td> <td><code translate="no" dir="ltr">test_aspect_ratio_and_crop</code></td> </tr> <tr> <td><strong>sensor_fusion</strong></td> <td><code translate="no" dir="ltr">test_sensor_fusion</code></td> </tr> </tbody> </table> <h4 id="parallel-dut-testing">Parallel DUT testing</h4> <p>Devices running Android 14 or higher support parallel DUT testing. This lets you test DUTs in parallel with multiple rigs to speed up overall testing. For example, parallel testing lets you test camera 0 in one rig and camera 1 in another rig at the same time. For Android 17 and higher, because Camera ITS tests are split into two activities, you can run <code translate="no" dir="ltr">sensor_fusion</code> and <code translate="no" dir="ltr">feature_combination</code> tests on one DUT, and other tests on another DUT in parallel. All testing for parallel testing sessions is aggregated on the CTS Verifier session on the reference DUT. You must run parallel testing with Arduino lighting control, as manual lighting control isn't supported with parallel testing. Make sure that a different channel on the same Arduino controller controls the lighting for each rig.</p> <p>The following is a sample <code translate="no" dir="ltr">config.yml</code> file that defines three testbeds to run in parallel.</p> 
+<pre>TestBeds:
+  - Name: TEST_BED_TABLET_SCENES_INDEX_0
+    Controllers:
+        AndroidDevice:
+          - serial: &lt;device-id-0&gt;
+            label: dut
+          - serial: &lt;tablet-id-0&gt;
+            label: tablet
+    TestParams:
+      brightness: 192
+      chart_distance: 22.0
+      debug_mode: "False"
+      lighting_cntl: "arduino"
+      lighting_ch: &lt;controller-channel-0&gt;
+      camera: 0
+      scene: &lt;scene-name&gt;  # if &lt;scene-name&gt; left as-is runs all scenes
+      foldable_device: "False"
+
+  - Name: TEST_BED_TABLET_SCENES_INDEX_1
+    Controllers:
+        AndroidDevice:
+          - serial: &lt;device-id-1&gt;
+            label: dut
+          - serial: &lt;tablet-id-1&gt;
+            label: tablet
+    TestParams:
+      brightness: 192
+      chart_distance: 22.0
+      debug_mode: "False"
+      lighting_cntl: "arduino"
+      lighting_ch: &lt;controller-channel-1&gt;
+      camera: 1
+      scene: &lt;scene-name&gt;  # if &lt;scene-name&gt; left as-is runs all scenes
+      foldable_device: "False"
+
+  # TEST_BED_SENSOR_FUSION represents testbed index 2
+  # Parallel sensor_fusion is currently unsupported due to Arduino requirements
+  - Name: TEST_BED_SENSOR_FUSION
+    # Test configuration for sensor_fusion
+    Controllers:
+        AndroidDevice:
+          - serial: &lt;device-id&gt;
+            label: dut
+    TestParams:
+      fps: 30
+      img_size: 640,480
+      test_length: 7
+      debug_mode: "False"
+      chart_distance: 25
+      rotator_cntl: "arduino"
+      rotator_ch: &lt;controller-channel-2&gt;
+      camera: &lt;camera-id&gt;
+      foldable_device: "False"
+      tablet_device: "False"
+      lighting_cntl: "None"
+      lighting_ch: &lt;controller-channel&gt;
+      scene: "sensor_fusion"
+
+</pre> <p>To run the testbeds in parallel, use the following command:</p> 
+<pre>for i in 0 1 2; do python3 tools/run_all_tests.py testbed_index=$i num_testbeds=3 &amp; done; wait</pre> <h4 id="result-aggregation">Submit aggregate test results</h4> <p>In Android 17 and higher, you can submit aggregate Camera ITS test results for build approval. CTS Verifier lets you concurrently test multiple scenes across multiple devices, and aggregate test results from multiple CTS Verifier reports (from different test runs or devices) into a single, unified submission.</p> <h5 id="aggregation-process">Submission process</h5> <p>To submit aggregated Camera ITS results for build approval, follow these steps:</p> <ol> <li>
+<strong>Prepare devices:</strong> Gather two to three devices under test (DUTs) that all have the exact same build fingerprint.</li> <li>
+<strong>Install CTS Verifier:</strong> Install the latest CTS Verifier APK, which can be obtained from the provided build explorer.</li> <li>
+<p><strong>Execute tests in parallel:</strong></p> <ol> <li>Mount the DUTs in separate rigs.</li> <li>Run different Camera ITS scenes on each device concurrently.</li> <li>
+<strong>Report collection:</strong> Pull the CTS Verifier report after each run. This includes reports where scenes have failed. Only rerun the failing scenes in subsequent runs.</li> </ol>
+</li> <li><p><strong>Submit reports:</strong> Upload multiple CTS Verifier reports collected from all devices.</p></li> <li>
+<p><strong>Review results:</strong> Once the reports are uploaded, review the aggregated results:</p> <ul> <li>The <strong>Test Analysis</strong> section shows a complete list of all executed scenes.</li> <li>
+<p>Non-executed or failing scenes are listed under the <strong>Failed</strong> section.</p> <p><img src="https://source.android.com/static/docs/compatibility/cts/images/result-aggregation-image-1.png" alt="result-aggregation-image-1" width="350" class="screenshot"> </p> <p><strong>Figure 1.</strong> Documentation of scenes that were not executed or failed.</p>
+</li> <li>
+<p>Passing scenes are listed under the <strong>Aggregated Pass</strong> section.</p> <p><img src="https://source.android.com/static/docs/compatibility/cts/images/result-aggregation-image-2.png" alt="result-aggregation-image-2" width="350" class="screenshot"> </p> <p><strong>Figure 2.</strong> Scenes categorized as Aggregated Pass</p>
+</li> </ul>
+</li> </ol> <h5 id="aggregation-approval">Build approval status</h5> <p>Build approval is granted once all required scenes have completed successfully across the aggregated reports.</p> <aside class="note"><strong>Note:</strong><span> The Camera ITS test status indicator on the individual device doesn't turn green because passing all scenes on a single device isn't required. The on-device status is instead displayed in grey for all devices.</span></aside> <h3 id="dng-noise-model">DNG noise model</h3> <p>Devices that advertise the ability to capture RAW or DNG must provide a noise model in the capture result metadata of each raw shot. This noise model must be embedded into the camera HAL for each camera (for example, front and back cameras) on the device that claims support.</p> <h4 id="dng-noise-model-implementation">Noise model implementation</h4> <p>To implement a noise model, follow these steps to generate a noise model and embed the model into the camera HAL.</p> <aside class="note"><strong>Note:</strong><span> The noise model must be created on a per-camera basis and the noise model is used for all devices with that specific camera.</span></aside> <ol> <li><p>To generate a noise model for each camera, run the <code translate="no" dir="ltr">dng_noise_model.py</code> script in the <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:cts/apps/CameraITS/tools/"><code translate="no" dir="ltr">tools</code></a> directory. This outputs a C code snippet. For more information on how to set up the camera and capture environment, see the <code translate="no" dir="ltr">DngNoiseModel.pdf</code> document in the <code translate="no" dir="ltr">tools</code> directory.</p></li> <li><p>To implement the noise model for the device, cut and paste the C code snippet into the camera HAL.</p></li> </ol> <h4 id="noise_model_validation">Noise model validation</h4> <p>The <a href="camera-its-tests#test_dng_noise_model"><code translate="no" dir="ltr">tests/scene1_1/test_dng_noise_model.py</code></a> automated ITS test validates the noise model by verifying that the noise values for the shot exposure and gain provided in the camera data is correct.</p> <h2 id="marginal-pass-test-status">Marginally passing tests (PASS* test status)</h2> <p>In Android 17 and higher, a <em>marginal pass</em> (<code translate="no" dir="ltr">PASS*</code>) indicates that a test has passed, but its performance metrics are very close to the predefined passing threshold. While the test technically meets the passing criteria, the proximity to the failure boundary suggests a need for closer examination.</p> <h3 id="benefits-marginal-pass">Benefits of marginal pass</h3> <p>The <code translate="no" dir="ltr">PASS*</code> status offers several benefits:</p> <ul> <li><p>Early warning system: Identifies tests that are on the verge of failing, allowing teams to address issues before they lead to outright failures.</p></li> <li><p>Proactive optimization: Encourages teams to optimize tests and code that are performing at the lower end of the acceptable range, improving overall stability.</p></li> <li><p>Improved quality: Helps maintain a higher standard of quality by flagging areas that might be susceptible to future regressions with minor code changes.</p></li> <li><p>Reduced debugging time: By catching <code translate="no" dir="ltr">PASS*</code> tests early, the time and effort required to debug full failures in the future can be significantly reduced.</p></li> </ul> <h3 id="pass-star-details">PASS* details</h3> <p>The <code translate="no" dir="ltr">PASS*</code> status includes the following:</p> <ul> <li><p>Defining thresholds: Specific marginal pass thresholds are defined for each relevant test in Camera ITS.</p></li> <li><p>Automated detection: The test automation system detects and categorizes tests as <code translate="no" dir="ltr">PASS*</code> based on the defined thresholds.</p></li> <li><p>Alerting mechanism: Teams receive automated alerts for any tests flagged as <code translate="no" dir="ltr">PASS*</code>, directing them to investigate the specific test and its metrics.</p></li> <li><p>Reporting: Marginal pass statuses are clearly indicated in test reports and dashboards for better visibility as <code translate="no" dir="ltr">PASS*</code> in the <code translate="no" dir="ltr">ItsTestSummary</code> report, similar to <code translate="no" dir="ltr">Fail*</code> for <code translate="no" dir="ltr">not_yet_mandated</code> tests. The test maintains a green status, as it continues to pass within the established thresholds, to avoid further confusion. The <code translate="no" dir="ltr">PASS*</code> status applies only to a test class, not the entire scene. For example, Scene_0 can be considered <code translate="no" dir="ltr">PASS</code> even if test_jitter and test_metadata are <code translate="no" dir="ltr">PASS*</code>.</p></li> <li><p>Monitoring: Performance data is collected on tests that marginally pass on a device. This allows for monitoring future camera improvements made by OEMs if these tests transition to a <code translate="no" dir="ltr">PASS</code> status.</p></li> </ul> <p>The following is an example of test results with <code translate="no" dir="ltr">PASS*</code>:</p> 
+<pre>INFO:root:Reporting camera 1 ITS results to CtsVerifier
+INFO:root:ITS results to CtsVerifier: {'scene0': {'result': 'PASS', 'TEST_STATUS': [{'test': 'test_jitter', 'status': 'PASS*'}, {'test': 'test_metadata', **'status': 'PASS*'**}, {'test': 'test_request_capture_match', 'status': 'PASS'}, {'test': 'test_sensor_events', 'status': 'PASS'}, {'test': 'test_solid_color_test_pattern', 'status': 'PASS'}, {'test': 'test_test_patterns', 'status': 'SKIP'}, {'test': 'test_tonemap_curve', 'status': 'SKIP'}, {'test': 'test_unified_timestamps', 'status': 'PASS'}, {'test': 'test_vibration_restriction', 'status': 'PASS'}], 'mpc_metrics': [], 'performance_metrics': [], 'feature_query_proto': [], 'feature_query_proto_path': [], 'summary': '/tmp/CameraITS_zojk4sdr/cam_id_1/scene0/scene_test_summary.txt', 'start': 1754330630345, 'end': 1754330764534}, 'scene1_1': {'result': 'NOT_EXECUTED'}, 'scene1_2': {'result': 'NOT_EXECUTED'}, 'scene1_3': {'result': 'NOT_EXECUTED'}, 'scene2_a': {'result': 'NOT_EXECUTED'}, 'scene2_b': {'result': 'NOT_EXECUTED'}, 'scene2_c': {'result': 'NOT_EXECUTED'}, 'scene2_d': {'result': 'NOT_EXECUTED'}, 'scene2_e': {'result': 'NOT_EXECUTED'}, 'scene2_f': {'result': 'NOT_EXECUTED'}, 'scene2_g': {'result': 'NOT_EXECUTED'}, 'scene3': {'result': 'NOT_EXECUTED'}, 'scene4': {'result': 'NOT_EXECUTED'}, 'scene6': {'result': 'NOT_EXECUTED'}, 'scene7': {'result': 'NOT_EXECUTED'}, 'scene8': {'result': 'NOT_EXECUTED'}, 'scene9': {'result': 'NOT_EXECUTED'}, 'scene_extensions/scene_hdr': {'result': 'NOT_EXECUTED'}, 'scene_extensions/scene_low_light': {'result': 'NOT_EXECUTED'}, 'scene_tele/scene6_tele': {'result': 'NOT_EXECUTED'}, 'scene_tele/scene7_tele': {'result': 'NOT_EXECUTED'}, 'scene_video': {'result': 'NOT_EXECUTED'}, 'scene5': {'result': 'NOT_EXECUTED'}, 'sensor_fusion': {'result': 'NOT_EXECUTED'}, 'feature_combination': {'result': 'NOT_EXECUTED'}, 'scene_flash': {'result': 'NOT_EXECUTED'}, 'scene_ip': {'result': 'NOT_EXECUTED'}}
+</pre> <p>Partners are encouraged to:</p> <ul> <li>Monitor <code translate="no" dir="ltr">PASS*</code> alerts</li> <li>Investigate the root cause of <code translate="no" dir="ltr">PASS*</code> tests</li> <li>Proactively optimize tests and code identified as <code translate="no" dir="ltr">PASS*</code>
+</li> </ul> <p>The <code translate="no" dir="ltr">PASS*</code> status aims to enhance the robustness and reliability of Camera ITS testing, leading to a stable and high-quality product.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/compatibility/cts/camera-its" class="_attribution-link">https://source.android.com/docs/compatibility/cts/camera-its</a>
+  </p>
+</div>

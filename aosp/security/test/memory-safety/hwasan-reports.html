@@ -1,0 +1,105 @@
+<h1>Understand HWASan reports</h1>  <p>When the HWASan tool detects a memory bug, the process is terminated with <code translate="no" dir="ltr">abort()</code>, and a report is printed to stderr and logcat. Like all native crashes on Android, HWASan errors are under <code translate="no" dir="ltr">/data/tombstones</code>.</p> <h2 id="example-report">Example report</h2> <p>Compared to regular native crashes, HWASan carries extra information in the <strong>Abort message</strong> field near the top of the tombstone. Here is a sample heap-based crash. For stack bugs, see the <a href="#stack-mismatch">note</a> for the stack-specific sections.</p> 
+<pre>*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+Build fingerprint: 'google/flame_hwasan/flame:Tiramisu/MASTER/7956676:userdebug/dev-keys'
+Revision: 'DVT1.0'
+ABI: 'arm64'
+Timestamp: 2019-04-24 01:13:22+0000
+pid: 11154, tid: 11154, name: sensors@1.0-ser  &gt;&gt;&gt; /vendor/bin/hw/android.hardware.sensors@1.0-service &lt;&lt;&lt;
+signal 6 (SIGABRT), code -1 (SI_QUEUE), fault addr --------
+Abort message: '==9569==ERROR: HWAddressSanitizer: tag-mismatch on address 0x00433ae20045 at pc 0x00623ae2a9cc
+READ of size 1 at 0x00433ae20045 tags: 5b/83 (ptr/mem) in thread T0
+    #0 0x7240450c68  (/system/lib64/vndk-sp-R/libcutils.so+0x8c68)
+    #1 0x723dffd490  (/vendor/lib64/sensors.ssc.so+0x34490)
+    #2 0x723e0126e0  (/vendor/lib64/sensors.ssc.so+0x496e0)
+[...]
+
+[0x00433ae20040,0x00433ae20060) is a small unallocated heap chunk; size: 32 offset: 5
+
+Cause: use-after-free
+0x00433ae20045 is located 5 bytes inside of 10-byte region [0x00433ae20040,0x00433ae2004a)
+freed by thread T0 here:
+    #0 0x72404d1b18  (/system/lib64/libclang_rt.hwasan-aarch64-android.so+0x10b18)
+    #1 0x723af23040  (/vendor/lib64/libgralloccore.so+0x5040)
+    #2 0x723af23fa4  (/vendor/lib64/libgralloccore.so+0x5fa4)
+[...]
+
+previously allocated here:
+    #0 0x72404ce554  (/system/lib64/libclang_rt.hwasan-aarch64-android.so+0xd554)
+    #1 0x7240115654  (/apex/com.android.runtime/lib64/bionic/libc.so+0x43654)
+    #2 0x7240450ac8  (/system/lib64/vndk-sp-R/libcutils.so+0x8ac8)
+[...]
+
+hwasan_dev_note_heap_rb_distance: 1 1023
+hwasan_dev_note_num_matching_addrs: 0
+hwasan_dev_note_num_matching_addrs_4b: 0
+Thread: T0 0x006a00002000 stack: [0x007fc1064000,0x007fc1864000) sz: 8388608 tls: [0x00737702ffc0,0x007377033000)
+Memory tags around the buggy address (one tag corresponds to 16 bytes):
+  0x006f33ae1f80: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0x006f33ae1f90: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0x006f33ae1fa0: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0x006f33ae1fb0: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0x006f33ae1fc0: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0x006f33ae1fd0: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0x006f33ae1fe0: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0x006f33ae1ff0: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+=&gt;0x006f33ae2000: 08  00  08  00 [83] 00  00  00  00  00  00  00  00  00  00  00
+  0x006f33ae2010: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0x006f33ae2020: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0x006f33ae2030: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0x006f33ae2040: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0x006f33ae2050: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0x006f33ae2060: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0x006f33ae2070: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0x006f33ae2080: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+Tags for short granules around the buggy address (one tag corresponds to 16 bytes):
+  0x006f33ae1ff0: ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..
+=&gt;0x006f33ae2000: 72  ..  d0  .. [..] ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..
+  0x006f33ae2010: ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..
+See https://clang.llvm.org/docs/HardwareAssistedAddressSanitizerDesign.html#short-granules for a description of short granule tags
+Registers where the failure occurred (pc 0x00623ae2a9cc):
+    x0  0000007fc18623ec  x1  5b0000433ae20045  x2  0000000000000013  x3  ffffffffffffffff
+    x4  ffffffffffffffff  x5  0000007fc1861da3  x6  6f7420676e696f47  x7  45522061206f6420
+    x8  0000000000000000  x9  0200006b00000000  x10 00000007fc18623f  x11 5b0000433ae20040
+    x12 6f64206f7420676e  x13 0a44414552206120  x14 0000000000000010  x15 ffffffffffffffff
+    x16 000000737169ac94  x17 0000000000000007  x18 0000007377bd8000  x19 0000007fc1862498
+    x20 0200006b00000000  x21 0000007fc18624a8  x22 0000000000000001  x23 0000000000000000
+    x24 0000000000000000  x25 0000000000000000  x26 0000000000000000  x27 0000000000000000
+    x28 0000000000000000  x29 0000007fc1862410  x30 000000623ae2a9d0   sp 0000007fc18623d0
+SUMMARY: HWAddressSanitizer: tag-mismatch (/system/lib64/vndk-sp-R/libcutils.so+0x8c68)
+
+[ … regular crash dump follows …]</pre> <p>This is similar to an <a href="https://github.com/google/sanitizers/wiki/AddressSanitizer">AddressSanitizer</a> report. Unlike those, almost all HWASan bugs are tag-mismatch errors, that is, a memory access where a pointer tag doesn't match the corresponding memory tag. This could be any of the following: </p> <ul> <li>Out of bounds access on stack or heap</li> <li>Use-after-free error on heap</li> <li>Use-after-return error on stack</li> </ul> <h2 id="sections">Sections</h2> <p>Here is an explanation of each of the sections of the HWASan report.</p> <div id="access" class="report_target"> <h3 id="access-error"><span class="access">Access error</span></h3> <p>Contains information about the bad memory access, including:</p> <ul> <li>Access type (<code translate="no" dir="ltr">READ</code> versus <code translate="no" dir="ltr">WRITE</code>)</li> <li>Access size (how many bytes were attempted to be accessed)</li> <li>Thread number of the access</li> <li>Pointer and memory tags (for advanced debugging)</li> </ul> </div> <div id="access_stack" class="report_target"> <h3 id="access-stack-trace"><span class="access_stack">Access stack trace</span></h3> <p> Stack trace of the bad memory access. See <a href="#symbolization">Symbolization</a> to symbolize. </p> </div> <div id="cause" class="report_target"> <h3 id="cause"><span class="cause">Cause</span></h3> <p> The potential cause for the bad access. If there are multiple candidates, they're listed in order of descending likelihood. Precedes the detailed info about the potential cause. HWASan can diagnose the following causes: </p> <ul> <li>Use after free</li> <li>Stack tag mismatch, which can be stack use after return, stack use after scope, or out of bounds</li> <li>Heap buffer overflow</li> <li>Global overflow</li> </ul> </div> <div id="meminfo" class="report_target"> <h3 id="memory-information"><span class="meminfo">Memory information</span></h3> <p>Describes what HWASan knows about the memory being accessed, and can differ based on the bug type:</p> <table> <tr> <th>Bug type</th> <th>Cause</th> <th>Report format</th> </tr> <tr> <td rowspan="3">Tag mismatch</td> <td>Use after free</td> <td>Use this report format:<br> 
+<pre>&lt;address&gt; is located N bytes inside of M-byte region [&lt;start&gt;, &lt;end&gt;)
+freed by thread T0 here:</pre>
+</td> </tr> <tr> <td>Heap buffer overflow</td> <td>Note that this can also be an underflow.<br> 
+<pre>&lt;address&gt; is located N bytes to the right of M-byte region [&lt;start&gt;, &lt;end&gt;)
+allocated here:</pre>
+</td> </tr> <tr> <td>Stack tag mismatch</td> <td>Stack reports don't differentiate between overflow or underflow and use-after-return bugs. In addition, to find the stack allocation that is the source of the error, an offline symbolization step is required. See <a href="#stack-mismatch">Understand stack reports</a>.</td> </tr> <tr> <td rowspan="3">Invalid free</td> <td>Use after free</td> <td>A double free bug. If this happens on process shutdown, this can signify an <a href="#odr">ODR violation</a>. 
+<pre>&lt;address&gt; is located N bytes inside of M-byte region [&lt;start&gt;, &lt;end&gt;)
+freed by thread T0 here:</pre> </td> </tr> <tr> <td>Can't describe address</td> <td>Either a wild free (free of memory that hadn't been allocated before), or a double free after the allocated memory was evicted from HWASan's free buffer.</td> </tr> <tr> <td>0x... is HWAsan shadow memory</td> <td>A wild free, as the app was attempting to free memory that is internal to HWASan.</td> </tr> </table> </div> <div id="free_stack" class="report_target"> <h3 id="deallocation-stack-trace"><span class="free_stack">Deallocation stack trace</span></h3> <p>Stack trace of where the memory was deallocated. Present only for use-after-free or invalid-free bugs. See <a href="#symbolization">Symbolization</a> to symbolize.</p> </div> <div id="prev_stack" class="report_target"> <h3 id="allocation-stack-trace"><span class="prev_stack">Allocation stack trace</span></h3> <p> Stack trace of where the memory was allocated. See <a href="#symbolization">Symbolization</a> to symbolize. </p> </div> <div id="advanced" class="report_target"> <h3 id="advanced-debugging-information"><span class="advanced">Advanced debugging information</span></h3> <p>The HWASan report also features some advanced debugging information, including (in order):</p> <ol> <li>The list of threads in the process</li> <li>The list of threads in the process</li> <li>The value of the memory tags near the faulting memory</li> <li>The dump of the registers at the point of memory access</li> </ol> <h4 id="memory-tag-dump">Memory tag dump</h4> <p>You can use the tag memory dump to look for nearby memory allocations with the same tag as the pointer tag. These tags can point to an out of bounds access with a large offset. One tag corresponds to 16 bytes of memory; the pointer tag is the top 8 bits of the address. The tag memory dump can give hints, for example, the following is a buffer overflow to the right:</p> 
+<pre>tags: ad/5c (ptr/mem)
+[...]
+Memory tags around the buggy address (one tag corresponds to 16 bytes):
+  0x006f33ae1ff0: 0e  0e  0e  57  20  20  20  20  20  2e  5e  5e  5e  5e  5e  b5
+=&gt;0x006f33ae2000: f6  f6  f6  f6  f6  4c  ad  ad  ad  ad  ad  ad [5c] 5c  5c  5c
+  0x006f33ae2010: 5c  04  2e  2e  2e  2e  2e  2f  66  66  66  66  66  80  6a  6a
+Tags for short granules around the buggy address (one tag corresponds to 16 bytes):
+  0x006f33ae1ff0: ab  52  eb  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..
+=&gt;0x006f33ae2000: ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  .. [..] ..  ..  ..
+  0x006f33ae2010: ..  5c  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..</pre> <p>Note the run of 6 × 16 = 96 bytes of <code translate="no" dir="ltr">ad</code> tags to the left that match the pointer tag.</p> <p>If the size of an allocation isn't a multiple of 16, the remainder of the size is stored as the <span class="shortsize">memory tag</span> and the tag is stored as a <span class="shorttag">short granule tag</span>. In the previous example, just after the bolded allocation tagged <code translate="no" dir="ltr">ad</code>, we have a 5 × 16 + 4 = 84 byte allocation of tag <code translate="no" dir="ltr">5c</code>.</p> <p>A zero memory tag (for example, <code translate="no" dir="ltr">tags: ad/<b>00</b> (ptr/mem)</code>) indicates a stack-use-after-return bug.</p> <h4 id="register-dump">Register dump</h4> <p>The register dump in HWASan reports corresponds to the instruction that performed the invalid memory access. This dump is followed by another register dump from the regular Android signal handler. <b>Ignore the second dump</b>, as it was taken when HWASan called <code translate="no" dir="ltr">abort()</code> and isn't relevant to the bug.</p> </div> <h2 id="symbolization">Symbolization</h2> <aside class="note"> <b>Note:</b> Your organization might have tools for automating part or all of the symbolization process.</aside> <p> To get function names and line numbers in stack traces (and get variable names for use-after-scope bugs), an offline symbolization step is needed.</p> <h3 id="first-time-setup">First-time setup: install llvm-symbolizer</h3> <p>To symbolize, your system must have <code translate="no" dir="ltr">llvm-symbolizer</code> installed and accessible from <code translate="no" dir="ltr">$PATH</code>. On Debian, you can install it using <code translate="no" dir="ltr">sudo apt install llvm</code>.</p> <h3 id="obtain-symbol-files">Obtain symbol files</h3> <p>For symbolization, we require unstripped binaries containing symbols. Their location depends on the type of build:</p> <ul> <li>For <b>local builds</b>, the symbol files are in <code translate="no" dir="ltr">out/target/product/&lt;product&gt;/symbols/</code>.</li> <li>For <b>AOSP builds</b> (for example, flashed from <a href="https://flash.android.com">Android Flash Tool</a>), the builds are on <a href="https://ci.android.com/">Android CI</a>. In the <strong>Artifacts</strong> for the build, there is a <code translate="no" dir="ltr">${PRODUCT}-symbols-${BUILDID}.zip</code> file.</li> <li>For <b>internal builds</b> from your organization, check your organization's documentation for help obtaining symbol files.</li> </ul> <h3 id="symbolize">Symbolize</h3> 
+<pre>hwasan_symbolize --symbols &lt;DECOMPRESSED_DIR&gt;/out/target/product/*/symbols &lt; crash</pre> <aside class="note"> <b>Note:</b> The <code translate="no" dir="ltr">hwasan_symbolize</code> script is located in the Android NDK under <code translate="no" dir="ltr">toolchains/llvm</code>.</aside> <h2 id="stack-mismatch">Understand stack reports</h2> <p>For bugs that occur with stack variables, the HWASan report contains details like this:</p> 
+<pre>
+Cause: stack tag-mismatch
+Address 0x007d4d251e80 is located in stack of thread T64
+Thread: T64 0x0074000b2000 stack: [0x007d4d14c000,0x007d4d255cb0) sz: 1088688 tls: [0x007d4d255fc0,0x007d4d259000)
+Previously allocated frames:
+  record_addr:0x7df7300c98 record:0x51ef007df3f70fb0  (/apex/com.android.art/lib64/libart.so+0x570fb0)
+  record_addr:0x7df7300c90 record:0x5200007df3cdab74  (/apex/com.android.art/lib64/libart.so+0x2dab74)
+  [...]
+</pre> <p> To help you understand stack bugs, HWASan keeps track of past stack frames. HWASan doesn't transform these into human-understandable content in the bug report, and requires an additional <a href="#symbolization">symbolization step</a>. </p> <h2 id="odr">ODR violations</h2> <p> Some use-after-free bugs reported by HWASan can indicate a One Definition Rule (ODR) violation. An ODR violation happens when the same variable is defined multiple times in the same program. This also means that the variable is destructed multiple times, which can lead to the use-after-free error. </p>
+<p> After symbolization, ODR violations show a use-after-free error with <code translate="no" dir="ltr">__cxa_finalize</code>, on both the invalid access stack and the <strong>freed here</strong> stack. The <strong>previously allocated here</strong> stack contains <code translate="no" dir="ltr">__dl__ZN6soinfo17call_constructorsEv</code> and should point at the location in your program that defines the variable higher on the stack. </p> <p>The ODR can be violated if static libraries are used. If a static library that defines a C++ global is linked into multiple shared libraries or executables, multiple definitions of the same symbol might exist in the same address space, which causes an ODR error. </p> <h2 id="troubleshooting">Troubleshooting</h2> <p>This section describes some errors and how to address them.</p> <h3 id="hwaddresssanitizer">HWAddressSanitizer can not describe address in more detail</h3> <p>Sometimes HWASan can run out of space for information about past memory allocations. In that case, the report contains only one stack trace for the immediate memory access, followed by a note:</p> 
+<pre>HWAddressSanitizer can not describe address in more detail.</pre> <p>In some cases, you can resolve this by running the test multiple times. Another option is to increase HWASan history size. You can do this globally in <code translate="no" dir="ltr">build/soong/cc/sanitize.go</code> (look for <code translate="no" dir="ltr">hwasanGlobalOptions</code>), or in your process environment (try <code translate="no" dir="ltr">adb shell echo $HWASAN_OPTIONS</code> to see the current settings). </p> <p>This error can also happen if the accessed memory isn't mapped, or allocated by a non-HWASan aware allocator. In this case, the <code translate="no" dir="ltr">mem</code> tag listed in the crash header is generally <code translate="no" dir="ltr">00</code>. If you have access to the full tombstone, it might be helpful to consult the memory maps dump to find out which mapping (if any) the address belongs to.</p> <h3 id="nested-bug">Nested bug in the same thread</h3> <p>This means there was a bug while generating the HWASan crash-report. This is usually due to a bug in the HWASan runtime. <a href="https://github.com/google/sanitizers/issues/new">File a bug</a> and provide instructions for how to reproduce the issue if possible.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/security/test/memory-safety/hwasan-reports" class="_attribution-link">https://source.android.com/docs/security/test/memory-safety/hwasan-reports</a>
+  </p>
+</div>

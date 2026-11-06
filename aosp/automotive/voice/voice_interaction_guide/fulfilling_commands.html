@@ -1,0 +1,166 @@
+<h1>Fulfill commands</h1>  <p>This page describes how to fulfill commands with voice interaction.</p> <h2 id="media-commands">Fulfill media commands</h2> <p>Media-related command can be split into three different groups:</p> <ul> <li>External media sources (such as Spotify installed in AAOS).</li> <li>Backend media sources (such as music streamed through the VIA).</li> <li>Local media sources (such as car radio).</li> </ul> <h3 id="handle-external-media-source-commands">Handle external media source commands</h3> <p>External media sources are defined as Android apps that support <code translate="no" dir="ltr"><a href="https://developer.android.com/reference/android/support/v4/media/session/MediaSessionCompat">MediaSessionCompat</a></code> and <code translate="no" dir="ltr"><a href="https://developer.android.com/reference/android/support/v4/media/MediaBrowserCompat">MediaBrowseCompat</a></code> APIs (refer to <a href="https://developer.android.com/training/cars/media">Build media apps for cars</a> for a detailed explanation on the use of these APIs). </p> <p><strong>Important:</strong> For an assistant app to connect to the <code translate="no" dir="ltr">MediaBrowseService</code> of all installed media apps in the system, it must:</p> <ol> <li>Be installed as system-signed (see Media Application Development guidelines for AAOS and the sample <code translate="no" dir="ltr">PackageValidator</code> code).</li> <li>Hold <code translate="no" dir="ltr">android.permission.MEDIA_CONTENT_CONTROL</code> system-privileged permission (see <a href="integration_flows#grant">Grant system-privileged permissions</a>).</li> </ol> <p>In addition to <a href="https://developer.android.com/reference/android/support/v4/media/MediaBrowserCompat"><code translate="no" dir="ltr">MediaBrowserCompat</code></a> and <a href="https://developer.android.com/reference/android/support/v4/media/session/MediaControllerCompat"><code translate="no" dir="ltr">MediaControllerCompat</code></a>, AAOS provides the following:</p> <ul> <li>
+<code translate="no" dir="ltr"><a href="https://android.googlesource.com/platform/packages/services/Car/+/refs/heads/android10-release/service/src/com/android/car/CarMediaService.java">CarMediaService</a></code> provides centralized information on the currently selected media source. This is also used to resume a previously playing media source after car shutdown-restart.</li> <li>
+<code translate="no" dir="ltr">car-media-common</code> provides convenient methods to list, connect, and interact with media apps.</li> </ul> <p>Provided below are guidelines specific to the implementation of common voice interaction commands.</p> <h4 id="get-a-list-of-installed-media-sources">Get a list of installed media sources</h4> <p>Media sources can be detected using <a href="https://developer.android.com/reference/android/content/pm/PackageManager"><code translate="no" dir="ltr">PackageManager</code></a>, and filtering for services matching the <a href="https://developer.android.com/reference/android/service/media/MediaBrowserService#SERVICE_INTERFACE"><code translate="no" dir="ltr">MediaBrowserService.SERVICE_INTERFACE</code></a>. In some cars there might be some special media browser service implementations, which should be excluded. Here is an example of this logic:</p> 
+<pre>private Map&lt;String, MediaSource&gt; getAvailableMediaSources() {
+    List&lt;String&gt; customMediaServices =
+        Arrays.asList(mContext.getResources()
+            .getStringArray(R.array.custom_media_packages));
+    List&lt;ResolveInfo&gt; mediaServices = mPackageManager.queryIntentServices(
+            new Intent(MediaBrowserService.SERVICE_INTERFACE),
+            PackageManager.GET_RESOLVED_FILTER);
+    Map&lt;String, MediaSource&gt; result = new HashMap&lt;&gt;();
+    for (ResolveInfo info : mediaServices) {
+        String packageName = info.serviceInfo.packageName;
+        if (customMediaServices.contains(packageName)) {
+            // Custom media sources should be ignored, as they might have a
+            // specialized handling (e.g., radio).
+            continue;
+        }
+        String className = info.serviceInfo.name;
+        ComponentName componentName = new ComponentName(packageName,
+            className);
+        MediaSource source = MediaSource.create(mContext, componentName);
+        result.put(source.getDisplayName().toString().toLowerCase(),
+            source);
+    }
+    return result;
+}</pre> <p>Be aware that media sources might be installed or uninstalled at any time. In order to maintain an accurate list, it is recommended to implement a <a href="https://developer.android.com/reference/android/content/BroadcastReceiver"><code translate="no" dir="ltr">BroadcastReceiver</code></a> instance for the intent actions <a href="https://developer.android.com/reference/android/content/Intent#ACTION_PACKAGE_ADDED"><code translate="no" dir="ltr">ACTION_PACKAGE_ADDED</code></a>, <a href="https://developer.android.com/reference/android/content/Intent#ACTION_PACKAGE_CHANGED"><code translate="no" dir="ltr">ACTION_PACKAGE_CHANGED</code></a>, <a href="https://developer.android.com/reference/android/content/Intent#ACTION_PACKAGE_REPLACED"><code translate="no" dir="ltr">ACTION_PACKAGE_REPLACED</code></a>, and <a href="https://developer.android.com/reference/android/content/Intent#ACTION_PACKAGE_REMOVED"><code translate="no" dir="ltr">ACTION_PACKAGE_REMOVED</code></a>.</p> <h4 id="connect-to-currently-playing-media-source">Connect to currently playing media source</h4> <p><a href="https://android.googlesource.com/platform/packages/services/Car/+/refs/heads/android10-release/service/src/com/android/car/CarMediaService.java"><code translate="no" dir="ltr">CarMediaService</code></a> provides methods to get the currently selected media source, and when this media source changes. These changes could happen because the user interacted with the UI directly, or due the use of hardware buttons in the car. On the other hand, car-media-common library offers convenient ways to connect to a given media source. Here is a simplified snippet on how to connect to the currently selected media app:</p> 
+<pre>public class MediaActuator implements
+        MediaBrowserConnector.onConnectedBrowserChanged {
+    private final Car mCar;
+    private CarMediaManager mCarMediaManager;
+    private MediaBrowserConnector mBrowserConnector;
+
+    …
+
+    public void initialize(Context context) {
+        mCar = Car.createCar(context);
+        mBrowserConnector = new MediaBrowserConnector(context, this);
+        mCarMediaManager = (CarMediaManager)
+            mCar.getCarManager(Car.CAR_MEDIA_SERVICE);
+        mBrowserConnector.connectTo(mCarMediaManager.getMediaSource());
+        …
+    }
+
+    @Override
+    public void onConnectedBrowserChanged(
+            @Nullable MediaBrowserCompat browser) {
+        // TODO: Handle connected/disconnected browser
+    }
+
+    …
+}</pre> <h4 id="control-playback-of-currently-playing-media-source">Control playback of currently playing media source</h4> <p>With a connected <a href="https://developer.android.com/reference/android/support/v4/media/session/MediaControllerCompat"><code translate="no" dir="ltr">MediaBrowserCompat</code></a> it's easy to send <a href="https://developer.android.com/reference/android/support/v4/media/session/MediaControllerCompat.TransportControls">transport control commands</a> to the target app. Here is a simplified example:</p> 
+<pre>public class MediaActuator …  {
+    …
+    private MediaControllerCompat mMediaController;
+
+    @Override
+    public void onConnectedBrowserChanged(
+            @Nullable MediaBrowserCompat browser) {
+        if (browser != null &amp;&amp; browser.isConnected()) {
+            mMediaController = new MediaControllerCompat(mContext,
+                browser.getSessionToken());
+        } else {
+            mMediaController = null;
+        }
+    }
+
+    private boolean playSongOnCurrentSource(String song) {
+        if (mMediaController == null) {
+            // No source selected.
+            return false;
+        }
+        MediaControllerCompat.TransportControls controls =
+            mMediaController.getTransportControls();
+        PlaybackStateCompat state = controller.getPlaybackState();
+        if (state == null || ((state.getActions() &amp;
+                PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH) == 0)) {
+            // Source can't play from search
+            return false;
+        }
+        controls.playFromSearch(query, null);
+        return true;
+    }
+
+    …
+}</pre> <h3 id="handle-local-media-source-commands-radio,-cd-player,-bluetooth,-usb">Handle local media source commands (radio, CD player, Bluetooth, USB)</h3> <p>Local media sources expose their functionality to the system using the same MediaSession and MediaBrowse APIs detailed above. To accommodate the particularities of each type of hardware, these MediaBrowse services use specific conventions to organize their information and media commands.</p> <h4 id="handle-radio">Handle radio</h4> <p>Radio MediaBrowseService can be identified by the <a href="https://android.googlesource.com/platform/packages/apps/Car/libs/+/refs/heads/android10-release/car-broadcastradio-support/src/com/android/car/broadcastradio/support/media/BrowseTree.java#118"><code translate="no" dir="ltr">ACTION_PLAY_BROADCASTRADIO</code></a> intent filter. They are expected to follow the playback controls and media browse structure described in <a href="../../radio/radio-control-implementation">Implement radio</a>. AAOS offers the <a href="https://android.googlesource.com/platform/packages/apps/Car/libs/+/refs/heads/android11-release/car-broadcastradio-support"><code translate="no" dir="ltr">car-broadcastradio-support</code></a> library containing constants and methods to help OEMs create MediaBrowseService implementations for their own radio services that follow the defined protocol, and provides support for apps consuming their browse tree (for example, VIAs). </p> <h4 id="handle-auxiliary-input,-cd-audio,-and-usb-media">Handle auxiliary input, CD audio, and USB media</h4> <p>There is no default implementation of these media sources as part of AOSP. The suggested approach is to:</p> <ul> <li>Have OEMs implement media services for each of them. For details, see <a href="https://developer.android.com/training/cars/media">Build media apps for cars</a>.</li> <li>These MediaBrowseService implementations would be identified and responded to in the intent actions defined at <a href="../../radio/radio-control-implementation#play-intents">General play intents</a>.</li> <li>These services would expose a browse tree following the guidelines described at <a href="../../radio/radio-control-implementation#other">Other source types</a>.</li> </ul> <h4 id="handle-bluetooth">Handle Bluetooth</h4> <p>Bluetooth media content is exposed through the AVRCP Bluetooth profile. In order to facilitate access to this functionality, AAOS includes a MediaBrowserService and MediaSession implementation that abstracts out the communication details (see <a href="https://android.googlesource.com/platform/packages/apps/Bluetooth/+/refs/heads/android10-release/src/com/android/bluetooth/avrcpcontroller/">packages/apps/Bluetooth</a>).</p> <p>The respective media browser tree structure is defined at <a href="https://android.googlesource.com/platform/packages/apps/Bluetooth/+/refs/heads/android10-release/src/com/android/bluetooth/avrcpcontroller/BrowseTree.java">BrowseTree</a> class. Playback control commands can be delivered similarly to any other app, by using its MediaSession implementation.</p> <h4 id="handle-streaming-media-commands">Handle streaming media commands</h4> <p>To implement server side media streaming, the VIA must become itself a media source, implementing MediaBrowse and MediaSession API. Refer to <a href="https://developer.android.com/training/cars/media">Build media apps for cars</a>. By implementing these APIs, a voice control app would be able to (among other things):</p> <ul> <li>Participate seamlessly in the media source selection</li> <li>Be automatically resumed after car restart </li> <li>Provide playback and browsing control using Media Center UI</li> <li>Receive standard hardware media button events</li> </ul> <h2 id="navigation">Fulfill navigation commands</h2> <p>There is no standardized way of interacting with all navigation apps. For integrations with Google Maps, see <a href="https://developers.google.com/maps/documentation/urls/android-intents">Google Maps Intents for Android</a>. For integrations with other apps, contact the app developers directly. Before launching an intent to any app (including Google Maps), verify that the intent can be resolved (see <a href="https://developer.android.com/guide/components/google-maps-intents">Google Maps Intents</a>). This creates the opportunity to inform the user in case the target app isn't available.</p> <h2 id="vehicle">Fulfill vehicle commands</h2> <p>Access to vehicle properties for both read and write is provided through <a href="https://android.googlesource.com/platform/packages/services/Car/+/refs/heads/android10-release/car-lib/src/android/car/hardware/property/CarPropertyManager.java">CarPropertyManager</a>. Vehicle properties types, its implementation and other details are explained in <a href="../../vhal/property-configuration">Property configurations</a>. For an accurate description of the properties supported by Android, it is best to refer directly to <a href="https://android.googlesource.com/platform/hardware/interfaces/+/refs/heads/android10-release/automotive/vehicle/2.0/types.hal"><code translate="no" dir="ltr">hardware/interfaces/automotive/vehicle/2.0/types.hal</code></a>. The <a href="https://android.googlesource.com/platform/hardware/interfaces/+/refs/heads/android10-release/automotive/vehicle/2.0/types.hal">VehicleProperty</a> enum defined there contains both standard and vendor specific properties, data types, change mode, units and read/write access definition.</p> <p>To access these same constants from Java, you can use <a href="https://developer.android.com/reference/android/car/VehiclePropertyIds">VehiclePropertyIds</a> and its companion classes. Different properties have different Android permissions controlling their access. These permissions are declared in the <a href="https://android.googlesource.com/platform/packages/services/Car/+/refs/heads/android10-release/service/AndroidManifest.xml">CarService manifest</a>, and the mapping between properties and permissions described in the <a href="https://developer.android.com/reference/android/car/VehiclePropertyIds">VehiclePropertyIds</a> Javadoc and enforced in <a href="https://android.googlesource.com/platform/packages/services/Car/+/refs/heads/android10-release/service/src/com/android/car/hal/PropertyHalServiceIds.java">PropertyHalServiceIds</a>. </p> <h3 id="vehicle-property">Read a vehicle property</h3> <p>The following is an example showing how to read the vehicle speed:</p> 
+<pre>public class CarActuator ... {
+    private final Car mCar;
+    private final CarPropertyManager mCarPropertyManager;
+    private final TextToSpeech mTTS;
+
+    /** Global VHAL area id */
+    public static final int GLOBAL_AREA_ID = 0;
+
+    public CarActuator(Context context, TextToSpeech tts) {
+        mCar = Car.createCar(context);
+        mCarPropertyManager = (CarPropertyManager) mCar.getCarManager(Car.PROPERTY_SERVICE);
+        mTTS = tts;
+        ...
+    }
+
+    @Nullable
+    private void getSpeedInMetersPerSecond() {
+        if (!mCarPropertyManager.isPropertyAvailable(VehiclePropertyIds.PERF_VEHICLE_SPEED,
+                GLOBAL_AREA_ID)) {
+            mTTS.speak("I'm sorry, but I can't read the speed of this vehicle");
+            return;
+        }
+        // Data type and unit can be found in
+        // automotive/vehicle/2.0/types.hal
+        float speedInMps = mCarPropertyManager.getFloatProperty(
+                VehiclePropertyIds.PERF_VEHICLE_SPEED, GLOBAL_AREA_ID);
+        int speedInMph = (int)(speedInMetersPerSecond * 2.23694f);
+        mTTS.speak(String.format("Sure. Your current speed is %d miles "
+                + "per hour", speedInUserUnit);
+    }
+
+    ...
+}</pre> <h3 id="set-a-vehicle-property">Set a vehicle property</h3> <p>The following is an example showing how to turn on and off the front AC.</p> 
+<pre>public class CarActuator … {
+    …
+
+    private void changeFrontAC(boolean turnOn) {
+        List&lt;CarPropertyConfig&gt; configs = mCarPropertyManager
+                .getPropertyList(new ArraySet&lt;&gt;(Arrays.asList(
+                    VehiclePropertyIds.HVAC_AC_ON)));
+        if (configs == null || configs.size() != 1) {
+            mTTS.speak("I'm sorry, but I can't control the AC of your vehicle");
+            return;
+        }
+
+        // Find the front area Ids for the AC property.
+        int[] areaIds = configs.get(0).getAreaIds();
+        List&lt;Integer&gt; areasToChange = new ArrayList&lt;&gt;();
+        for (int areaId : areaIds) {
+            if ((areaId &amp; (VehicleAreaSeat.SEAT_ROW_1_CENTER
+                        | VehicleAreaSeat.SEAT_ROW_1_LEFT
+                        | VehicleAreaSeat.SEAT_ROW_1_RIGHT)) == 0) {
+                continue;
+            }
+            boolean isACInAreaAlreadyOn = mCarPropertyManager
+                    .getBooleanProperty(VehiclePropertyIds.HVAC_AC_ON, areaId);
+            if ((!isACInAreaAlreadyOn &amp;&amp; turnOn) || (isACInAreaAlreadyOn &amp;&amp; !turnOn)) {
+                areasToChange.add(areaId);
+            }
+        }
+        if (areasToChange.isEmpty()) {
+            mTTS.speak(String.format("The AC is already %s", turnOn ? "on" : "off"));
+            return;
+        }
+
+        for (int areaId : areasToChange) {
+            mCarPropertyManager.setBooleanProperty(
+                VehiclePropertyIds.HVAC_AC_ON, areaId, turnOn);
+        }
+        mTTS.speak(String.format("Okay, I'm turning your front AC %s",
+            turnOn ? "on" : "off"));
+    }
+
+    …
+}</pre> <h2 id="communication">Fulfill communication commands</h2> <h3 id="messaging">Handle messaging commands</h3> <p>VIAs must handle incoming messages following the "tap-to-read" flow described in <a href="integration_flows#ttr">Voice assistant Tap-to-Read</a>, which can optionally handle sending replies back to the incoming message sender. Additionally, VIAs can use <a href="https://developer.android.com/reference/android/telephony/SmsManager"><code translate="no" dir="ltr">SmsManager</code></a> (part of the <a href="https://developer.android.com/reference/android/telephony/package-summary"><code translate="no" dir="ltr">android.telephony</code></a> package) to compose and send SMS messages directly from the car or over Bluetooth.</p> <h3 id="handle-call-commands">Handle call commands</h3> <p>In a similar way, VIAs can use <a href="https://developer.android.com/reference/android/telephony/TelephonyManager"><code translate="no" dir="ltr">TelephonyManager</code></a> to place phone calls and call to the user's voice mail number. In these cases, VIAs will interact with the telephony stack directly or with the Car Dialer app. In any case, the Car Dialer app should be the one displaying voice-call related UI to the user. </p> <h2 id="other">Fulfill other commands</h2> <p>For a list of other possible points of integration between the VIA and the system, check the list of well-known <a href="https://developer.android.com/guide/components/intents-common.html">Android intents</a>. Many user commands can be resolved server-side (for example, reading users emails and calendar events) and don't require any interactions with the system other than the voice interaction itself.</p> <h2 id="immersive">Immersive actions (display visual content)</h2> <p>Where it enhances user actions or understanding, a VIA can provide supplementary visual content on the car screen. To minimize driver distraction, keep such content simple, brief, and actionable. For details about UI/UX guidelines on immersive actions, see <a href="https://source.android.com/static/docs/automotive/voice/voice_interaction_guide/preloaded-assistants_UX-guidelines.pdf" class="download">Preloaded Assistants: UX Guidance</a>.</p> <p>To enable customization and consistency with the rest of the head unit (HU) design, VIAs should use <a href="https://android.googlesource.com/platform/packages/apps/Car/libs/+/refs/heads/android10-qpr3-release/car-ui-lib/">Car UI Library</a> components for most of the UI elements. For details, see <a href="integration_flows#customization">Customization</a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/voice/voice_interaction_guide/fulfilling_commands" class="_attribution-link">https://source.android.com/docs/automotive/voice/voice_interaction_guide/fulfilling_commands</a>
+  </p>
+</div>

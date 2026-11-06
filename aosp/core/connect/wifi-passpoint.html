@@ -1,0 +1,248 @@
+<h1>Passpoint (Hotspot 2.0)</h1>  <p><a href="https://www.wi-fi.org/discover-wi-fi/passpoint">Passpoint</a> is a <a href="https://www.wi-fi.org/">Wi-Fi Alliance (WFA)</a> protocol that enables mobile devices to discover and authenticate to Wi-Fi hotspots that provide internet access.</p> <h2 id="device_support">Device support</h2> <aside class="note"><strong>Note:</strong><span> Support for Passpoint is required on devices that run Android 11 or higher and have Wi-Fi.</span></aside> <p>To support Passpoint, device manufacturers need to implement the Supplicant interface. Starting with Android 13, the interface uses AIDL for the HAL definition. For releases before Android 13, interfaces and vendor partitions use HIDL. The HIDL files are in <code translate="no" dir="ltr">hardware/interfaces/supplicant/1.x</code> and the AIDL files are in <code translate="no" dir="ltr">hardware/interfaces/supplicant/aidl</code>. The supplicant provides support for the 802.11u standard, specifically network discovery and selection features such as Generic Advertisement Service (GAS) and access network query protocol (ANQP).</p> <h3 id="implementation">Implementation</h3> <p>Passpoint implementation varies depending on the Android version.</p> <h4 id="11-higher">Android 11 or higher</h4> <p>To support Passpoint on devices running Android 11 or higher, device manufacturers need to provide firmware support for 802.11u. All other requirements for supporting Passpoint are included in AOSP.</p> <h4 id="10-lower">Android 10 or lower</h4> <p>For devices running Android 10 or lower, device manufacturers need to provide both framework and HAL and firmware support:</p> <ul> <li>Framework: Enable Passpoint (requires a feature flag)</li> <li>Firmware: Support for 802.11u</li> </ul> <p>To support Passpoint, implement the Wi-Fi HAL and enable the feature flag for Passpoint. In <code translate="no" dir="ltr">device.mk</code> located in <code translate="no" dir="ltr">device/&lt;oem&gt;/&lt;device&gt;</code>, modify the <code translate="no" dir="ltr">PRODUCT_COPY_FILES</code> environment variable to include support for the Passpoint feature:</p> 
+<pre>PRODUCT_COPY_FILES +=
+frameworks/native/data/etc/android.hardware.wifi.passpoint.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.wifi.passpoint.xml
+</pre> <p>All other requirements for supporting Passpoint are included in AOSP.</p> <h3 id="validation">Validation</h3> <p>To validate your implementation of the Passpoint feature, run the following Passpoint package unit tests:</p> <p>Service tests:</p> 
+<pre>atest com.android.server.wifi.hotspot2</pre> <p>Manager tests:</p> 
+<pre>atest android.net.wifi.hotspot2</pre> <h2 id="passpoint_r1_provisioning">Passpoint R1 provisioning</h2> <p>Android has supported Passpoint R1 since Android 6.0, allowing the provisioning of Passpoint R1 (release 1) credentials through web-based downloading of a special file that contains profile and credential information. The client automatically launches a special installer for the Wi-Fi information and lets the user view parts of the information before accepting or declining the content.</p> <p>The profile information contained in the file is used for matching to data retrieved from Passpoint-enabled access points, and the credentials are automatically applied for any matched network.</p> <p>The Android reference implementation supports EAP-TTLS, EAP-TLS, EAP-SIM, EAP-AKA, and EAP-AKA'.</p> <h3 id="download_mechanism">Download mechanism</h3> <p>The Passpoint configuration file must be hosted on a web server and should be protected with TLS (HTTPS) because it may contain clear text password or private key data. The content is made up of wrapped multipart MIME text represented in UTF-8 and encoded in base64 encoding per RFC-2045 section 6.8.</p> <p>The following HTTP header fields are used by the client to automatically launch a Wi-Fi installer on the device:</p> <ul> <li>
+<code translate="no" dir="ltr">Content-Type</code> must be set to <code translate="no" dir="ltr">application/x-wifi-config</code>.</li> <li>
+<code translate="no" dir="ltr">Content-Transfer-Encoding</code> must be set to <code translate="no" dir="ltr">base64</code>.</li> <li>
+<code translate="no" dir="ltr">Content-Disposition</code> must not be set.</li> </ul> <p>The HTTP method used to retrieve the file must be GET. Any time an HTTP GET from the browser receives a response with these MIME headers, the installation app is started. The download must be triggered by tapping on an HTML element such as a button (automatic redirects to a download URL aren't supported). This behavior is specific to Google Chrome; other web browsers may or may not provide similar functionality.</p> <h3 id="file_composition">File composition</h3> <p>The Base64 encoded content must consist of MIME multipart content with a <code translate="no" dir="ltr">Content-Type</code> of <code translate="no" dir="ltr">multipart/mixed</code>. The following parts make up the individual parts of the multipart content.</p> <table> <thead> <tr> <th><strong>Part</strong></th> <th><strong>Content-Type (less quotes)</strong></th> <th><strong>Required</strong></th> <th><strong>Description</strong></th> </tr> </thead> <tbody> <tr> <td>Profile</td> <td>
+<code translate="no" dir="ltr">
+application/x-passpoint-profile
+</code> </td> <td>Always</td> <td>OMA-DM SyncML formatted payload containing the Passpoint R1 <code translate="no" dir="ltr">PerProviderSubscription</code> formatted MO for <code translate="no" dir="ltr">HomeSP</code> and <code translate="no" dir="ltr">Credential</code>.</td> </tr> <tr> <td>Trust certificate</td> <td>
+<code translate="no" dir="ltr">
+application/x-x509-ca-cert
+</code> </td> <td>Required for EAP-TLS and EAP-TTLS</td> <td>A single X.509v3 base64-encoded certificate payload.</td> </tr> <tr> <td>EAP-TLS key</td> <td>
+<code translate="no" dir="ltr">
+application/x-pkcs12
+</code> </td> <td>Required for EAP-TLS</td> <td>A base64-encoded PKCS #12 ASN.1 structure containing a client certificate chain with at least the client certificate and the associated private key. The PKCS 12 container as well as the private key and the certificates must all be in clear text with no password.</td> </tr> </tbody> </table> <p>The Profile section must be transferred as base64-encoded, UTF-8-encoded XML text that specifies parts of the <code translate="no" dir="ltr">HomeSP</code> and <code translate="no" dir="ltr">Credential</code> subtrees in the Passpoint R2 Technical Specification Version 1.0.0, section 9.1.</p> <aside class="note"><strong>Note:</strong><span> The profile XML format used in Android for Passpoint R1 borrows the Passpoint R2 format but isn't necessarily R2 compliant. That is a design choice and not a requirement of Passpoint R1.</span></aside> <p>The top-level node must be <code translate="no" dir="ltr">MgmtTree</code> and the immediate subnode must be <code translate="no" dir="ltr">PerProviderSubscription</code>. An example XML file appears in <a href="#example_profile_oma-dm_xml">Example profile OMA-DM XML</a>.</p> <p>The following subtree nodes are used under <code translate="no" dir="ltr">HomeSP</code>:</p> <ul> <li>
+<code translate="no" dir="ltr">FriendlyName</code>: Must be set; used as display text</li> <li>
+<code translate="no" dir="ltr">FQDN</code>: Required</li> <li><code translate="no" dir="ltr">RoamingConsortiumOI</code></li> </ul> <p>The following subtree nodes are used under <code translate="no" dir="ltr">Credential</code>:</p> <ul> <li>
+<code translate="no" dir="ltr">Realm</code>: Must be a nonempty string</li> <li>
+<p><code translate="no" dir="ltr">UsernamePassword</code>: Required for EAP-TTLS with the following nodes set:</p> <ul> <li>
+<code translate="no" dir="ltr">Username</code>: String that contains the username</li> <li>
+<code translate="no" dir="ltr">Password</code>: Base64-encoded string (set to <code translate="no" dir="ltr">cGFzc3dvcmQ=</code>, the base64-encoded string for "password", in the example following)</li> <li>
+<code translate="no" dir="ltr">EAPMethod/EAPType</code>: Must be set to <code translate="no" dir="ltr">21</code>
+</li> <li>
+<code translate="no" dir="ltr">EAPMethod/InnerMethod</code>: Must be set to one of <code translate="no" dir="ltr">PAP</code>, <code translate="no" dir="ltr">CHAP</code>, <code translate="no" dir="ltr">MS-CHAP</code>, or <code translate="no" dir="ltr">MS-CHAP-V2</code>
+</li> </ul>
+</li> <li>
+<p><code translate="no" dir="ltr">DigitalCertificate</code>: Required for EAP-TLS. The following nodes must be set:</p> <ul> <li>
+<code translate="no" dir="ltr">CertificateType</code> set to <code translate="no" dir="ltr">x509v3</code>
+</li> <li>
+<code translate="no" dir="ltr">CertSHA256Fingerprint</code> set to the correct SHA-256 digest of the client certificate in the EAP-TLS key MIME section</li> </ul>
+</li> <li><p><code translate="no" dir="ltr">SIM</code>: Required for EAP-SIM, EAP-AKA, and EAP-AKA'. The <code translate="no" dir="ltr">EAPType</code> field must be set to the appropriate EAP type and <code translate="no" dir="ltr">IMSI</code> must match an IMSI of one of the SIM cards installed in the device at the time of provisioning. The IMSI string can either consist entirely of decimal digits to force full equality match, or of 5 or 6 decimal digits followed by an asterisk (<code translate="no" dir="ltr">*</code>) to relax the IMSI matching to MCC/MNC only. For example, the IMSI string <code translate="no" dir="ltr">123456*</code> matches any SIM card with MCC as <code translate="no" dir="ltr">123</code> and MNC as <code translate="no" dir="ltr">456</code>.</p></li> </ul> <p>Android 11 introduces capabilities that make Passpoint R1 provisioning more flexible.</p> <dl> <dt><strong>Separate authentication, authorization, and accounting (AAA) domain name</strong></dt> <dd>
+<p>Passpoint network administrators that require a AAA domain name specified independently of the fully qualified domain name (FQDN) advertised by the network through the Access Network Query Protocol (ANQP) can specify a semicolon-delimited list of FQDNs in a new node under the <code translate="no" dir="ltr">Extension</code> subtree. This is an optional node and devices running Android version 10 or lower ignore this node.</p> <ul> <li>
+<p><code translate="no" dir="ltr">Android</code>: Android extension subtree</p> <ul> <li>
+<p><code translate="no" dir="ltr">AAAServerTrustedNames</code>: Required for AAA server trusted names with the following nodes set:</p> <ul> <li>
+<code translate="no" dir="ltr">FQDN</code>: String that contains the AAA server trusted names. Use semicolons to separate the trusted names. For example, <code translate="no" dir="ltr">example.org;example.com</code>.</li> </ul>
+</li> </ul>
+</li> </ul>
+</dd> <dt><strong>Self-signed private Root CAs</strong></dt> <dd><p>Passpoint network administrators that manage their certificates internally can provision profiles with a private self-signed CA for AAA authentication.</p></dd> <dt><strong>Allow installation of profiles without a Root CA certificate</strong></dt> <dd><p>The Root CA certificate that's attached to the profile is used for AAA server authentication. Passpoint network administrators that want to rely on public trusted Root CAs for their AAA server authentication can provision profiles without a Root CA certificate. In this case, the system verifies the AAA server certificates against the public Root CA certificates installed in the trust store.</p></dd> </dl> <h2 id="passpoint_r2_provisioning">Passpoint R2 provisioning</h2> <aside class="caution"><strong>Caution:</strong><span> As of June 30, 2023, the online sign up (OSU) feature has been deprecated by the Wi-Fi Alliance.</span></aside> <p>Android 10 introduced support for Passpoint R2 features. Passpoint R2 implements online sign up (OSU), a standard method to provision new Passpoint profiles. Android 10 and higher supports the provisioning of EAP-TTLS profiles using the SOAP-XML protocol over open OSU ESS.</p> <p>The supported Passpoint R2 features supported only require AOSP reference code (no additional driver or firmware support is required). The AOSP reference code also includes a default implementation of the Passpoint R2 UI in the Settings app.</p> <p>When Android detects a Passpoint R2 access point, the Android framework:</p> <ol> <li>Displays a list of the service providers advertised by the AP in the Wi-Fi picker (in addition to displaying the SSIDs).</li> <li>Prompts the user to tap one of the service providers to set up a Passpoint profile.</li> <li>Walks the user through the Passpoint profile setup flow.</li> <li>Installs the resulting Passpoint profile on successful completion.</li> <li>Associates to the Passpoint network using the newly provisioned Passpoint profile.</li> </ol> <aside class="note"><strong>Note:</strong><span> CA certificates (trusted root certificates) for AAA servers and remediation servers must be DER-encoded X.509 certificates, and the <code translate="no" dir="ltr">Content-Type</code> header field must be set to <code translate="no" dir="ltr">application/x-x509-ca-cert</code>. The <code translate="no" dir="ltr">Content-Transfer-Encoding</code> header field must be set to <code translate="no" dir="ltr">base64</code>.</span></aside> <h2 id="passpoint-r3">Passpoint R3 features</h2> <p>Android 12 introduces the following Passpoint R3 features that improve the user experience and allow networks to comply with local laws:</p> <dl> <dt><strong>Terms and conditions</strong></dt> <dd>
+<p>Acceptance of terms and conditions is legally required in some locations and venues to provide network access. This feature allows network deployments to replace insecure captive portals, which use open networks, with a secure Passpoint network. A notification is displayed to the user when terms and conditions are required to be accepted.</p> <p>The terms and conditions URL must point to a secure website using HTTPS. If the URL points to an insecure website, the framework immediately disconnects and blocks the network.</p>
+</dd> <dt><strong>Venue information URL</strong></dt> <dd>
+<p>Allows networks operators and venues to provide additional information to the user, such as venue maps, directories, promotions, and coupons. A notification is displayed to the user when the network is connected.</p> <p>The venue information URL must point to a secure web site using HTTPS. If the URL points to an insecure website, the framework ignores the URL and doesn't display a notification.</p>
+</dd> </dl> <h2 id="other_passpoint_features">Other Passpoint features</h2> <p>Android 11 introduces the following Passpoint capabilities that improve the user experience, power usage, and deployment flexibility.</p> <dl> <dt><strong>Expiration date enforcement and notification</strong></dt> <dd>Enforcing expiration dates on profiles lets the framework avoid auto-connection to access points with expired credentials, which are bound to fail. This prevents airtime usage, and saves battery and backend bandwidth. The framework displays a notification to the user when a network matching their profile is in range and the profile has expired.</dd> <dt><strong>Multiple profiles with identical FQDN</strong></dt> <dd>Carriers that deploy Passpoint networks and use multiple public land mobile network (PLMN) IDs can provision multiple Passpoint profiles with the same FQDN, one for each PLMN ID, which is automatically matched with the installed SIM card and used to connect the network.</dd> </dl> <p>Android 12 introduces the following Passpoint capabilities that improve the user experience, power usage, and deployment flexibility:</p> <dl> <dt><strong>Decorated identity prefix</strong></dt> <dd>When authenticating to networks with a prefix decoration, the decorated identity prefix lets network operators update the Network Access Identifier (NAI) to perform explicit routing through multiple proxies inside of an AAA network (see <a href="https://datatracker.ietf.org/doc/html/rfc7542">RFC 7542</a>). Android 12 implements this feature according to the <a href="https://wballiance.com/resource/wba-pps-mo-extensions/">WBA specification for PPS-MO extensions</a>.</dd> <dt><strong>Deauthentication imminent handling</strong></dt> <dd>Allows network operators to signal to a device that service isn't available for the credential used to authenticate to the network for a certain duration (specified through a timeout delay). After receiving this signal, devices won't attempt to reconnect to the network with the same credential until after the timeout delay expires. In contrast, devices that don't support this feature might attempt to repeatedly reconnect to the network while the service is unavailable.</dd> </dl> <h2 id="example_profile_oma-dm_xml">Examples of OMA-DM PerProviderSubscription-MO XML profiles</h2> <h3 id="example_eap_ttls">Profile with a username and password credential (EAP-TTLS)</h3> <p>The following example demonstrates a profile for a network with:</p> <ul> <li>Network friendly name set to <code translate="no" dir="ltr">Example Network</code>
+</li> <li>FQDN set to <code translate="no" dir="ltr">hotspot.example.net</code>
+</li> <li>Roaming consortium OIs (for roaming)</li> <li>Credential with username <code translate="no" dir="ltr">user</code>, password <code translate="no" dir="ltr">password</code> encoded with Base64, and realm set to <code translate="no" dir="ltr">example.net</code>
+</li> <li>EAP method set to <code translate="no" dir="ltr">21</code> (EAP-TTLS)</li> <li>Phase-2 inner method set to <code translate="no" dir="ltr">MS-CHAP-V2</code>
+</li> <li>Alternative AAA domain names set to <code translate="no" dir="ltr">trusted.com</code> and <code translate="no" dir="ltr">trusted.net</code>
+</li> </ul> 
+<pre>&lt;MgmtTree xmlns="syncml:dmddf1.2"&gt;
+  &lt;VerDTD&gt;1.2&lt;/VerDTD&gt;
+  &lt;Node&gt;
+    &lt;NodeName&gt;PerProviderSubscription&lt;/NodeName&gt;
+    &lt;RTProperties&gt;
+      &lt;Type&gt;
+        &lt;DDFName&gt;urn:wfa:mo:hotspot2dot0-perprovidersubscription:1.0&lt;/DDFName&gt;
+      &lt;/Type&gt;
+    &lt;/RTProperties&gt;
+    &lt;Node&gt;
+      &lt;NodeName&gt;i001&lt;/NodeName&gt;
+      &lt;Node&gt;
+        &lt;NodeName&gt;HomeSP&lt;/NodeName&gt;
+        &lt;Node&gt;
+          &lt;NodeName&gt;FriendlyName&lt;/NodeName&gt;
+          &lt;Value&gt;Example Network&lt;/Value&gt;
+        &lt;/Node&gt;
+        &lt;Node&gt;
+          &lt;NodeName&gt;FQDN&lt;/NodeName&gt;
+          &lt;Value&gt;hotspot.example.net&lt;/Value&gt;
+        &lt;/Node&gt;
+        &lt;Node&gt;
+          &lt;NodeName&gt;RoamingConsortiumOI&lt;/NodeName&gt;
+          &lt;Value&gt;112233,445566&lt;/Value&gt;
+        &lt;/Node&gt;
+      &lt;/Node&gt;
+      &lt;Node&gt;
+        &lt;NodeName&gt;Credential&lt;/NodeName&gt;
+        &lt;Node&gt;
+          &lt;NodeName&gt;Realm&lt;/NodeName&gt;
+          &lt;Value&gt;example.net&lt;/Value&gt;
+        &lt;/Node&gt;
+        &lt;Node&gt;
+          &lt;NodeName&gt;UsernamePassword&lt;/NodeName&gt;
+          &lt;Node&gt;
+            &lt;NodeName&gt;Username&lt;/NodeName&gt;
+            &lt;Value&gt;user&lt;/Value&gt;
+          &lt;/Node&gt;
+          &lt;Node&gt;
+            &lt;NodeName&gt;Password&lt;/NodeName&gt;
+            &lt;Value&gt;cGFzc3dvcmQ=&lt;/Value&gt;
+          &lt;/Node&gt;
+          &lt;Node&gt;
+            &lt;NodeName&gt;EAPMethod&lt;/NodeName&gt;
+            &lt;Node&gt;
+              &lt;NodeName&gt;EAPType&lt;/NodeName&gt;
+              &lt;Value&gt;21&lt;/Value&gt;
+            &lt;/Node&gt;
+            &lt;Node&gt;
+              &lt;NodeName&gt;InnerMethod&lt;/NodeName&gt;
+              &lt;Value&gt;MS-CHAP-V2&lt;/Value&gt;
+            &lt;/Node&gt;
+          &lt;/Node&gt;
+        &lt;/Node&gt;
+      &lt;/Node&gt;
+      &lt;Node&gt;
+        &lt;NodeName&gt;Extension&lt;/NodeName&gt;
+        &lt;Node&gt;
+            &lt;NodeName&gt;Android&lt;/NodeName&gt;
+            &lt;Node&gt;
+                &lt;NodeName&gt;AAAServerTrustedNames&lt;/NodeName&gt;
+                &lt;Node&gt;
+                    &lt;NodeName&gt;FQDN&lt;/NodeName&gt;
+                    &lt;Value&gt;trusted.com;trusted.net&lt;/Value&gt;
+                &lt;/Node&gt;
+            &lt;/Node&gt;
+        &lt;/Node&gt;
+      &lt;/Node&gt;
+    &lt;/Node&gt;
+  &lt;/Node&gt;
+&lt;/MgmtTree&gt;
+</pre> <h3 id="example_eap_tls">Profile with a digital certificate credential (EAP-TLS)</h3> <p>The following example demonstrates a profile for a network with:</p> <ul> <li>Network friendly name set to <code translate="no" dir="ltr">GlobalRoaming</code>
+</li> <li>FQDN set to <code translate="no" dir="ltr">globalroaming.net</code>
+</li> <li>Roaming Consortium OIs (for roaming)</li> <li>Realm set to <code translate="no" dir="ltr">users.globalroaming.net</code>
+</li> <li>Credential with a digital certificate that has the specified fingerprint</li> </ul> 
+<pre>&lt;MgmtTree xmlns="syncml:dmddf1.2"&gt;
+  &lt;VerDTD&gt;1.2&lt;/VerDTD&gt;
+  &lt;Node&gt;
+    &lt;NodeName&gt;PerProviderSubscription&lt;/NodeName&gt;
+    &lt;RTProperties&gt;
+      &lt;Type&gt;
+        &lt;DDFName&gt;urn:wfa:mo:hotspot2dot0-perprovidersubscription:1.0&lt;/DDFName&gt;
+      &lt;/Type&gt;
+    &lt;/RTProperties&gt;
+    &lt;Node&gt;
+      &lt;NodeName&gt;i001&lt;/NodeName&gt;
+      &lt;Node&gt;
+        &lt;NodeName&gt;HomeSP&lt;/NodeName&gt;
+        &lt;Node&gt;
+          &lt;NodeName&gt;FriendlyName&lt;/NodeName&gt;
+          &lt;Value&gt;GlobalRoaming&lt;/Value&gt;
+        &lt;/Node&gt;
+        &lt;Node&gt;
+          &lt;NodeName&gt;FQDN&lt;/NodeName&gt;
+          &lt;Value&gt;globalroaming.net&lt;/Value&gt;
+        &lt;/Node&gt;
+        &lt;Node&gt;
+          &lt;NodeName&gt;RoamingConsortiumOI&lt;/NodeName&gt;
+          &lt;Value&gt;FFEEDDCC0,FFEEDDCC1,009999,008888&lt;/Value&gt;
+        &lt;/Node&gt;
+      &lt;/Node&gt;
+      &lt;Node&gt;
+        &lt;NodeName&gt;Credential&lt;/NodeName&gt;
+        &lt;Node&gt;
+          &lt;NodeName&gt;Realm&lt;/NodeName&gt;
+          &lt;Value&gt;users.globalroaming.net&lt;/Value&gt;
+        &lt;/Node&gt;
+        &lt;Node&gt;
+          &lt;NodeName&gt;DigitalCertificate&lt;/NodeName&gt;
+          &lt;Node&gt;
+            &lt;NodeName&gt;CertificateType&lt;/NodeName&gt;
+            &lt;Value&gt;x509v3&lt;/Value&gt;
+          &lt;/Node&gt;
+          &lt;Node&gt;
+            &lt;NodeName&gt;CertSHA256Fingerprint&lt;/NodeName&gt;
+            &lt;Value&gt;0ef08a3d2118700474ca51fa25dc5e6d3d63d779aaad8238b608a853761da533&lt;/Value&gt;
+          &lt;/Node&gt;
+        &lt;/Node&gt;
+      &lt;/Node&gt;
+    &lt;/Node&gt;
+  &lt;/Node&gt;
+&lt;/MgmtTree&gt;
+</pre>
+<aside class="note"><strong>Note:</strong><span> The fingerprint specified in the <code translate="no" dir="ltr">CertSHA256Fingerprint</code> node must match the fingerprint of the certificate that's attached to the profile.</span></aside> <h3 id="example_eap_aka">Profile with a SIM credential (EAP-AKA)</h3> <p>The following example demonstrates a profile for a network with:</p> <ul> <li>Network friendly name set to <code translate="no" dir="ltr">Purple Passpoint</code>
+</li> <li>FQDN set to <code translate="no" dir="ltr">wlan.mnc888.mcc999.3gppnetwork.org</code>
+</li> <li>SIM credential with PLMN ID of <code translate="no" dir="ltr">999888</code>
+</li> <li>EAP method set to <code translate="no" dir="ltr">23</code> (EAP-AKA)</li> </ul> 
+<pre>&lt;MgmtTree xmlns="syncml:dmddf1.2"&gt;
+  &lt;VerDTD&gt;1.2&lt;/VerDTD&gt;
+  &lt;Node&gt;
+    &lt;NodeName&gt;PerProviderSubscription&lt;/NodeName&gt;
+    &lt;RTProperties&gt;
+      &lt;Type&gt;
+        &lt;DDFName&gt;urn:wfa:mo:hotspot2dot0-perprovidersubscription:1.0&lt;/DDFName&gt;
+      &lt;/Type&gt;
+    &lt;/RTProperties&gt;
+    &lt;Node&gt;
+      &lt;NodeName&gt;i001&lt;/NodeName&gt;
+      &lt;Node&gt;
+        &lt;NodeName&gt;HomeSP&lt;/NodeName&gt;
+        &lt;Node&gt;
+          &lt;NodeName&gt;FriendlyName&lt;/NodeName&gt;
+          &lt;Value&gt;Purple Passpoint&lt;/Value&gt;
+        &lt;/Node&gt;
+        &lt;Node&gt;
+          &lt;NodeName&gt;FQDN&lt;/NodeName&gt;
+          &lt;Value&gt;purplewifi.com&lt;/Value&gt;
+        &lt;/Node&gt;
+      &lt;/Node&gt;
+      &lt;Node&gt;
+        &lt;NodeName&gt;Credential&lt;/NodeName&gt;
+        &lt;Node&gt;
+          &lt;NodeName&gt;Realm&lt;/NodeName&gt;
+          &lt;Value&gt;wlan.mnc888.mcc999.3gppnetwork.org&lt;/Value&gt;
+        &lt;/Node&gt;
+        &lt;Node&gt;
+          &lt;NodeName&gt;SIM&lt;/NodeName&gt;
+          &lt;Node&gt;
+            &lt;NodeName&gt;IMSI&lt;/NodeName&gt;
+            &lt;Value&gt;999888*&lt;/Value&gt;
+          &lt;/Node&gt;
+          &lt;Node&gt;
+            &lt;NodeName&gt;EAPType&lt;/NodeName&gt;
+            &lt;Value&gt;23&lt;/Value&gt;
+          &lt;/Node&gt;
+        &lt;/Node&gt;
+      &lt;/Node&gt;
+    &lt;/Node&gt;
+  &lt;/Node&gt;
+&lt;/MgmtTree&gt;
+</pre>
+<aside class="note"><strong>Note:</strong><span> Refer to section 9 in Passpoint specification release 3 from <a href="https://www.wi-fi.org/">Wi-Fi Alliance</a> for more details and a graphical representation of the <code translate="no" dir="ltr">PerProviderSubscription</code> management object.</span></aside> <h2 id="auth_advisory">Auth advisory</h2> <aside class="note"><strong>Note:</strong><span> This advisory doesn't apply to devices running Android 10 or higher.</span></aside> <p>Devices running Android 8.x or Android 9 with a Passpoint R1 EAP-SIM, EAP-AKA, or EAP-AKA' profile won't auto-connect to the Passpoint network. This issue affects users, carriers, and services by reducing the Wi-Fi offload.</p> <table> <tr> <th>
+<strong>Segment</strong> </th> <th>
+<strong>Impact</strong> </th> <th>
+<strong>Size of impact</strong> </th> </tr> <tr> <td>Carriers and Passpoint service providers </td> <td>Increased load on mobile network. </td> <td>Any carrier using Passpoint R1. </td> </tr> <tr> <td>Users </td> <td>Missed opportunity to auto-connect to Carrier Wi-Fi access points (APs), resulting in higher data costs. </td> <td>Any user with a device that runs on a carrier network supporting Passpoint R1. </td> </tr> </table> <h3 id="cause_of_failure">Cause of failure</h3> <p>Passpoint specifies a mechanism to match an advertised (ANQP) service provider to a profile installed on the device. The following matching rules for EAP-SIM, EAP-AKA, and EAP-AKA' are a partial set of rules focusing on the EAP-SIM/AKA/AKA' failures:</p> 
+<pre>If the FQDN (Fully Qualified Domain Name) matches
+    then the service is a Home Service Provider.
+Else: If the PLMN ID (3GPP Network) matches
+    then the service is a Roaming Service Provider.
+</pre> <p>The second criterion was modified in Android 8.0:</p> 
+<pre>Else: If the PLMN ID (3GPP Network) matches AND the NAI Realm matches
+    then the service is a Roaming Service Provider.
+</pre> <p>With this modification, the system observed no match for previously working service providers, so Passpoint devices didn't auto-connect.</p> <h3 id="workarounds">Workarounds</h3> <p>To work around the issue of the modified matching criteria, carriers and service providers need to add the network access identifier (NAI) realm to the information published by the Passpoint AP.</p> <p>The recommended solution is for network service providers to implement a network-side workaround for the fastest time to deployment. A device-side workaround depends on OEMs picking up a changelist (CL) from AOSP and then updating devices in the field.</p> <h4 id="network_fix_for_carriers_and_passpoint_service_providers">Network fix for carriers and Passpoint service providers</h4> <p>The network-side workaround requires reconfiguring the network to add the NAI realm ANQP element as follows. The Passpoint specifications don't require the NAI realm ANQP element, but the addition of this property complies with the Passpoint specifications, so spec-compliant client implementations shouldn't break.</p> <ol> <li>Add the NAI realm ANQP element.</li> <li>Set the NAI realm subfield to match the <code translate="no" dir="ltr">Realm</code> of the profile installed on the device.</li> <li>Set the following information based on each EAP type: <ul> <li>
+<strong>EAP-TTLS</strong>: Set <code translate="no" dir="ltr">EAPMethod(21)</code> and supported inner auth types (<code translate="no" dir="ltr">PAP</code>, <code translate="no" dir="ltr">CHAP</code>, <code translate="no" dir="ltr">MS-CHAP</code>, or <code translate="no" dir="ltr">MS-CHAP-V2</code>)</li> <li>
+<strong>EAP-TLS</strong>: Set <code translate="no" dir="ltr">EAPMethod(13)</code>
+</li> <li>
+<strong>EAP-SIM</strong>: Set <code translate="no" dir="ltr">EAPMethod(18)</code>
+</li> <li>
+<strong>EAP-AKA</strong>: Set <code translate="no" dir="ltr">EAPMethod(23)</code>
+</li> <li>
+<strong>EAP-AKA'</strong>: Set <code translate="no" dir="ltr">EAPMethod(50)</code>
+</li> </ul>
+</li> </ol> <h4 id="deviceaosp_fix_for_oems">Device/AOSP fix for OEMs</h4> <p>To implement a device-side workaround, OEMs need to pick the patch CL <a href="https://android-review.googlesource.com/c/platform/frameworks/opt/net/wifi/+/718508">aosp/718508</a>. This patch can be applied on top of the following releases (doesn't apply to Android 10 or higher):</p> <ul> <li>Android 9</li> <li>Android 8.x</li> </ul> <p>When the patch is picked up, OEMs need to update devices in the field.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/connect/wifi-passpoint" class="_attribution-link">https://source.android.com/docs/core/connect/wifi-passpoint</a>
+  </p>
+</div>

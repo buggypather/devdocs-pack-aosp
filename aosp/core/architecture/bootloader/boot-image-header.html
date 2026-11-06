@@ -1,0 +1,123 @@
+<h1>Boot image header</h1>  <p>Android 9 introduced a version field in the boot image header, enabling updates to the header while maintaining backward compatibility. The bootloader must check the header version field and parse the header accordingly. Devices launching with:</p> <ul> <li>Android 13 can use boot header version 3 or 4. For devices supporting the <a href="../kernel/generic-kernel-image">Generic Kernel Image (GKI)</a> architecture, version 4 is the primary boot image and the <a href="https://cs.android.com/android/kernel/superproject/+/common-android-mainline:tools/mkbootimg/include/bootimg/bootimg.h;l=257;drc=b4b04c2a965d9b3ce1ebf0442fc8047fe103d4e6"><code translate="no" dir="ltr">os_version</code></a> field in the boot header must be zero. The device bootloader is expected to obtain the version information from the <a href="version-info-avb">Android Verified Boot (AVB) properties</a> instead.</li> <li>Android 12 can use boot header version 3 or 4. For devices supporting the <a href="../kernel/generic-kernel-image">Generic Kernel Image (GKI)</a> architecture, version 4 is the primary boot image.</li> <li>Android 11 can use boot header version 3. For devices supporting <a href="../kernel/generic-kernel-image">Generic Kernel Image (GKI)</a> architecture, this version must be used for the primary boot image.</li> <li>Android 10 must use boot header version 2.</li> <li>Android 9 must use boot header version 1.</li> <li>Android 8 and lower are considered as using a boot image header version 0.</li> </ul> <p>For all devices running with Android 9 or higher, the <a href="../../tests/vts">Vendor Test Suite (VTS)</a> checks the format of the <code translate="no" dir="ltr">boot/recovery</code> image to ensure that the boot image header uses the correct version. To view AOSP details on all supported boot and vendor boot image headers, refer to <a href="https://android.googlesource.com/platform/system/tools/mkbootimg/+/refs/heads/android17-release/include/bootimg/bootimg.h"><code translate="no" dir="ltr">system/tools/mkbootimg/include/bootimg/bootimg.h</code></a>.</p> <h2 id="implementing-versioning">Implement boot image header versioning</h2> <p>The <code translate="no" dir="ltr">mkbootimg</code> tool accepts the following arguments.</p> <table> <tr> <th style="width:20%">Argument</th> <th>Description</th> </tr> <tr> <td><code translate="no" dir="ltr">header_version</code></td> <td>Sets the boot image header version. A boot image with a header version: <ul> <li>1 or 2 supports a recovery DTBO image or a recovery ACPIO image.</li> <li>3 doesn't support recovery images.</li> </ul> </td> </tr> <tr> <td><code translate="no" dir="ltr">recovery_dtbo</code></td> <td>Used for architectures that use DTB. Specifies the path to the recovery DTBO image. Optional for A/B devices, which don't need a recovery image. Non-A/B devices using <code translate="no" dir="ltr">header_version</code>: <ul> <li>1 or 2 can specify this path or use the <code translate="no" dir="ltr">recovery_acpio</code> section to specify a path to a recovery ACPIO image.</li> <li>3 can't specify a recovery DTBO image.</li> </ul> </td> </tr> <tr> <td><code translate="no" dir="ltr">recovery_acpio</code></td> <td>Used for architectures that use ACPI instead of DTB. Specifies the path to the recovery ACPIO image. Optional for A/B devices, which don't need a recovery image. Non-A/B devices using <code translate="no" dir="ltr">header_version</code>: <ul> <li>1 or 2 can specify this path or use the <code translate="no" dir="ltr">recovery_dtbo</code> section to specify a path to a recovery DTBO image.</li> <li>3 can't specify a recovery ACPIO image.</li> </ul> </td> </tr> <tr> <td><code translate="no" dir="ltr">dtb</code></td> <td>Path to the DTB image that's included in the boot/recovery images.</td> </tr> <tr> <td><code translate="no" dir="ltr">dtb_offset</code></td> <td>When added to the <code translate="no" dir="ltr">base</code> argument, provides the physical load address for the final device tree. For example, if the <code translate="no" dir="ltr">base</code> argument is <code translate="no" dir="ltr">0x10000000</code> and the <code translate="no" dir="ltr">dtb_offset</code> argument is <code translate="no" dir="ltr">0x01000000</code>, the <code translate="no" dir="ltr">dtb_addr_field</code> in the boot image header is populated as <code translate="no" dir="ltr">0x11000000</code>.</td> </tr> </table> <p>The device <code translate="no" dir="ltr">BoardConfig.mk</code> uses the config <code translate="no" dir="ltr">BOARD_MKBOOTIMG_ARGS</code> to add <code translate="no" dir="ltr">header version</code> to the other board-specific arguments of <code translate="no" dir="ltr">mkbootimg</code>. For example:</p> 
+<pre>BOARD_MKBOOTIMG_ARGS := --ramdisk_offset $(BOARD_RAMDISK_OFFSET) --tags_offset $(BOARD_KERNEL_TAGS_OFFSET) --header_version $(BOARD_BOOTIMG_HEADER_VERSION)
+</pre> <p>The Android build system uses the <code translate="no" dir="ltr">BoardConfig</code> variable <code translate="no" dir="ltr">BOARD_PREBUILT_DTBOIMAGE</code> to set the argument <code translate="no" dir="ltr">recovery_dtbo</code> of the <code translate="no" dir="ltr">mkbootimg</code> tool during the creation of the recovery image. For details on the Android Open Source Project (AOSP) changes, review the <a href="https://android-review.googlesource.com/q/topic:%22recovery_dtbo%22+(status:open%20OR%20status:merged)">associated changelists for boot image header versioning</a>.</p> <h2 id="header-v4">Boot image header, version 4</h2> <p>Android 12 provides a <code translate="no" dir="ltr">boot_signature</code> in the boot image header version 4, which can be used to check the integrity of the kernel and the ramdisk. The check is done in <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:test/vts-testcase/security/avb/VtsSecurityAvbTest.cpp">VtsSecurityAvbTest</a> and is required for devices using the GKI architecture. However, the <code translate="no" dir="ltr">boot_signature</code> isn't involved in the device-specific verified boot process and is only used in VTS. See <a href="partitions/generic-boot#board-configurations">GKI boot.img board configuration</a> and <a href="partitions/generic-boot#chain-vbmeta">GKI verified boot settings</a> for details.</p> <p><a href="partitions/vendor-boot-partitions">Vendor boot image header</a> version 4 supports multiple vendor ramdisk fragments.</p> <p>Version 4 of the boot image header version uses the following format.</p> 
+<pre>struct boot_img_hdr
+{
+#define BOOT_MAGIC_SIZE 8
+    uint8_t magic[BOOT_MAGIC_SIZE];
+
+    uint32_t kernel_size;    /* size in bytes */
+    uint32_t ramdisk_size;   /* size in bytes */
+
+    uint32_t os_version;
+
+    uint32_t header_size;    /* size of boot image header in bytes */
+    uint32_t reserved[4];
+    uint32_t header_version; /* offset remains constant for version check */
+
+#define BOOT_ARGS_SIZE 512
+#define BOOT_EXTRA_ARGS_SIZE 1024
+    uint8_t cmdline[BOOT_ARGS_SIZE + BOOT_EXTRA_ARGS_SIZE];
+
+    uint32_t signature_size; /* size in bytes */
+};
+</pre> <h2 id="header-v3">Boot image header, version 3</h2> <p>Android 11 updates the boot image header to version 3, which removes the following data:</p> <ul> <li><p><strong>Second-stage bootloader.</strong> The <code translate="no" dir="ltr">second_size</code> and <code translate="no" dir="ltr">second_addr</code> fields no longer appear in the boot image header. Devices with a second-stage bootloader must store that bootloader in its own partition.</p></li> <li>
+<p><strong>Recovery image.</strong> The requirement for specifying a recovery image has been deprecated, and the <code translate="no" dir="ltr">recovery_dtbo_size</code>, <code translate="no" dir="ltr">recovery_dtbo_offset</code>, <code translate="no" dir="ltr">recovery_acpio_size</code>, and <code translate="no" dir="ltr">recovery_acpio_offset</code> fields no longer appear in the boot image header.</p> <ul> <li><p>A/B devices use an update and recovery scheme that makes it unnecessary to specify a DTBO or ACPIO image for recovery.</p></li> <li><p>Non-A/B devices that want to specify a recovery image (either DTBO or ACPIO) should use boot image header version 1 or 2.</p></li> </ul>
+</li> <li><p><strong>Device tree blob (DTB).</strong> The DTB is stored in the <a href="partitions/vendor-boot-partitions">vendor boot partition</a>, so the <code translate="no" dir="ltr">dtb_size</code> and <code translate="no" dir="ltr">dtb_addr</code> fields no longer appear in the boot image header (but are present in the vendor boot image header).</p></li> </ul> <p>Devices can use boot image header version 3 to comply with <a href="../kernel/generic-kernel-image">Generic Kernel Image (GKI)</a> architecture, which unifies the core kernel and moves vendor modules that are required for boot to the <code translate="no" dir="ltr">vendor_boot</code> partition (meaning the boot image contains only GKI components). Devices that:</p> <ul> <li><p>Use GKI (requires the android-4.19 or android-5.4 kernel) but don't use A/B updates can specify a recovery image by using boot image version 3 for the boot image and boot image version 2 for the recovery image.</p></li> <li><p>Don't use GKI and don't use A/B updates can specify a recovery image by using boot image version 1 or 2 for both boot and recovery images.</p></li> </ul> <p>Version 3 of the boot image header version uses the following format.</p> 
+<pre>struct boot_img_hdr
+{
+#define BOOT_MAGIC_SIZE 8
+    uint8_t magic[BOOT_MAGIC_SIZE];
+
+    uint32_t kernel_size;    /* size in bytes */
+    uint32_t ramdisk_size;   /* size in bytes */
+
+    uint32_t os_version;
+
+    uint32_t header_size;    /* size of boot image header in bytes */
+    uint32_t reserved[4];
+    uint32_t header_version; /* offset remains constant for version check */
+
+#define BOOT_ARGS_SIZE 512
+#define BOOT_EXTRA_ARGS_SIZE 1024
+    uint8_t cmdline[BOOT_ARGS_SIZE + BOOT_EXTRA_ARGS_SIZE];
+};
+</pre> <h2 id="header-v2">Boot image header, version 2</h2> <p>Android 10 updates the boot image header to version 2, which adds a section for recovery <a href="dtb-images">DTB image</a> information (image size and physical load address).</p> <p>Version 2 of the boot image header version uses the following format.</p> 
+<pre>struct boot_img_hdr
+{
+    uint8_t magic[BOOT_MAGIC_SIZE];
+    uint32_t kernel_size;               /* size in bytes */
+    uint32_t kernel_addr;               /* physical load addr */
+
+    uint32_t ramdisk_size;              /* size in bytes */
+    uint32_t ramdisk_addr;              /* physical load addr */
+
+    uint32_t second_size;               /* size in bytes */
+    uint32_t second_addr;               /* physical load addr */
+
+    uint32_t tags_addr;                 /* physical addr for kernel tags */
+    uint32_t page_size;                 /* flash page size we assume */
+    uint32_t header_version;
+    uint32_t os_version;
+    uint8_t name[BOOT_NAME_SIZE];       /* asciiz product name */
+    uint8_t cmdline[BOOT_ARGS_SIZE];
+    uint32_t id[8];                     /* timestamp / checksum / sha1 / etc */
+    uint8_t extra_cmdline[BOOT_EXTRA_ARGS_SIZE];
+    uint32_t recovery_[dtbo|acpio]_size;    /* size of recovery image */
+    uint64_t recovery_[dtbo|acpio]_offset;  /* offset in boot image */
+    uint32_t header_size;               /* size of boot image header in bytes */
+    uint32_t dtb_size;                  /* size of dtb image */
+    uint64_t dtb_addr;                  /* physical load address */
+};
+</pre> <h2 id="header-v1">Boot image header, version 1</h2> <p>Android 9 converts the <code translate="no" dir="ltr">unused</code> field of the boot image header to a header version field. Devices launching with Android 9 must use the boot image header with the header version set to 1 or higher (this is verified by VTS).</p> <p>Version 1 of the boot image header version uses the following format.</p> 
+<pre>struct boot_img_hdr
+{
+    uint8_t magic[BOOT_MAGIC_SIZE];
+    uint32_t kernel_size;               /* size in bytes */
+    uint32_t kernel_addr;               /* physical load addr */
+    uint32_t ramdisk_size;              /* size in bytes */
+    uint32_t ramdisk_addr;              /* physical load addr */
+
+    uint32_t second_size;               /* size in bytes */
+    uint32_t second_addr;               /* physical load addr */
+
+    uint32_t tags_addr;                 /* physical addr for kernel tags */
+    uint32_t page_size;                 /* flash page size we assume */
+    uint32_t header_version;
+    uint32_t os_version;
+    uint8_t name[BOOT_NAME_SIZE];       /* asciiz product name */
+    uint8_t cmdline[BOOT_ARGS_SIZE];
+    uint32_t id[8];                     /* timestamp / checksum / sha1 / etc */
+    uint8_t extra_cmdline[BOOT_EXTRA_ARGS_SIZE];
+    uint32_t recovery_[dtbo|acpio]_size;    /* size of recovery image */
+    uint64_t recovery_[dtbo|acpio]_offset;  /* offset in boot image */
+    uint32_t header_size;               /* size of boot image header in bytes */
+};
+</pre> <p>Non-A/B devices can specify a <a href="recovery-images">DTB/ACPI overlay image for recovery</a> to help mitigate over-the-air (OTA) update failures. (A/B devices don't have this problem and don't need to specify an overlay image.) You can specify either a DTBO image or an ACPIO image, but not both (because they're used by different architectures). To configure the boot image header correctly, when using:</p> <ul> <li><p>A DTBO image for recovery, include the <code translate="no" dir="ltr">recovery_dtbo_size</code> and <code translate="no" dir="ltr">recovery_dtbo_offset</code> fields (and don't include the <code translate="no" dir="ltr">recovery_acpio_size</code> and <code translate="no" dir="ltr">recovery_acpio_offset</code> fields).</p></li> <li><p>An ACPIO image for recovery, include the <code translate="no" dir="ltr">recovery_acpio_size</code> and <code translate="no" dir="ltr">recovery_acpio_offset</code> fields (and don't include the <code translate="no" dir="ltr">recovery_dtbo_size</code> and <code translate="no" dir="ltr">recovery_dtbo_offset</code> fields).</p></li> </ul> <p>The <code translate="no" dir="ltr">header_size</code> field contains the size of the boot image header. If the boot image header version is set to 1, the <code translate="no" dir="ltr">id</code> field contains the SHA-1 digest for the <code translate="no" dir="ltr">recovery_[dtbo|acpio]</code> section of the boot image in addition to the <code translate="no" dir="ltr">kernel</code>, <code translate="no" dir="ltr">ramdisk</code>, and <code translate="no" dir="ltr">second sections</code>. For details on the <code translate="no" dir="ltr">recovery_[dtbo|acpio]_size</code> and <code translate="no" dir="ltr">recovery_[dtbo|acpio]_offset</code> fields, see <a href="recovery-images">Recovery Images</a>.</p> <h2 id="header-v0">Legacy boot image header, version 0</h2> <p>Devices launched before Android 9 using the legacy boot image header are considered as using a boot image header version 0.</p> 
+<pre>struct boot_img_hdr
+{
+    uint8_t magic[BOOT_MAGIC_SIZE];
+    uint32_t kernel_size;                /* size in bytes */
+    uint32_t kernel_addr;                /* physical load addr */
+
+    uint32_t ramdisk_size;               /* size in bytes */
+    uint32_t ramdisk_addr;               /* physical load addr */
+
+    uint32_t second_size;                /* size in bytes */
+    uint32_t second_addr;                /* physical load addr */
+
+    uint32_t tags_addr;                  /* physical addr for kernel tags */
+    uint32_t page_size;                  /* flash page size we assume */
+    uint32_t unused;
+    uint32_t os_version;
+    uint8_t name[BOOT_NAME_SIZE];        /* asciiz product name */
+    uint8_t cmdline[BOOT_ARGS_SIZE];
+    uint32_t id[8];                      /* timestamp / checksum / sha1 / etc */
+    uint8_t extra_cmdline[BOOT_EXTRA_ARGS_SIZE];
+};
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/bootloader/boot-image-header" class="_attribution-link">https://source.android.com/docs/core/architecture/bootloader/boot-image-header</a>
+  </p>
+</div>

@@ -1,0 +1,74 @@
+<h1>Connectivity Diagnostics API</h1>  <p>The Connectivity Diagnostics API allows apps that own or manage networks, such as carrier apps, VPN apps, and Wi-Fi suggestion apps, to receive diagnostic network connectivity information from the framework. These apps can register callbacks and receive notifications with connectivity information for the networks that they own or manage. Apps won't receive notifications for networks that aren't owned or managed by the app.</p> <p>The following are examples of apps that manage or own networks:</p> <ul> <li>
+<strong>Carrier apps:</strong> Manage cellular networks for which their <code translate="no" dir="ltr">subId</code> has carrier privileges for</li> <li>
+<strong>Wi-Fi suggestion apps:</strong> Own Wi-Fi networks that they suggest to the system</li> <li>
+<strong>VPN apps:</strong> Manage all networks that their VPN uses, but only when they are the active VPN</li> </ul> <p>Callbacks are invoked in the following cases:</p> <ul> <li>
+<p><strong>Network validation:</strong> The system finished evaluating a specific network. The <a href="https://developer.android.com/reference/android/net/ConnectivityDiagnosticsManager.ConnectivityReport"><code translate="no" dir="ltr">ConnectivityReport</code></a> class provides information on the current state of the network and the results of any tests or procedures performed as part of the validation.</p> 
+<pre>public class ConnectivityReport {
+    Network network;
+    long reportTimestamp;
+    LinkProperties linkProperties;
+    NetworkCapabilities networkCapabilities;
+    PersistableBundle additionalInfo;
+}
+</pre>
+</li> <li>
+<p><strong>Data stall suspected:</strong> A data stall, a condition in which IP packets aren't properly flowing through the network, is suspected. The <a href="https://developer.android.com/reference/android/net/ConnectivityDiagnosticsManager.DataStallReport"><code translate="no" dir="ltr">DataStallReport</code></a> class provides information about suspected data stalls.</p> 
+<pre>public class DataStallReport {
+    Network network;
+    long reportTimestamp;
+    int detectionMethod;
+    LinkProperties linkProperties;
+    NetworkCapabilities networkCapabilities;
+    PersistableBundle stallDetails;
+}
+</pre>
+</li> <li><p><strong>Connectivity reported:</strong> An app has reported connectivity through <a href="https://developer.android.com/reference/android/net/ConnectivityManager#reportNetworkConnectivity(android.net.Network,%20boolean)"><code translate="no" dir="ltr">ConnectivityManager#reportNetworkConnectivity</code></a> to the system. The network and reported connectivity (whether the app believes the network does or doesn't provide connectivity) is shared.</p></li> </ul> <h2 id="implementation">Implementation</h2> <aside class="note"><strong>Note:</strong><span> Apps registering callbacks must have the <a href="https://developer.android.com/reference/android/Manifest.permission#ACCESS_FINE_LOCATION"><code translate="no" dir="ltr">ACCESS_FINE_LOCATION</code></a> permission because connecting to location-specific networks can expose the fine location of the user.</span></aside> <p>To use the Connectivity Diagnostics API, an app must obtain a <a href="https://developer.android.com/reference/android/net/ConnectivityDiagnosticsManager"><code translate="no" dir="ltr">ConnectivityDiagnosticsManager</code></a> instance from the platform. This instance should be used to register and unregister <a href="https://developer.android.com/reference/android/net/ConnectivityDiagnosticsManager.ConnectivityDiagnosticsCallback"><code translate="no" dir="ltr">ConnectivityDiagnosticsCallback</code></a> implementations. Callback methods that aren't overridden are no-ops.</p> <p>Below is an example of a <a href="https://developer.android.com/reference/android/net/ConnectivityDiagnosticsManager.ConnectivityDiagnosticsCallback"><code translate="no" dir="ltr">ConnectivityDiagnosticsCallback</code></a> implementation:</p> 
+<pre>public class ExampleCallback extends ConnectivityDiagnosticsCallback {
+    @Override
+    public void onConnectivityReportAvailable(@NonNull ConnectivityReport report) {
+        ... 
+        // Log data, take action based on report result, etc
+        ... 
+    }
+
+    @Override
+    public void onDataStallSuspected(@NonNull DataStallReport report) {
+        ... 
+        // Log data, take action based on report result, etc
+        ... 
+    }
+
+    @Override
+    public void onNetworkConnectivityReported(
+               @NonNull Network network, boolean hasConnectivity) {
+        ... 
+        // Log data, take action based on report result, etc
+        ... 
+    }
+}
+</pre> <p>To register callbacks and receive notifications, call <a href="https://developer.android.com/reference/android/net/ConnectivityDiagnosticsManager#registerConnectivityDiagnosticsCallback(android.net.NetworkRequest,%20java.util.concurrent.Executor,%20android.net.ConnectivityDiagnosticsManager.ConnectivityDiagnosticsCallback)"><code translate="no" dir="ltr">registerConnectivityDiagnosticsCallback</code></a>. To unregister callbacks and stop receiving notifications, call <a href="https://developer.android.com/reference/android/net/ConnectivityDiagnosticsManager#unregisterConnectivityDiagnosticsCallback(android.net.ConnectivityDiagnosticsManager.ConnectivityDiagnosticsCallback)"><code translate="no" dir="ltr">unregisterConnectivityDiagnosticsCallback</code></a>.</p> <aside class="note"><strong>Note:</strong><span> The callbacks must be registered and unregistered using the same <a href="https://developer.android.com/reference/android/content/pm/ApplicationInfo.html#uid"><code translate="no" dir="ltr">uid</code></a>.</span></aside> <p>Below is an example for registering and unregistering <code translate="no" dir="ltr">ConnectivityDiagnosticsCallback</code>:</p> 
+<pre>NetworkRequest request =
+        new NetworkRequest.Builder()
+                .addTransportType(TRANSPORT_CELLULAR)
+                .build();
+// Use an Executor that is appropriate for your use case
+Executor executor = Executors.newSingleThreadExecutor();
+
+ConnectivityDiagnosticsManager cdm =
+        context.getSystemService(ConnectivityDiagnosticsManager.class);
+
+ExampleCallback callback = new ExampleCallback();
+cdm.registerConnectivityDiagnosticsCallback(
+        request, executor, callback);
+
+... 
+// Collect connectivity information on networks that match with request
+... 
+
+cdm.unregisterConnectivityDiagnosticsCallback(callback);
+</pre> <h2 id="validation">Validation</h2> <p>The Connectivity Diagnostics API is CTS tested by <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/Connectivity/tests/cts/net/src/android/net/cts/ConnectivityDiagnosticsManagerTest.java"><code translate="no" dir="ltr">ConnectivityDiagnosticsManagerTest</code></a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/connect/connectivity-diagnostics-api" class="_attribution-link">https://source.android.com/docs/core/connect/connectivity-diagnostics-api</a>
+  </p>
+</div>

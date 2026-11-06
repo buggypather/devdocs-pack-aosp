@@ -1,0 +1,33 @@
+<h1>JAR host tests</h1>  <p>Java archive (JAR) host tests should be implemented to provide complete code coverage of your software. Follow the instructions to <a href="https://developer.android.com/training/testing/unit-testing/local-unit-tests">Build local unit tests</a>. Write small unit tests to validate a specific function and nothing more.</p> <h2 id="example">Example</h2> <p>The following Blueprint file provides a simple Hello World JAR host test example to copy and adapt to your needs: <a href="https://android.googlesource.com/platform/platform_testing/+/android17-release/tests/example/jarhosttest/Android.bp">platform_testing/tests/example/jarhosttest/Android.bp</a></p> <p>This corresponds to the actual test code found at: <a href="https://android.googlesource.com/platform/platform_testing/+/android17-release/tests/example/jarhosttest/test/android/test/example/helloworld/HelloWorldTest.java">platform_testing/tests/example/jarhosttest/test/android/test/example/helloworld/HelloWorldTest.java</a></p> <p>A snapshot of the Blueprint file is included here for convenience:</p> 
+<pre>java_test_host {
+    name: "HelloWorldHostTest",
+
+    test_suites: ["general-tests"],
+
+    srcs: ["test/**/*.java"],
+
+    static_libs: [
+        "junit",
+        "mockito",
+    ],
+}
+</pre> <p>The <code translate="no" dir="ltr">java_test_host</code> declaration at the beginning indicates that this is a JAR host test. See an example of its use in: <a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/tools/powermodel/Android.bp">frameworks/base/tools/powermodel/Android.bp</a></p> <h2 id="settings">Settings</h2> <p>See below for explanations of the following settings:</p> <ul> <li>
+<p>The <code translate="no" dir="ltr">name</code> setting is required when the <code translate="no" dir="ltr">java_test_host</code> module type is specified (at the start of the block). This setting gives a name to your module, and the resulting JAR has the same name and a <code translate="no" dir="ltr">.jar</code> suffix. In the example below,the resulting test JAR is named <code translate="no" dir="ltr">HelloWorldHostTest.jar</code>. In addition, this setting also defines a make target name for your module, so that you can use <code translate="no" dir="ltr">make [options] &lt;HelloWorldHostTest&gt;</code> to build your test module and all its dependencies.</p> 
+<pre>name: "HelloWorldHostTest",
+</pre>
+</li> <li>
+<p>The <code translate="no" dir="ltr">test_suites</code> setting makes the test easily discoverable by the Trade Federation test harness. Other test suites can be added here, such as CTS, so that the JAR host test test can be shared.</p> 
+<pre>test_suites: ["general-tests"],
+</pre>
+</li> <li>
+<p>The <code translate="no" dir="ltr">static_libs</code> setting instructs the build system to incorporate the contents of the named modules into the resulting APK of the current module. This means that each named module is expected to produce a <code translate="no" dir="ltr">.jar</code> file. The module's content is used for resolving classpath references during compile time and incorporated into the resulting APK.</p> 
+<pre>static_libs: [
+    "junit&amp;quot;,
+],
+</pre>
+</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/development/jar" class="_attribution-link">https://source.android.com/docs/core/tests/development/jar</a>
+  </p>
+</div>

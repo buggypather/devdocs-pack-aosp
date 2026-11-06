@@ -1,0 +1,15 @@
+<h1>Android Runtime (ART)</h1>  <p>The ART module aims to improve the Android experience by offering users the latest managed runtime optimizations, features, and bug fixes. Users are no longer stuck on the runtime that shipped with their device. Developers no longer wait for years for the new functionalities. Improvements to the runtime and libraries are shared across all Android partners.</p> <p>The Android Runtime (ART) and managed core library (libcore) were part of the Runtime module effort in Android 10 along with the native runtime (Bionic) and ICU.</p> <p>In Android 11, ART and libcore are packaged as non-updateable APEX. Bionic and ICU (code and data) remain on the platform and are separated from ART to improve updatability.</p> <h2 id="module-boundary">Module boundary</h2> <table> <tr> <th>Project name </th> <th>Purpose </th> </tr> <tr> <td>
+<code translate="no" dir="ltr">art</code> </td> <td>Module project </td> </tr> <tr> <td>
+<code translate="no" dir="ltr">external/apache-xml</code> </td> <td>Module project </td> </tr> <tr> <td>
+<code translate="no" dir="ltr">external/bouncycastle</code> </td> <td>Module project </td> </tr> <tr> <td>
+<code translate="no" dir="ltr">external/okhttp</code> </td> <td>Module project </td> </tr> <tr> <td>
+<code translate="no" dir="ltr">external/oj-libjdwp</code> </td> <td>Module project </td> </tr> <tr> <td>
+<code translate="no" dir="ltr">libcore</code> </td> <td>Module project </td> </tr> <tr> <td>
+<code translate="no" dir="ltr">libnativehelper</code> </td> <td>Module project </td> </tr> <tr> <td>
+<code translate="no" dir="ltr">system/core/libnativebridge</code> </td> <td>Module project </td> </tr> <tr> <td>
+<code translate="no" dir="ltr">system/core/libnativeloader</code> </td> <td>Module project </td> </tr> </table> <h2 id="package-format">Package format</h2> <p>The ART module (<code translate="no" dir="ltr">com.android.art</code>) ships as an APEX since it is a critical system component. Applications and services inside APKs require the ART module to be present before they can be started.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/modular-system/art" class="_attribution-link">https://source.android.com/docs/core/architecture/modular-system/art</a>
+  </p>
+</div>

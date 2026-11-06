@@ -1,0 +1,56 @@
+<h1>Kernel AddressSanitizer</h1>  <p> Similar to the LLVM-based sanitizers for userspace components, Android includes the Kernel AddressSanitizer (KASan). KASan is a combination of kernel and compile time modifications that result in an instrumented system that allows for simpler bug discovery and root cause analysis. </p> <p> KASan can detect many types of memory violations in the kernel. It can also detect out-of-bound reads and writes on stack, heap and global variables, and can detect use-after-free and double frees. </p> <p> Similar to ASan, KASan uses a combination of memory-function instrumentation at compile time and shadow memory to track memory accesses at runtime. In KASan, an eighth of the kernel memory space is dedicated to shadow memory, which determines if a memory access is valid or not. </p> <p> KASan is supported on x86_64 and arm64 architectures. It has been part of the upstream kernel since 4.0, and has been backported to Android 3.18-based kernels. </p> <p> In addition to KASan, kcov is another kernel modification that is useful for testing. kcov was developed to allow for coverage-guided fuzz testing in the kernel. It measures coverage in terms of syscall inputs and is useful with fuzzing systems, such as <a href="https://github.com/google/syzkaller">syzkaller</a>. </p> <h2 id="kasan-implementation">Implementation</h2> <p> To compile a kernel with KASan and kcov enabled, add the following build flags to your kernel build configuration: </p> 
+<pre>
+CONFIG_KASAN
+CONFIG_KASAN_INLINE
+CONFIG_TEST_KASAN
+CONFIG_KCOV
+CONFIG_SLUB
+CONFIG_SLUB_DEBUG
+CONFIG_CC_OPTIMIZE_FOR_SIZE
+</pre> <p> And removing the following: </p> 
+<pre>
+CONFIG_SLUB_DEBUG_ON
+CONFIG_SLUB_DEBUG_PANIC_ON
+CONFIG_KASAN_OUTLINE
+CONFIG_KERNEL_LZ4
+</pre> <p> Then build and flash your kernel as usual. The KASan kernel is considerably larger than the original. If needed, modify any boot parameters and bootloader settings to take this into consideration. </p> <p> After flashing the kernel, check the kernel boot logs to see if KASan is enabled and running. The kernel starts up with memory map information for KASan, such as: </p> 
+<pre>
+...
+[    0.000000] c0      0 Virtual kernel memory layout:
+[    0.000000] c0      0     kasan   : 0xffffff8000000000 - 0xffffff9000000000   (    64 GB)
+[    0.000000] c0      0     vmalloc : 0xffffff9000010000 - 0xffffffbdbfff0000   (   182 GB)
+[    0.000000] c0      0     vmemmap : 0xffffffbdc0000000 - 0xffffffbfc0000000   (     8 GB maximum)
+[    0.000000] c0      0               0xffffffbdc0000000 - 0xffffffbdc3f95400   (    63 MB actual)
+[    0.000000] c0      0     PCI I/O : 0xffffffbffa000000 - 0xffffffbffb000000   (    16 MB)
+[    0.000000] c0      0     fixed   : 0xffffffbffbdfd000 - 0xffffffbffbdff000   (     8 KB)
+[    0.000000] c0      0     modules : 0xffffffbffc000000 - 0xffffffc000000000   (    64 MB)
+[    0.000000] c0      0     memory  : 0xffffffc000000000 - 0xffffffc0fe550000   (  4069 MB)
+[    0.000000] c0      0       .init : 0xffffffc001d33000 - 0xffffffc001dce000   (   620 KB)
+[    0.000000] c0      0       .text : 0xffffffc000080000 - 0xffffffc001d32284   ( 29385 KB)
+...
+</pre> <p> And this is how a bug looks: </p> 
+<pre>
+[   18.539668] c3      1 ==================================================================
+[   18.547662] c3      1 BUG: KASAN: null-ptr-deref on address 0000000000000008
+[   18.554689] c3      1 Read of size 8 by task swapper/0/1
+[   18.559988] c3      1 CPU: 3 PID: 1 Comm: swapper/0 Tainted: G        W      3.18.24-xxx #1
+[   18.569275] c3      1 Hardware name: Android Device
+[   18.577433] c3      1 Call trace:
+[   18.580739] c3      1 [&lt;ffffffc00008b32c&gt;] dump_backtrace+0x0/0x2c4
+[   18.586985] c3      1 [&lt;ffffffc00008b600&gt;] show_stack+0x10/0x1c
+[   18.592889] c3      1 [&lt;ffffffc001481194&gt;] dump_stack+0x74/0xc8
+[   18.598792] c3      1 [&lt;ffffffc000202ee0&gt;] kasan_report+0x11c/0x4d0
+[   18.605038] c3      1 [&lt;ffffffc00020286c&gt;] __asan_load8+0x20/0x80
+[   18.611115] c3      1 [&lt;ffffffc000bdefe8&gt;] android_verity_ctr+0x8cc/0x1024
+[   18.617976] c3      1 [&lt;ffffffc000bcaa2c&gt;] dm_table_add_target+0x3dc/0x50c
+[   18.624832] c3      1 [&lt;ffffffc001bdbe60&gt;] dm_run_setup+0x50c/0x678
+[   18.631082] c3      1 [&lt;ffffffc001bda8c0&gt;] prepare_namespace+0x44/0x1ac
+[   18.637676] c3      1 [&lt;ffffffc001bda170&gt;] kernel_init_freeable+0x328/0x364
+[   18.644625] c3      1 [&lt;ffffffc001478e20&gt;] kernel_init+0x10/0xd8
+[   18.650613] c3      1 ==================================================================
+</pre> <p> In addition, if modules are enabled in your kernel, you can load the <code translate="no" dir="ltr">test_kasan</code> kernel module for further testing. The module attempts out-of-bounds memory accesses and use-after-free and is useful for ensuring you correctly enabled KASan on a target device. </p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/security/test/kasan" class="_attribution-link">https://source.android.com/docs/security/test/kasan</a>
+  </p>
+</div>

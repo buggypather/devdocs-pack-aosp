@@ -1,0 +1,21 @@
+<h1>Trade Federation Console</h1>  <p>The Trade Federation Console is an optional component that allows you to inspect the state of Trade Federation and what it sees, from the device states to the current tests in progress.</p> <p>It is a great tool for monitoring a large number of tests running in parallel and understanding the progress of each test.</p> <h2 id="reach_the_console">Reach the console</h2> <p>Once Tradefed is built, the <code translate="no" dir="ltr">tradefed.sh</code> launcher script is accessible from your path and by default will take you to the console.</p> <p>The console presents itself with the <code translate="no" dir="ltr">tf &gt;</code> prompt.</p> <h2 id="what_can_the_console_do">What can the console do?</h2> <p>The <code translate="no" dir="ltr">help</code> of the console will always list the most up-to-date information. A few interesting features of it are:</p> <ul> <li>List the devices and how Tradefed sees their state: <code translate="no" dir="ltr">list devices</code>
+</li> <li>List the currently running invocations and their metadata: <code translate="no" dir="ltr">list invocations</code>
+</li> <li>Get the logs of all running invocations and Tradefed: <code translate="no" dir="ltr">dump logs</code>
+</li> </ul> <p>The console allows you to debug what is happening in Tradefed and the devices by querying some states that are not shown together anywhere else.</p> <h2 id="how_do_i_disable_the_console">How do I disable the console?</h2> <p>Sometimes the console isn't needed, such as when running a one-time command. The console must be disabled when running Tradefed from a script or when piping its output directly. Running Tradefed from a script with the console enabled can cause unexpected behavior.</p> <p>To prevent the console from starting, run the <code translate="no" dir="ltr">tradefed.sh</code> launcher script with the <code translate="no" dir="ltr">commandAndExit</code> argument.</p> 
+<pre>tradefed.sh run commandAndExit &lt;usual command&gt;
+</pre> <h2 id="console_autocompletion">Console autocompletion</h2> <p>The console provides basic autocompletion of configuration names.</p> 
+<pre>tf &gt; run &lt;hit TAB&gt;
+result in:
+Display all 167 possibilities? (y or n)
+</pre> <p>By hitting TAB after the <code translate="no" dir="ltr">run</code> you can get the full list of configurations available. And if you have a partial name already typed in, the console will print all the possibilities.</p> 
+<pre>tf &gt;run tf/&lt;HIT TAB&gt;
+
+tf/acceptance            tf/fake                  tf/func
+tf/stress                tf/uiautomator           tf/unit-runner
+tf &gt;run tf/
+</pre> <p>This is a useful when you don't remember an exact configuration name.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/tradefed/fundamentals/console" class="_attribution-link">https://source.android.com/docs/core/tests/tradefed/fundamentals/console</a>
+  </p>
+</div>

@@ -1,0 +1,54 @@
+<h1>Near ultrasound tests</h1>  <p>This page contains steps for conducting near ultrasound (formerly known as hifi ultrasound) microphone and speaker tests. See the <a href="../../core/audio">Audio</a> section for general audio implementation instructions.</p> <h2 id="ultrasound_microphone_tests">Near ultrasound microphone tests</h2> <p>Prerequisites: Prepare two devices, one as the test device, one as the reference device. The reference can be any device that is known to produce near ultrasound sound.</p> <ol> <li>Open <strong>Hifi Ultrasound Microphone Test</strong> on both devices: <table class="columns"> <tr> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near1.png" class="android-image-dark-theme-background screenshot" alt="Hifi Ultrasound Microphone Test on test device" width="300"> <br><strong>Figure 1.</strong> Hifi Ultrasound Microphone Test on the test device.</td> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near2.png" class="android-image-dark-theme-background screenshot" alt="Hifi Ultrasound Microphone Test on reference device" width="300"> <br><strong>Figure 2.</strong> Hifi Ultrasound Microphone Test on the reference device.</td> </tr>
+</table>
+</li> <li>Press <strong>RECORD</strong> on the test device, then press <strong>PLAY</strong> on the reference device: <table class="columns"> <tr> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near3.png" class="android-image-dark-theme-background screenshot" alt="Press RECORD on the test device" width="300"> <br><strong>Figure 3.</strong> Press RECORD on the test device.</td> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near4.png" class="android-image-dark-theme-background screenshot" alt="Press PLAY on the reference device" width="300"> <br><strong>Figure 4.</strong> Press PLAY on the reference device.</td> </tr>
+</table>
+</li> <li>Wait for the test to finish. While waiting, the devices should look like the following images. Do nothing until you see the screens shown in Step 4. <table class="columns"> <tr> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near5.png" class="android-image-dark-theme-background screenshot" alt="Test in progress on the test device" width="300"> <br><strong>Figure 5.</strong> Test in progress on the test device.</td> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near6.png" class="android-image-dark-theme-background screenshot" alt="Test in progress on the reference device" width="300"> <br><strong>Figure 6.</strong> Test in progress on the reference device.</td> </tr>
+</table>
+</li> <li>On the test device, if the text <strong>PASS</strong> is shown, press the green button. <table class="columns"> <tr> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near7.png" class="android-image-dark-theme-background screenshot" alt="Test device showing PASS" width="300"> <br><strong>Figure 7.</strong> Test device showing PASS.</td> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near8.png" class="android-image-dark-theme-background screenshot" alt="Reference device while the test device passes" width="300"> <br><strong>Figure 8.</strong> Reference device while the test device shows PASS.</td> </tr>
+</table>
+</li> <li>On the test device, if the text <strong>FAIL</strong> is shown, press the red button. Then you can repeat this sequence from step 1 to repeat the test, if desired. <table class="columns"> <tr> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near9.png" class="android-image-dark-theme-background screenshot" alt="FAIL shown on the test device" width="300"> <br><strong>Figure 9.</strong> FAIL shown on the test device.</td> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near10.png" class="android-image-dark-theme-background screenshot" alt="Reference device while the test device shows FAIL" width="300"><br><strong>Figure 10.</strong> Reference device while the test device shows FAIL.</td> </tr>
+</table>
+</li> <li>Optional: Plot the calculated response by tapping <strong>PLOT</strong> on the test device. <table class="columns"> <tr> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near11.png" class="android-image-dark-theme-background screenshot" alt="PLOT on the test device" width="300"> <br><strong>Figure 11.</strong> PLOT on the test device.</td> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near12.png" class="android-image-dark-theme-background screenshot" alt="Reference device during PLOT" width="300"><br><strong>Figure 12.</strong> Reference device during PLOT.</td> </tr>
+</table>
+</li> </ol> <h2 id="ultrasound_speaker_tests">Near ultrasound speaker tests</h2> <p>Prerequisites: Prepare two devices, one as the test device, one as the reference device. The reference can be any device that is known to record near ultrasound sound.</p> <ol> <li>Open <strong>Hifi Ultrasound Speaker Test</strong> on both devices: <table class="columns"> <tr> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near13.png" class="android-image-dark-theme-background screenshot" alt="Hifi Ultrasound Speaker Test on the test device" width="300"> <br><strong>Figure 13.</strong> Hifi Ultrasound Speaker Test on the test device.</td> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near14.png" class="android-image-dark-theme-background screenshot" alt="Hifi Ultrasound Speaker Test on the reference device" width="300"> <br><strong>Figure 14.</strong> Hifi Ultrasound Speaker Test on the reference device.</td> </tr>
+</table>
+</li> <li>Press <strong>RECORD</strong> on the reference device, then press <strong>PLAY</strong> on the test device: <table class="columns"> <tr> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near15.png" class="android-image-dark-theme-background screenshot" alt="PLAY on the test device" width="300"> <br><strong>Figure 15.</strong> PLAY on the test device.</td> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near16.png" class="android-image-dark-theme-background screenshot" alt="RECORD on the reference device" width="300"> <br><strong>Figure 16.</strong> RECORD on the reference device.</td> </tr>
+</table>
+</li> <li>Wait for the test to finish. While waiting, the devices should look like the following images. Do nothing until you see the screens shown in Step 4. <table class="columns"> <tr> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near17.png" class="android-image-dark-theme-background screenshot" alt="Test in progress on the test device" width="300"> <br><strong>Figure 17.</strong> Test in progress on the test device.</td> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near18.png" class="android-image-dark-theme-background screenshot" alt="Test in progress on the reference device" width="300"> <br><strong>Figure 18.</strong> Test in progress on the reference device.</td> </tr>
+</table>
+</li> <li>When you see the dialog on the reference device, press <strong>OK</strong> on the test device. <table class="columns"> <tr> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near19.png" class="android-image-dark-theme-background screenshot" alt="Test device with dialog" width="300"> <br><strong>Figure 19.</strong> Test device with dialog.</td> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near20.png" class="android-image-dark-theme-background screenshot" alt="Reference device with dialog" width="300"> <br><strong>Figure 20.</strong> Reference device with dialog.</td> </tr>
+</table>
+</li> <li>On the reference device, if the text <strong>PASS</strong> is shown, press the green button on the test device. <table class="columns"> <tr> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near21.png" class="android-image-dark-theme-background screenshot" alt="Green button on the test device" width="300"> <br><strong>Figure 21.</strong> Green button on the test device.</td> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near22.png" class="android-image-dark-theme-background screenshot" alt="Reference device shows PASS" width="300"><br><strong>Figure 22.</strong> Reference device shows PASS.</td> </tr>
+</table>
+</li> <li>On the reference device, if the text <strong>FAIL</strong> is shown, press the red button on the test device. Then you can repeat this sequence from step 1 to repeat the test, if desired. <table class="columns"> <tr> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near23.png" class="android-image-dark-theme-background screenshot" alt="Red button on the test device" width="300"> <br><strong>Figure 23.</strong> Red button on the test device.</td> <td style="width: 50%">
+<img src="https://source.android.com/static/docs/compatibility/cts/images/Near24.png" class="android-image-dark-theme-background screenshot" alt="Reference device with dialog" width="300"><br><strong>Figure 24.</strong> Reference device with dialog.</td> </tr>
+</table>
+</li> <li>Optional: Plot the calculated response by tapping <strong>PLOT</strong> on the reference device. See the instructions in <a href="#ultrasound_microphone_tests">Near Ultrasound Microphone Test</a>.</li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/compatibility/cts/near-ultrasound" class="_attribution-link">https://source.android.com/docs/compatibility/cts/near-ultrasound</a>
+  </p>
+</div>

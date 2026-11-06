@@ -1,0 +1,141 @@
+<h1>Deployment guide</h1>  <p>The Cloud Telemetry Simulation platform requires you to deploy the infrastructure to your Google Cloud project.</p> <h2 id="get-source">Access the source code</h2> <p>The source code for the Cloud Telemetry Simulation platform is hosted on GitHub, in <a href="https://github.com/google/aaos-sdv-telemetry-simulator">aaos-sdv-telemetry-simulator</a>.</p> <h2 id="prerequisites">Prerequisites</h2> <p>To deploy the platform, ensure you meet the following prerequisites:</p> <ul> <li>A Google Cloud project with <strong>Billing enabled</strong>.</li> <li>
+<strong>Web demo security:</strong> If you deploy the Web Demo, you must configure an <strong>OAuth 2.0 Client ID</strong> in Google Cloud <strong>APIs &amp; Services &gt; Credentials</strong> to secure the App Engine application and restrict access to authorized Google Accounts.</li> <li>
+<strong>Software Defined Vehicle (SDV) build artifacts:</strong> You must have your own compiled SDV image artifacts. These are not provided in this repository. <ul> <li><code translate="no" dir="ltr">cvd-host_package.tar.gz</code></li> <li><code translate="no" dir="ltr">sdv_core_cf-img-&lt;version&gt;.zip</code></li> </ul>
+</li> <li>
+<strong>Permissions:</strong> The user or service account running Terraform must have sufficient permissions to create the resources defined in the configuration (for example, <strong>Project Editor</strong>, or a custom role with permissions for Compute Engine, Cloud Functions, Identity and Access Management, Cloud Storage, and other necessary services).</li> <li>
+<strong>Tools:</strong> <ul> <li>
+<strong>Google Cloud CLI</strong> (<code translate="no" dir="ltr">gcloud CLI</code>)</li> <li>
+<strong>Terraform</strong> (used version in the repository)</li> <li><strong>Docker</strong></li> <li>
+<strong>Go</strong> (used version for orchestrator functions in the repository)</li> </ul>
+</li> </ul> <h2 id="infrastructure-deployment">Deploy the Google Cloud infrastructure</h2> <p>Deploying the simulation platform involves two main steps: using Terraform to deploy the core infrastructure to Google Cloud, and building and pushing the simulation agent Docker image to Artifact Registry. This section guides you through deploying the infrastructure.</p> <p>Enter values for the following variables to update the code snippets on this page:</p> <ol> <li>
+<p><strong>Configure the Terraform backend:</strong> Create a file to specify where Terraform stores its state file in Cloud Storage. Name the file using this syntax:</p> 
+<pre>environments/ENVIRONMENT/backend.hcl
+</pre>
+
+<pre># environments/ENVIRONMENT/backend.hcl
+bucket = "TF_BUCKET_NAME"
+prefix = "sdv-telemetry-simulation"
+</pre>
+</li> <li>
+<p><strong>Configure project variables:</strong> Create a file named with your project's details. Name the file using this syntax:</p> 
+<pre>environments/ENVIRONMENT/variables.tfvars
+</pre>
+<aside class="note"><strong>Note:</strong><span> To prevent the execution of unauthorized images, define the <code translate="no" dir="ltr">supported_agent_builds</code> map. The <code translate="no" dir="ltr">build_id</code> in user requests is validated against this map.</span></aside>
+<pre># environments/ENVIRONMENT/variables.tfvars
+project_id       = "PROJECT_ID"
+default_region   = "REGION"
+default_zone     = "ZONE"
+agent_docker_image = "REGION-docker.pkg.dev/PROJECT_ID/sim-agents/simulation-agent"
+    # Security: Map logical tags to SHA256 digests
+
+# Security: Map logical tags to SHA256 digests (optional)
+supported_agent_builds = {
+"latest" = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+"stable" = "sha256:88d4266fd4e6338d13b845fcf289579d209c897823b9217da3e161936f031589"
+}
+
+# Parallel Execution Limit (Default: 5)
+max_vm_count = 5
+</pre>
+<aside class="note"><strong>Note:</strong><span> The <code translate="no" dir="ltr">agent_docker_image</code> path must match the image you build and push in the next section.</span></aside>
+</li> <li>
+<p><strong>Apply the Terraform configuration:</strong> Navigate to the <code translate="no" dir="ltr">infrastructure</code> directory, then initialize and apply the configuration:</p> 
+<pre># Initialize Terraform with your backend configuration
+terraform init -backend-config=environments/ENVIRONMENT/backend.hcl
+
+# (Optional) Preview the changes
+terraform plan --var-file=environments/ENVIRONMENT/variables.tfvars
+
+# Apply the changes to deploy the infrastructure
+terraform apply --var-file=environments/ENVIRONMENT/variables.tfvars
+</pre>
+</li> </ol> <h2 id="agent-image">Build and push the simulation agent image</h2> <p>The simulation agent runs the simulation on the Compute Engine virtual machine (VM). You build it with your SDV artifacts and push it to Artifact Registry.</p> <p>To build and push the simulation agent image:</p> <ol> <li><p><strong>Place artifacts:</strong> Copy your <code translate="no" dir="ltr">cvd-host_package.tar.gz</code> and <code translate="no" dir="ltr">sdv_core_cf-img-&lt;version&gt;.zip</code> files into the <code translate="no" dir="ltr">simulation-agent/sdv-image-resources/</code> directory.</p></li> <li>
+<p><strong>Build and push:</strong> Navigate to the <code translate="no" dir="ltr">simulation-agent</code> directory, then build and push the image. Replace the image path with the one you configured in your <code translate="no" dir="ltr">variables.tfvars</code> file.</p> 
+<pre># Example using the path from the .tfvars example above
+export AGENT_IMAGE="REGION-docker.pkg.dev/PROJECT_ID/sim-agents/simulation-agent:latest"
+
+# Build the image
+docker build -t $AGENT_IMAGE .
+
+# Push the image to Artifact Registry
+docker push $AGENT_IMAGE
+</pre>
+</li> <li>
+<p><strong>Update fingerprints:</strong> After pushing a new image, you might need to get its SHA256 digest and update the <code translate="no" dir="ltr">supported_agent_builds</code> map in your <code translate="no" dir="ltr">variables.tfvars</code> file, then rerun <code translate="no" dir="ltr">terraform apply</code>.</p> 
+<pre># Get the digest using gcloud
+gcloud artifacts docker images describe $AGENT_IMAGE --format="value(image_summary.digest)"
+</pre> <p>Your Cloud Telemetry Simulation platform is deployed and ready to accept simulation requests.</p>
+</li> </ol> <h2 id="operations">Operations and troubleshooting</h2> <p>This solution lets you use Google Cloud built-in tools for observability. It consumes computation resources only per request and during simulation execution.</p> <h3 id="cost-management">Cost management</h3> <p>The architecture is designed to be cost-effective by using serverless and ephemeral resources. Costs are primarily driven by:</p> <ul> <li>
+<strong>Compute Engine:</strong> Billed for the time the simulation VMs are running. Using Spot VMs can significantly reduce this cost.</li> <li>
+<strong>Cloud Functions:</strong> Billed per invocation.</li> <li>
+<strong>Cloud Storage:</strong> Billed for storing input and output files and logs.</li> <li>
+<strong>Firestore:</strong> Billed for reads, writes, and data storage.</li> </ul> <h3 id="observability">Observability</h3> <p>All components are integrated with the Google Cloud operations suite.</p> <ul> <li>
+<strong>Logs Explorer:</strong> This is your primary tool for troubleshooting. You can filter logs by resource: <ul> <li>
+<strong>Cloud Functions:</strong> Check logs for the <code translate="no" dir="ltr">receive-request</code> or <code translate="no" dir="ltr">schedule-simulation</code> functions to debug orchestration issues.</li> <li>
+<strong>Compute Engine:</strong> Check VM instance logs for startup or shutdown problems.</li> <li>
+<strong>Simulation agent:</strong> The agent running inside the Docker container forwards its logs to Logs Explorer. Filter by the VM instance name to see detailed simulation progress.</li> </ul>
+</li> <li>
+<strong>Cloud Storage:</strong> For completed simulations, the <code translate="no" dir="ltr">logcat</code> and <code translate="no" dir="ltr">bugreport</code> files from the Cuttlefish device are uploaded to the simulation's output directory in the Cloud Storage bucket, providing deep insight into the Android environment's behavior.</li> </ul> <h3 id="service-accounts">Service accounts</h3> <p>Terraform creates several service accounts to enable a secure, least-privilege environment. Key service accounts include:</p> <ol> <li>
+<p><strong>Execution identity (VM):</strong></p> <ul> <li>
+<code translate="no" dir="ltr">simulation-agent</code>: <ul> <li>
+<strong>Attached to:</strong> The Compute Engine VMs running the simulation.</li> <li>
+<strong>Role:</strong> Allows the VM to upload results and signal completion.</li> <li>
+<strong>Permissions:</strong> <ul> <li>
+<code translate="no" dir="ltr">roles/storage.objectUser</code>: Reads inputs and uploads artifacts (logs, reports) to Cloud Storage.</li> <li>
+<code translate="no" dir="ltr">roles/run.invoker</code>: Authenticates and invokes the <code translate="no" dir="ltr">finish-simulation</code> function.</li> </ul>
+</li> </ul>
+</li> </ul>
+</li> <li>
+<p><strong>Orchestration identities (functions):</strong></p> <ul> <li>
+<code translate="no" dir="ltr">read-simulations-function</code>: <ul> <li>
+<strong>Attached to:</strong> The <code translate="no" dir="ltr">read-simulation</code> Cloud Function.</li> <li>
+<strong>Permissions:</strong> <ul> <li>
+<code translate="no" dir="ltr">roles/datastore.user</code>: Reads simulation and running-vm records in Firestore.</li> </ul>
+</li> </ul>
+</li> <li>
+<p><code translate="no" dir="ltr">receive-request-function</code>:</p> <ul> <li>
+<strong>Attached to:</strong> The <code translate="no" dir="ltr">receive-request</code> Cloud Function.</li> <li>
+<strong>Permissions:</strong> <ul> <li>
+<code translate="no" dir="ltr">roles/datastore.user</code>: Creates new <code translate="no" dir="ltr">PENDING</code> simulation records in Firestore.</li> <li>
+<code translate="no" dir="ltr">roles/storage.objectUser</code>: Verifies the existence of input files in Cloud Storage.</li> </ul>
+</li> </ul>
+</li> <li>
+<p><code translate="no" dir="ltr">scheduler-function</code>:</p> <ul> <li>
+<strong>Attached to:</strong> The <code translate="no" dir="ltr">schedule-simulation</code> Cloud Function.</li> <li>
+<strong>Permissions:</strong> <ul> <li>
+<code translate="no" dir="ltr">roles/pubsub.subscriber</code>: Pulls messages from the simulation queue.</li> <li>
+<code translate="no" dir="ltr">roles/datastore.user</code>: Performs atomic reads and writes to the <code translate="no" dir="ltr">running-vms</code> counter.</li> <li>
+<code translate="no" dir="ltr">roles/compute.instanceAdmin.v1</code>: Creates and starts Compute Engine VMs.</li> <li>
+<code translate="no" dir="ltr">roles/iam.serviceAccountUser</code>: Allows this function to assign the <code translate="no" dir="ltr">simulation-agent</code> service account to the VMs it creates.</li> </ul>
+</li> </ul>
+</li> <li>
+<p><code translate="no" dir="ltr">simulation-finisher-function</code>:</p> <ul> <li>
+<strong>Attached to:</strong> The <code translate="no" dir="ltr">finish-simulation</code> Cloud Function.</li> <li>
+<strong>Permissions:</strong> <ul> <li>
+<code translate="no" dir="ltr">roles/compute.instanceAdmin.v1</code>: Deletes the VM after execution completes.</li> <li>
+<code translate="no" dir="ltr">roles/datastore.user</code>: Updates the simulation status to <code translate="no" dir="ltr">COMPLETED</code> or <code translate="no" dir="ltr">FAILED</code>.</li> </ul>
+</li> </ul>
+</li> <li>
+<p><code translate="no" dir="ltr">delete-simulation-function</code>:</p> <ul> <li>
+<strong>Attached to:</strong> The <code translate="no" dir="ltr">delete-simulation</code> Cloud Function.</li> <li>
+<strong>Permissions:</strong> <ul> <li>
+<code translate="no" dir="ltr">roles/compute.instanceAdmin.v1</code>: Force-deletes virtual machines during cancellation.</li> <li>
+<code translate="no" dir="ltr">roles/datastore.user</code>: Updates the status for canceled jobs.</li> </ul>
+</li> </ul>
+</li> </ul>
+</li> <li>
+<p><strong>Trigger identities:</strong></p> <ul> <li>
+<p><code translate="no" dir="ltr">scheduler-trigger</code>:</p> <ul> <li>
+<strong>Used by:</strong> Eventarc (events) and Cloud Scheduler triggers.</li> <li>
+<strong>Permissions:</strong> <code translate="no" dir="ltr">roles/eventarc.eventReceiver</code> and <code translate="no" dir="ltr">roles/run.invoker</code> to trigger the orchestrator functions.</li> </ul>
+</li> <li>
+<p><code translate="no" dir="ltr">cleanup-scheduler</code>:</p> <ul> <li>
+<strong>Used by:</strong> The Cloud Scheduler cron job for cleanup.</li> <li>
+<strong>Permissions:</strong> <code translate="no" dir="ltr">roles/run.invoker</code> to trigger the cleanup logic.</li> </ul>
+</li> </ul>
+</li> </ol> <p>Managing Identity and Access Management policies for these service accounts is the primary way to control access and permissions within the system.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/telemetry/cloud-simulator/deployment" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/telemetry/cloud-simulator/deployment</a>
+  </p>
+</div>

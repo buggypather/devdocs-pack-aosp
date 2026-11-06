@@ -1,0 +1,163 @@
+<h1>Android 12 Camera Image Test Suite release notes</h1>  <p>A number of <a href="camera-hal#its_tests">Camera ITS</a> changes are included in the Android 12 release. This page summarizes the changes that fall into these broad categories:</p> <ul> <li><a href="#python-refactor">Refactoring to Python 3</a></li> <li><a href="#mobly">Mobly test framework adoption</a></li> <li><a href="#test-changes">Test changes</a></li> <li><a href="#new-tests">New tests</a></li> </ul> <h2 id="python-refactor">Refactor to Python 3</h2> <p>Due to the Python 2.7 deprecation in January 2020, the entire Camera ITS codebase was refactored to Python 3. The following Python versions and libraries are required in Android 12:</p> <ul> <li><a href="https://www.python.org/downloads/">Python 3.7.9 or Python 3.7.10</a></li> <li><a href="https://opencv.org/">OpenCV 3.4.2</a></li> <li><a href="https://numpy.org/">Numpy 1.19.2</a></li> <li><a href="https://matplotlib.org/">Matplotlib 3.3.2</a></li> <li><a href="https://docs.scipy.org/doc/">Scipy 1.5.2</a></li> <li><a href="https://pyserial.readthedocs.io/">pySerial 3.5</a></li> <li><a href="https://pypi.org/project/Pillow/">Pillow 8.1.0</a></li> <li><a href="https://pypi.org/project/PyYAML/">PyYAML 5.3.1</a></li> </ul> <p>The main test launcher, <code translate="no" dir="ltr">tools/run_all_tests.py</code>, remains the same as versions Android 11 or lower and is refactored to Python 3.</p> <p>All individual tests are refactored and use the new test setup class defined in <code translate="no" dir="ltr">tests/its_base_test.py</code>. Most test names and functionality remain the same. In Android 12, all individual tests load their scenes. While scene loading for each test increases overall test time, it enables debugging of individual tests.</p> <p>For more information on individual test changes, see <a href="#test-changes">Test changes</a>.</p> <p>The following Python modules are refactored with a name change:</p> <ul> <li>
+<code translate="no" dir="ltr">pymodules/its/caps.py</code> → <code translate="no" dir="ltr">utils/camera_properties_utils.py</code>
+</li> <li>
+<code translate="no" dir="ltr">pymodules/its/cv2image.py</code> → <code translate="no" dir="ltr">utils/opencv_processing_utils.py</code>
+</li> <li>
+<code translate="no" dir="ltr">pymodules/its/device.py</code> → <code translate="no" dir="ltr">utils/its_session_utils.py</code>
+</li> <li>
+<code translate="no" dir="ltr">pymodules/its/error.py</code> → <code translate="no" dir="ltr">utils/error_util.py</code>
+</li> <li>
+<code translate="no" dir="ltr">pymodules/its/image.py</code> → <code translate="no" dir="ltr">utils/image_processing_utils.py</code>
+</li> <li>
+<code translate="no" dir="ltr">pymodules/its/objects.py</code> → <code translate="no" dir="ltr">utils/capture_request_utils.py</code>
+</li> <li>
+<code translate="no" dir="ltr">pymodules/its/target.py</code> → <code translate="no" dir="ltr">utils/target_exposure_utils.py</code>
+</li> <li>
+<code translate="no" dir="ltr">tools/hw.py</code> → <code translate="no" dir="ltr">utils/sensor_fusion_utils.py</code>
+</li> </ul> <h2 id="mobly">Mobly test framework adoption</h2> <p><a href="https://github.com/google/mobly">Mobly</a> is a Python-based test framework supporting test cases that require multiple devices with custom hardware setups. Camera ITS uses the Mobly test infrastructure to enable better control and logging of the tests.</p> <p>Camera ITS uses the Mobly test infrastructure to enable better control and logging of the tests. Mobly is a Python-based test framework supporting test cases that require multiple devices with custom hardware setups. For more information on Mobly, see <a href="https://github.com/google/mobly">google/mobly</a>.</p> <h3 id="config">config.yml files</h3> <p>With the Mobly framework, you can set up a device under test (DUT) and a chart tablet in the <code translate="no" dir="ltr">its_base_test</code> class. A <code translate="no" dir="ltr">config.yml</code> (YAML) file is used to create a Mobly testbed. Multiple testbeds can be configured within this config file, for example, a tablet and a sensor fusion testbed. Within each testbed's controller section, you can specify <code translate="no" dir="ltr">device_ids</code> to identify the appropriate Android devices to the test runner. In addition to the device IDs, other parameters such as tablet <code translate="no" dir="ltr">brightness</code>, <code translate="no" dir="ltr">chart_distance</code>, <code translate="no" dir="ltr">debug_mode</code>, <code translate="no" dir="ltr">camera_id</code>, and <code translate="no" dir="ltr">scene_id</code> are passed in the test class. Common test parameter values are:</p> 
+<pre>brightness: 192  (all tablets except Pixel C)
+chart_distance: 31.0  (rev1/rev1a box for FoV &lt; 90° cameras)
+chart_distance: 22.0 (rev2 test rig for FoV &gt; 90° cameras)
+</pre> <h4 id="tablet-test">Tablet-based testing</h4> <p>For tablet-based testing, the keyword <code translate="no" dir="ltr">TABLET</code> must be present in the testbed name. During initialization, the Mobly test runner initializes <code translate="no" dir="ltr">TestParams</code> and passes them to the individual tests.</p> <p>The following is a sample <code translate="no" dir="ltr">config.yml</code> file for tablet-based runs.</p> 
+<pre>TestBeds:
+  - Name: TEST_BED_TABLET_SCENES
+    # Test configuration for scenes[0:4, 6, _change]
+    Controllers:
+        AndroidDevice:
+          - serial: 8A9X0NS5Z
+            label: dut
+          - serial: 5B16001229
+            label: tablet
+
+    TestParams:
+      brightness: 192
+      chart_distance: 22.0
+      debug_mode: "False"
+      chart_loc_arg: ""
+      camera: 0
+      scene: &lt;scene-name&gt;  # if &lt;scene-name&gt; runs all scenes
+</pre> <p>The testbed can be invoked using <code translate="no" dir="ltr">tools/run_all_tests.py</code>. If no command line values are present, the tests run with the <code translate="no" dir="ltr">config.yml</code> file values. Additionally, you can override the <code translate="no" dir="ltr">camera</code> and <code translate="no" dir="ltr">scene</code> config file values at the command line using commands similar to Android 11 or lower.</p> <p>For example:</p> 
+<pre>python tools/run_all_tests.py
+python tools/run_all_tests.py camera=1
+python tools/run_all_tests.py scenes=2,1,0
+python tools/run_all_tests.py camera=1 scenes=2,1,0
+</pre> <h4 id="sensor-fusion">Sensor fusion testing</h4> <p>For <a href="camera-its-tests#sensor_fusion">sensor fusion testing</a>, the testbed name must include the keyword <code translate="no" dir="ltr">SENSOR_FUSION</code>. The correct testbed is determined by the scenes tested. Android 12 supports both Arduino and Canakit <a href="sensor-fusion-controller">controllers for sensor fusion</a>.</p> <p>The following is a sample <code translate="no" dir="ltr">config.yml</code> file for sensor fusion runs.</p> 
+<pre>Testbeds
+  - Name: TEST_BED_SENSOR_FUSION
+    # Test configuration for sensor_fusion/test_sensor_fusion.py
+    Controllers:
+        AndroidDevice:
+          - serial: 8A9X0NS5Z
+            label: dut
+
+    TestParams:
+      fps: 30
+      img_size: 640,480
+      test_length: 7
+      debug_mode: "False"
+      chart_distance: 25
+      rotator_cntl: arduino         # cntl can be arduino or canakit
+      rotator_ch: 1
+      camera: 0
+</pre> <p>To run sensor fusion tests with the <a href="sensor-fusion-controller#test-rig">sensor fusion test rig</a>, use:</p> 
+<pre>python tools/run_all_tests.py scenes=sensor_fusion
+python tools/run_all_tests.py scenes=sensor_fusion camera=0
+</pre> <h4 id="multi-testbeds">Multiple testbeds</h4> <p>Multiple testbeds can be included in the config file. The most common combination is to have both a tablet testbed and a sensor fusion testbed.</p> <p>The following is a sample <code translate="no" dir="ltr">config.yml</code> file with both tablet and sensor fusion testbeds.</p> 
+<pre>Testbeds
+  - Name: TEST_BED_TABLET_SCENES
+    # Test configuration for scenes[0:4, 6, _change]
+    Controllers:
+        AndroidDevice:
+          - serial: 8A9X0NS5Z
+            label: dut
+          - serial: 5B16001229
+            label: tablet
+
+    TestParams:
+      brightness: 192
+      chart_distance: 22.0
+      debug_mode: "False"
+      chart_loc_arg: ""
+      camera: 0
+      scene: &lt;scene-name&gt;  # if &lt;scene-name&gt; runs all scenes
+
+  - Name: TEST_BED_SENSOR_FUSION
+    # Test configuration for sensor_fusion/test_sensor_fusion.py
+    Controllers:
+        AndroidDevice:
+          - serial: 8A9X0NS5Z
+            label: dut
+
+    TestParams:
+      fps: 30
+      img_size: 640,480
+      test_length: 7
+      debug_mode: "False"
+      chart_distance: 25
+      rotator_cntl: arduino         # cntl can be arduino or canakit
+      rotator_ch: 1
+      camera: 0
+</pre> <h4 id="manual-test">Manual testing</h4> <p>Manual testing continues to be supported in Android 12. However, the testbed must identify testing as such with the keyword <code translate="no" dir="ltr">MANUAL</code> in the testbed name. Additionally, the testbed can't include a tablet ID.</p> <p>The following is a sample <code translate="no" dir="ltr">config.yml</code> file for manual testing.</p> 
+<pre>TestBeds:
+  - Name: TEST_BED_MANUAL
+    Controllers:
+        AndroidDevice:
+          - serial: 8A9X0NS5Z
+            label: dut
+
+    TestParams:
+      debug_mode: "False"
+      chart_distance: 31.0
+      camera: 0
+      scene: scene1
+</pre> <h4 id="scenes-without-tablets">Test scenes without tablets</h4> <p>Testing for scene 0 and scene 5 can be done with <code translate="no" dir="ltr">TEST_BED_TABLET_SCENES</code> or with <code translate="no" dir="ltr">TEST_BED_MANUAL</code>. However, if testing is done with <code translate="no" dir="ltr">TEST_BED_TABLET_SCENES</code>, the tablet must be connected and the tablet serial ID must be valid even though the tablet isn't used because the test class setup assigns the serial ID value for the tablet.</p> <h4 id="individual-tests">Run individual tests</h4> <p>Individual tests can be run only for debug purposes because their results aren't reported to <a href="verifier">CTS Verifier</a>. Because the <code translate="no" dir="ltr">config.yml</code> files can't be overwritten at the command line for <code translate="no" dir="ltr">camera</code> and <code translate="no" dir="ltr">scene</code>, these parameters must be correct in the <code translate="no" dir="ltr">config.yml</code> file for the individual test in question. Additionally, if there is more than one testbed in the config file, you must specify the testbed with the <code translate="no" dir="ltr">--test_bed</code> flag. For example:</p> 
+<pre>python tests/scene1_1/test_black_white.py --config config.yml --test_bed TEST_BED_TABLET_SCENES
+</pre> <h3 id="test-artifacts">Test artifacts</h3> <p>In Android 12, test artifacts for Camera ITS are stored similarly to Android 11 or lower but with the following changes:</p> <ul> <li>The test artifact <code translate="no" dir="ltr">/tmp</code> directory has <code translate="no" dir="ltr">CameraITS_</code> prepended to the 8-character random string for clarity.</li> <li>Test output and errors are stored in <code translate="no" dir="ltr">test_log.DEBUG</code> for each test instead of <code translate="no" dir="ltr">test_name_stdout.txt</code> and <code translate="no" dir="ltr">test_name_stderr.txt</code>.</li> <li>The DUT and tablet logcats from each individual test are in stored the <code translate="no" dir="ltr">/tmp/CameraITS_########</code> directory simplifying debugging as all information required to debug 3A issues are logged.</li> </ul> <h2 id="test-changes">Test changes</h2> <p>In Android 12 the tablet scenes are PNG files rather than PDF files. Use of PNG files enables more tablet models to display the scenes properly.</p> <h3 id="test_jitter">scene0/test_jitter.py</h3> <p>The <code translate="no" dir="ltr">test_jitter</code> test runs on physical hidden cameras in Android 12.</p> <h3 id="test_black_white">scene1_1/test_black_white.py</h3> <p>For Android 12, <code translate="no" dir="ltr">test_black_white</code> has the functionality of both <code translate="no" dir="ltr">test_black_white</code> and <code translate="no" dir="ltr">test_channel_saturation</code>.</p> <p>The following table describes the two individual tests in Android 11.</p> <table> <tr> <th>Test name</th> <th>First API level</th> <th>Assertions</th> </tr> <tr> <td>
+<code translate="no" dir="ltr">scene1_1</code><br><code translate="no" dir="ltr">test_black_white.py</code>
+</td> <td>ALL</td> <td>Short exposure, low gain RGB values ~[0, 0, 0]<br> Long exposure, high gain RGB values ~[255, 255, 255]</td> </tr> <tr> <td>
+<code translate="no" dir="ltr">scene1_1</code><br><code translate="no" dir="ltr">test_channel_saturation.py</code>
+</td> <td>29</td> <td>Reduced tolerance on [255, 255, 255] differences to eliminate color tint in white images.</td> </tr> </table> <p>The following table describes the merged test, scene1_1/test_black_white.py, in Android 12.</p> <table> <tr> <th>Test name</th> <th>First API level</th> <th>Assertions</th> </tr> <tr> <td>
+<code translate="no" dir="ltr">scene1_1</code><br><code translate="no" dir="ltr">test_black_white.py</code>
+</td> <td>ALL</td> <td>Short exposure, low gain RGB values ~[0, 0, 0]<br> Long exposure, high gain RGB values ~[255, 255, 255] and reduced tolerance between values to eliminate color tint in white images.</td> </tr> </table> <h3 id="test_burst_sameness_manual">scene1_1/test_burst_sameness_manual.py</h3> <p>The <code translate="no" dir="ltr">test_burst_sameness_manual</code> test runs on physical hidden cameras in Android 12.</p> <h3 id="test_tonemap_sequence">scene1_2/test_tonemap_sequence.py</h3> <p>The <code translate="no" dir="ltr">test_tonemap_sequence</code> test runs on LIMITED cameras in Android 12.</p> <h3 id="test_yuv_plus_raw">scene1_2/test_yuv_plus_raw.py</h3> <p>The <code translate="no" dir="ltr">test_yuv_plus_raw</code> test runs on physical hidden cameras in Android 12.</p> <h3 id="test_format_combos">scene2_a/test_format_combos.py</h3> <p>The <code translate="no" dir="ltr">test_format_combos</code> test runs on LIMITED cameras in Android 12.</p> <h3 id="test_flip_mirror">scene3/test_flip_mirror.py</h3> <p>The <code translate="no" dir="ltr">test_flip_mirror</code> test runs on LIMITED cameras in Android 12.</p> <h3 id="test_aspect_ratio_and_crop">scene4/test_aspect_ratio_and_crop.py</h3> <p>Finding circles in <code translate="no" dir="ltr">scene4/test_aspect_ratio_and_crop.py</code> was refactored in Android 12.</p> <p>Earlier Android versions used a method that involved finding a child contour (the circle) inside the parent contour (the square) with filters for size and color. Android 12 uses a method that involves finding all contours and then filtering by finding features that are the most <em>circlish</em>. To screen out spurious circles on the display, there is a minimum contour area required, and the contour of the circle must be black.</p> <aside class="note"><strong>Note:</strong><span> Circlish means the ratio of the area of the contour to the area of a perfect circle (πr²) where r is the (width + height)/4 of the contour when width ≈ height.</span></aside> <p>The contours and their selection criteria are shown in the following image.</p> <p><img src="https://source.android.com/static/docs/compatibility/cts/images/contour-criteria.png" alt="Conceptual drawing of contours and selection criteria" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> Conceptual drawing of contours and selection criteria.</p> <p>The Android 12 method is simpler and works to resolve the issue with bounding box clipping in some display tablets. All circle candidates are logged for debugging purposes.</p> <p>In Android 12, the crop test is run for <code translate="no" dir="ltr">FULL</code> and <code translate="no" dir="ltr">LEVEL3</code> devices. Android 11 or lower versions skip the crop test assertions for <code translate="no" dir="ltr">FULL</code> devices.</p> <p>The following table lists the assertions for <code translate="no" dir="ltr">test_aspect_ratio_and_crop.py</code> that correspond to a given device level and first API level.</p> <table> <tr> <th>Device level</th> <th>First API level</th> <th>Assertions</th> </tr> <tr> <td>LIMITED</td> <td>ALL</td> <td>Aspect ratio<br> FoV for 4:3, 16:9, 2:1 formats</td> </tr> <tr> <td>FULL</td> <td>&lt; 31</td> <td>Aspect ratio<br> FoV for 4:3, 16:9, 2:1 formats</td> </tr> <tr> <td>FULL</td> <td>≥ 31</td> <td>Crop<br> Aspect ratio<br> FoV for 4:3, 16:9, 2:1 formats</td> </tr> <tr> <td>LEVEL3</td> <td>ALL</td> <td>Crop<br> Aspect ratio<br> FoV for 4:3, 16:9, 2:1 formats</td> </tr> </table> <h3 id="test_multi_camera_alignment">scene4/test_multi_camera_alignment.py</h3> <p>The method <code translate="no" dir="ltr">undo_zoom()</code> for YUV captures in <code translate="no" dir="ltr">scene4/test_multi_camera_alignment.py</code> was refactored to account more accurately for cropping on sensors that don't match the capture's aspect ratio.</p> <h4 id="android_11_python_2_code">Android 11 Python 2 code</h4> 
+<pre>zoom_ratio = min(1.0 * yuv_w / cr_w, 1.0 * yuv_h / cr_h)
+circle[i]['x'] = cr['left'] + circle[i]['x'] / zoom_ratio
+circle[i]['y'] = cr['top'] + circle[i]['y'] / zoom_ratio
+circle[i]['r'] = circle[i]['r'] / zoom_ratio
+</pre> <h4 id="android_12_python_3_code">Android 12 Python 3 code</h4> 
+<pre>yuv_aspect = yuv_w / yuv_h
+relative_aspect = yuv_aspect / (cr_w/cr_h)
+if relative_aspect &gt; 1:
+  zoom_ratio = yuv_w / cr_w
+  yuv_x = 0
+  yuv_y = (cr_h - cr_w / yuv_aspect) / 2
+else:
+  zoom_ratio = yuv_h / cr_h
+  yuv_x = (cr_w - cr_h * yuv_aspect) / 2
+  yuv_y = 0
+circle['x'] = cr['left'] + yuv_x + circle['x'] / zoom_ratio
+circle['y'] = cr['top'] + yuv_y + circle['y'] / zoom_ratio
+circle['r'] = circle['r'] / zoom_ratio
+</pre> <h3 id="test_sensor_fusion.py">sensor_fusion/test_sensor_fusion.py</h3> <p>In Android 12, a method for detecting features in images is added for the sensor fusion test.</p> <p>In Android 11 and lower, the entire image is used to find the best 240 features, which are then masked to the center 20% to avoid rolling shutter effects with the minimum feature requirement being 30 features.</p> <p>If the features found by this method are insufficient, Android 12 masks the feature detection area to the center 20% first, and limits the maximum features to two times the minimum feature requirement.</p> <p>The following image shows the difference between Android 11 and Android 12 feature detection. Raising the minimum feature requirement threshold results in the detection of poor quality features and negatively affects measurements.</p> <p><img src="https://source.android.com/static/docs/compatibility/cts/images/feature-detection.png" alt="difference in feature detection between Android 11 and Android 12 sensor_fusion feature detection" class="android-image-dark-theme-background"> </p> <p><strong>Figure 2.</strong> Difference in feature detection between Android 11 and Android 12.</p> <h2 id="new-tests">New tests</h2> <h3 id="test_solid_color_test_pattern">scene0/test_solid_color_test_pattern.py</h3> <p>A new test, <code translate="no" dir="ltr">test_solid_color_test_pattern</code>, is enabled for Android 12. This test is enabled for all cameras and is described in the following table.</p> <table> <tr> <th>Scene</th> <th>Test name</th> <th>First API level</th> <th>Description</th> </tr> <tr> <td>0</td> <td><code translate="no" dir="ltr">test_solid_color_test_pattern</code></td> <td>31</td> <td>Confirms solid color image output and image color programmability.</td> </tr> </table> <p>Solid color test patterns must be enabled to support the camera privacy mode. The <code translate="no" dir="ltr">test_solid_color_test_pattern</code> test confirms solid color YUV image output with the color defined by the pattern selected, and image color changes according to specification.</p> <h4 id="parameters">Parameters</h4> <ul> <li>
+<code translate="no" dir="ltr">cameraPrivacyModeSupport</code>: Determines whether the camera supports privacy mode.</li> <li>
+<code translate="no" dir="ltr">android.sensor.testPatternMode</code>: Sets the test pattern mode. This test uses <code translate="no" dir="ltr">SOLID_COLOR</code>.</li> <li>
+<code translate="no" dir="ltr">android.sensor.testPatternData</code>: Sets the R, Gr, Gb, G test pattern values for the test pattern mode.</li> </ul> <p>For a description of the solid color test pattern, see <a href="https://developer.android.com/reference/android/hardware/camera2/CameraMetadata#SENSOR_TEST_PATTERN_MODE_SOLID_COLOR"><code translate="no" dir="ltr">SENSOR_TEST_PATTERN_MODE_SOLID_COLOR</code></a>.</p> <h4 id="method">Method</h4> <p>YUV frames are captured for the parameters set and the image content is validated. The test pattern is output directly from the image sensor, so no particular scene is required. If <code translate="no" dir="ltr">PER_FRAME_CONTROL</code> is supported, a single YUV frame is captured for each setting tested. If <code translate="no" dir="ltr">PER_FRAME_CONTROL</code> isn't supported, four frames are captured with only the last frame analyzed to maximize test coverage in <code translate="no" dir="ltr">LIMITED</code> cameras.</p> <p>YUV captures are set to fully saturated <code translate="no" dir="ltr">BLACK</code>, <code translate="no" dir="ltr">WHITE</code>, <code translate="no" dir="ltr">RED</code>, <code translate="no" dir="ltr">GREEN</code>, and <code translate="no" dir="ltr">BLUE</code> test patterns. As the test pattern definition is per the sensor Bayer pattern, the color channels must be set for each color as shown in the following table.</p> <table> <tr> <th>Color</th> <th>testPatternData (RGGB)</th> </tr> <tr> <td>BLACK</td> <td>
+<code translate="no" dir="ltr">
+(0, 0, 0, 0)
+</code> </td> </tr> <tr> <td>WHITE</td> <td>
+<code translate="no" dir="ltr">
+(1, 1, 1, 1)
+</code> </td> </tr> <tr> <td>RED</td> <td>
+<code translate="no" dir="ltr">
+(1, 0, 0, 0)
+</code> </td> </tr> <tr> <td>GREEN</td> <td>
+<code translate="no" dir="ltr">
+(0, 1, 1, 0)
+</code> </td> </tr> <tr> <td>BLUE</td> <td>
+<code translate="no" dir="ltr">
+(0, 0, 0, 1)
+</code> </td> </tr> </table> <h4 id="assertion-table">Assertion table</h4> <p>The following table describes the test assertions for <code translate="no" dir="ltr">test_solid_color_test_pattern.py</code>.</p> <table> <tr> <th>Camera<br>First API level</th> <th>Camera type</th> <th>Colors asserted</th> </tr> <tr> <td>31</td> <td>Bayer</td> <td>BLACK, WHITE, RED, GREEN, BLUE</td> </tr> <tr> <td>31</td> <td>MONO</td> <td>BLACK, WHITE</td> </tr> <tr> <td>&lt; 31</td> <td>Bayer/MONO</td> <td>BLACK</td> </tr> </table> <h3 id="performance-class-tests">Performance class tests</h3> <h4 id="test_camera_launch_perf_class">scene2_c/test_camera_launch_perf_class.py</h4> <p>Verifies camera startup is less than 500 ms for both front and rear primary cameras with the scene2_c face scene.</p> <h4 id="test_jpeg_capture_perf_class">scene2_c/test_jpeg_capture_perf_class.py</h4> <p>Verifies 1080p JPEG capture latency is less than 1 second for both front and rear primary cameras with the scene2_c face scene.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/compatibility/cts/its-release-notes-12" class="_attribution-link">https://source.android.com/docs/compatibility/cts/its-release-notes-12</a>
+  </p>
+</div>

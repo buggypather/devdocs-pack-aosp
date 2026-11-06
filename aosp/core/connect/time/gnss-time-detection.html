@@ -1,0 +1,38 @@
+<h1>GNSS time detection</h1>  <p>In Android 12 and higher, Android can optionally use a Global Navigation Satellite System (GNSS) to suggest Unix epoch times to the <a href="../time#time_detector-service"><code translate="no" dir="ltr">time_detector</code></a> service. This isn't enabled by default in AOSP.</p> <p>When GNSS time detection is enabled, <code translate="no" dir="ltr">gnss_time_update_service</code> passively listens to location updates from GNSS sources and submits GNSS suggestions to the <code translate="no" dir="ltr">time_detector</code> service. The <code translate="no" dir="ltr">time_detector</code> service then determines whether to update the system clock to match the suggestion.</p> <h2 id="power-usage">Impact on power usage</h2> <p>AOSP <code translate="no" dir="ltr">gnss_time_update_service</code> passively listens to location updates. This means that the service never actively turns on the GPS or consumes additional power. This also means that unless another app or service in the system is actively requesting location updates, <code translate="no" dir="ltr">gnss_time_update_service</code> won't get a location update and suggest a GNSS time.</p> <h2 id="implement">Implementation</h2> <p>To enable GNSS time detection, device manufacturers must explicitly enable <code translate="no" dir="ltr">gnss_time_update_service</code> in the system server.</p> <p>Both the <code translate="no" dir="ltr">config_enableGnssTimeUpdateService</code> and <code translate="no" dir="ltr">config_autoTimeSourcesPriority</code> values in the <code translate="no" dir="ltr">core/res/res/values/config.xml</code> file must be updated to enable this feature. Set the value for <code translate="no" dir="ltr">config_enableGnssTimeUpdateService</code> to <code translate="no" dir="ltr">true</code> and add <code translate="no" dir="ltr">gnss</code> to the item list for <code translate="no" dir="ltr">config_autoTimeSourcesPriority</code>. The position of <code translate="no" dir="ltr">gnss</code> in the priority list determines the priority given to GNSS suggestions with respect to those from other sources.</p> <p>The following is an example <code translate="no" dir="ltr">core/res/res/values/config.xml</code> file where GNSS time detection is enabled and <code translate="no" dir="ltr">gnss</code> is third in the priority list after <code translate="no" dir="ltr">network</code> and <code translate="no" dir="ltr">telephony</code>:</p> 
+<pre>&lt;!-- Specifies priority of automatic time sources. Suggestions from higher entries in the list
+         take precedence over lower ones.
+         See com.android.server.timedetector.TimeDetectorStrategy for available sources. --&gt;
+    &lt;string-array name="config_autoTimeSourcesPriority"&gt;
+        &lt;item&gt;network&lt;/item&gt;
+        &lt;item&gt;telephony&lt;/item&gt;
+        &lt;item&gt;gnss&lt;/item&gt;
+    &lt;/string-array&gt;
+
+    &lt;!-- Enables the GnssTimeUpdate service. This is the global switch for enabling Gnss time based
+         suggestions to TimeDetector service. See also config_autoTimeSourcesPriority. --&gt;
+    &lt;bool name="config_enableGnssTimeUpdateService"&gt;true&lt;/bool&gt;
+</pre> <h2 id="test">Debug and test</h2> <aside class="note"><strong>Note:</strong><span> The interface for these commands might change between releases. Use the <code translate="no" dir="ltr">help</code> flag to see a list of command options.</span></aside> <p>To test GNSS time detection, use <code translate="no" dir="ltr">adb shell cmd location</code> commands. Use these commands to add test location providers where you can specify a location and the associated GNSS time. <code translate="no" dir="ltr">gnss_time_update_service</code> listens to these location updates, and makes suggestions periodically.</p> <p>The following shows examples of <code translate="no" dir="ltr">adb shell cmd location</code> commands:</p> <ul> <li>
+<p>Enable the master location switch for the foreground user (usually user <code translate="no" dir="ltr">10</code> on automotive). If you just flashed, this can be done through the setup wizard.</p> 
+<pre>adb shell cmd location set-location-enabled true --user 10</pre>
+</li> <li>
+<p>Add GPS test provider (usually fails the first time and throws a security exception with <code translate="no" dir="ltr">android from &lt;SOME_UID&gt; not allowed to perform
+MOCK_LOCATION</code>)</p> 
+<pre>adb shell cmd location providers add-test-provider gps</pre>
+</li> <li>
+<p>Enable mock location permissions for previous UID</p> 
+<pre>adb shell appops set UID_PRINTED_IN_PREVIOUS_ERROR android:mock_location allow</pre>
+</li> <li>
+<p>Add GPS test provider (should work with no errors)</p> 
+<pre>adb shell cmd location providers set-test-provider-enabled gps true</pre>
+</li> <li>
+<p>Enable GPS test provider</p> 
+<pre>adb shell cmd location providers set-test-provider-enabled gps true</pre>
+</li> <li>
+<p>Set location with time (the time can't be lower than the limit set by the lower bound)</p> 
+<pre>adb shell cmd location providers set-test-provider-location gps --location LATITUDE,LONGITUDE --time TIME</pre>
+</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/connect/time/gnss-time-detection" class="_attribution-link">https://source.android.com/docs/core/connect/time/gnss-time-detection</a>
+  </p>
+</div>

@@ -1,0 +1,180 @@
+<h1>Car audio configuration</h1>  <p>In Android 10, <code translate="no" dir="ltr">car_audio_configuration.xml</code> replaced <code translate="no" dir="ltr">car_volumes_groups.xml</code> and <code translate="no" dir="ltr">IAudioControl.getBusForContext</code>. The audio policy files, typically contained in the vendor partition, represent the audio hardware configuration of the board. All devices referenced in <code translate="no" dir="ltr">car_audio_configuration.xml</code> must be defined in <code translate="no" dir="ltr">audio_policy_configuration.xml</code>.</p> <p>Figure 1 illustrates an overview of the car audio service architecture in which the car audio service reads the car audio configuration file to set up audio for the device.</p> <p><img src="https://source.android.com/static/docs/automotive/images/car-audio-config-01.png" alt="Car audio architecture overview" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> Car audio architecture overview.</p> <p>Place the car audio configuration file in <code translate="no" dir="ltr">vendor/etc/</code> or <code translate="no" dir="ltr">system/etc/</code> on the device, with the <code translate="no" dir="ltr">vendor/etc/</code> being the first place searched for the file by the car audio service. The car audio services reads <code translate="no" dir="ltr">car_audio_configuration.xml</code> to determine the audio configuration.</p> <p>Car audio zones:</p> <ul> <li>Each audio zone contains a unique audio zone ID.</li> <li>Each audio zone can be mapped to an occupant zone.</li> <li>
+<p>The audio actions in each zone are independent of each other:</p> <ul> <li>Audio focus</li> <li>Audio routing</li> <li>Audio ducking</li> </ul>
+</li> <li>
+<p>Car volume groups:</p> <ul> <li><p><strong>All audio devices that contain a volume group are controlled together with the same gain changes.</strong> The audio gain configuration for all devices in a group should be the same.</p></li> <li><p><strong>Audio context to audio devices mapping.</strong> Use this to construct an audio mix that maps audio usages to an output device.</p></li> <li><p><strong>All audio contexts should be represented within a zone.</strong> This allows for audio routing to be accurately set up for all audio attribute usages.</p></li> </ul>
+</li> </ul> <h2 id="static">Audio contexts</h2> <p>To simplify the configuration of AAOS audio, similar usages have been grouped into <code translate="no" dir="ltr">CarAudioContexts</code>. These audio contexts are used throughout <code translate="no" dir="ltr">CarAudioService</code> to define routing, volume groups, audio focus, and ducking management. The static audio contexts in AAOS are listed in this table.</p> <p>This table describes the mapping between audio contexts and usages. Highlighted rows are provided for a new system usage.</p> <aside class="note"><strong>Note:</strong><span> System contexts are available <strong>only</strong> in Android 11 and higher.</span></aside> <table class="orange"> <tr> <th width="40%">CarAudioContext</th> <th>Associated AttributeUsages</th> </tr> <tr> <td><code translate="no" dir="ltr">MUSIC</code></td> <td>
+<code translate="no" dir="ltr">UNKNOWN</code><br><code translate="no" dir="ltr">GAME</code><br><code translate="no" dir="ltr">MEDIA</code>
+</td> </tr> <tr> <td><code translate="no" dir="ltr">NAVIGATION</code></td> <td><code translate="no" dir="ltr">ASSISTANCE_NAVIGATION_GUIDANCE</code></td> </tr> <tr> <td><code translate="no" dir="ltr">VOICE_COMMAND</code></td> <td><code translate="no" dir="ltr">ASSISTANT<br>ASSISTANCE_ACCESSIBILITY</code></td> </tr> <tr> <td><code translate="no" dir="ltr">CALL_RING</code></td> <td><code translate="no" dir="ltr">NOTIFICATION_RINGTONE</code></td> </tr> <tr> <td><code translate="no" dir="ltr">CALL</code></td> <td>
+<code translate="no" dir="ltr">VOICE_COMMUNICATION</code><br><code translate="no" dir="ltr">VOICE_COMMUNICATION_SIGNALING</code>
+</td> </tr> <tr> <td><code translate="no" dir="ltr">ALARM</code></td> <td><code translate="no" dir="ltr">ALARM</code></td> </tr> <tr> <td><code translate="no" dir="ltr">NOTIFICATION</code></td> <td>
+<code translate="no" dir="ltr">NOTIFICATION</code><br><code translate="no" dir="ltr">NOTIFICATION_*</code>
+</td> </tr> <tr> <td><code translate="no" dir="ltr">SYSTEM_SOUND</code></td> <td><code translate="no" dir="ltr">ASSISTANCE_SONIFICATION</code></td> </tr> <tr class="alt"> <td><code translate="no" dir="ltr">EMERGENCY</code></td> <td><code translate="no" dir="ltr">EMERGENCY</code></td> </tr> <tr class="alt"> <td><code translate="no" dir="ltr">SAFETY</code></td> <td><code translate="no" dir="ltr">SAFETY</code></td> </tr> <tr class="alt"> <td><code translate="no" dir="ltr">VEHICLE_STATUS</code></td> <td><code translate="no" dir="ltr">VEHICLE_STATUS</code></td> </tr> <tr class="alt"> <td><code translate="no" dir="ltr">ANNOUNCEMENT</code></td> <td><code translate="no" dir="ltr">ANNOUNCEMENT</code></td> </tr> </table> <h2 id="aaos-routing">Enable AAOS routing</h2> <p>To use AAOS-based routing, you must set the <code translate="no" dir="ltr">audioUseDynamicRouting</code> flag to <code translate="no" dir="ltr">true</code>:</p> 
+<pre>&lt;resources&gt;
+    &lt;bool name="audioUseDynamicRouting"&gt;true&lt;/bool&gt;
+&lt;/resources&gt;
+</pre> <p>When <code translate="no" dir="ltr">false</code>, routing and much of <code translate="no" dir="ltr">CarAudioService</code>, is disabled and AAOS falls back to the default behavior of the <code translate="no" dir="ltr">AudioService</code>.</p> <h3 id="cape-routing">Configurable audio policy engine</h3> <p>To further extend the car audio management in Android 14, AAOS introduced the use of audio management through the <a href="configurable-audio-policy-engine">Configurable audio policy engine (CAP)</a>. Doing so provides more flexibility to control audio routing and volume management and provides for versatile definition of:</p> <ul> <li><a href="configurable-audio-policy-engine#cape-aaos-product-strategies">Audio product strategies</a></li> <li><a href="configurable-audio-policy-engine#cape-aaos-volume-groups">Volume groups</a></li> <li><a href="configurable-audio-policy-engine#cape-aaos-configurations">Configurations</a></li> </ul> <p>You can enable the Configurable audio policy (CAP) engine through the use of <code translate="no" dir="ltr">useCoreAudioVolume</code> and <code translate="no" dir="ltr">useCoreAudioRouting</code>, see <a href="configurable-audio-policy-engine#cape-aaos-support">Configurable audio policy engine</a> for details.</p> <h2 id="primary_zone">Primary zone</h2> <p>By default, all audio is routed to the primary zone. Only one primary zone exists, which is indicated in the configuration by the attribute <code translate="no" dir="ltr">isPrimary="true"</code>. The primary zone is automatically assigned the <code translate="no" dir="ltr">Audiomanager.PRIMARY_AUDIO_ZONE</code>.</p> <h2 id="sample">Sample configuration (version 2)</h2> <p>For example, a vehicle may have two zones, a primary zone and a rear seat entertainment system. In this scenario, you can design a possible <code translate="no" dir="ltr">car_audio_configuration.xml</code> version 2 as follows:</p> 
+<pre>&lt;audioZoneConfiguration version="2.0"&gt;
+       &lt;zone name="primary zone" isPrimary="true"&gt;
+           &lt;volumeGroups&gt;
+               &lt;group&gt;
+                   &lt;device address="bus0_media_out"&gt;
+                       &lt;context context="music"/&gt;
+                       &lt;context context="announcement"/&gt;
+                   &lt;/device&gt;
+                   &lt;device address="bus3_call_ring_out"&gt;
+                       &lt;context context="call_ring"/&gt;
+                   &lt;/device&gt;
+                   &lt;device address="bus6_notification_out"&gt;
+                       &lt;context context="notification"/&gt;
+                   &lt;/device&gt;
+               &lt;/group&gt;
+               &lt;group&gt;
+                   &lt;device address="bus1_navigation_out"&gt;
+                       &lt;context context="navigation"/&gt;
+                   &lt;/device&gt;
+                   &lt;device address="bus2_voice_command_out"&gt;
+                       &lt;context context="voice_command"/&gt;
+                   &lt;/device&gt;
+               &lt;/group&gt;
+               &lt;group&gt;
+                   &lt;device address="bus4_call_out"&gt;
+                       &lt;context context="call"/&gt;
+                   &lt;/device&gt;
+               &lt;/group&gt;
+               &lt;group&gt;
+                   &lt;device address="bus5_alarm_out"&gt;
+                       &lt;context context="alarm"/&gt;
+                   &lt;/device&gt;
+               &lt;/group&gt;
+               &lt;group&gt;
+                   &lt;device address="bus7_system_sound_out"&gt;
+                       &lt;context context="system_sound"/&gt;
+                       &lt;context context="emergency"/&gt;
+                       &lt;context context="safety"/&gt;
+                       &lt;context context="vehicle_status"/&gt;
+                   &lt;/device&gt;
+               &lt;/group&gt;
+           &lt;/volumeGroups&gt;
+       &lt;/zone&gt;
+        &lt;zone name="rear seat zone" audioZoneId="1"&gt;
+           &lt;volumeGroups&gt;
+               &lt;group&gt;
+                   &lt;device address="bus100_rear_seat"&gt;
+                       &lt;context context="music"/&gt;
+                       &lt;context context="navigation"/&gt;
+                       &lt;context context="voice_command"/&gt;
+                       &lt;context context="call_ring"/&gt;
+                       &lt;context context="call"/&gt;
+                       &lt;context context="alarm"/&gt;
+                       &lt;context context="notification"/&gt;
+                       &lt;context context="system_sound"/&gt;
+                       &lt;context context="emergency"/&gt;
+                       &lt;context context="safety"/&gt;
+                       &lt;context context="vehicle_status"/&gt;
+                       &lt;context context="announcement"/&gt;
+                   &lt;/device&gt;
+               &lt;/group&gt;
+           &lt;/volumeGroups&gt;
+    &lt;/zones&gt;
+&lt;/audioZoneConfiguration&gt;
+</pre> <p>In this example, the primary zone separates out some audio contexts to different devices. This enables the HAL to apply different post-processing effects and to mix the output on each device by using the vehicle's hardware. The devices have been arranged into several volume groups: media, navigation, calls, alarms, and system sounds. If the system is configured to <code translate="no" dir="ltr">useFixedVolume</code>, then the volume levels for each group are passed to the HAL to apply to the output of these devices.</p> <p>For the primary zone, we recommend that system sounds be separate from other sounds. This allows for vehicle sounds to be treated with a higher priority. The car audio service already makes these distinctions for vehicle sounds in terms of focus and ducking management. For example, an emergency sound focus request has higher priority than another focus request.</p> <p>In the secondary zone example, all audio contexts are routed to a single device and one volume group.</p> <h3 id="cape-volume-name">Volume group definition for the CAP engine</h3> <p>To use volume management through the CAP engine as mentioned in <a href="#cape-routing">Configurable audio policy engine</a> the volume group definition must also contain a name:</p> 
+<pre>
+
+&lt;group name="media&amp;quot&gt;
+  &lt;device address="bus0_media_out"&gt;
+    &lt;context context="music"/&gt;
+    &lt;context context="announcement"/&gt;
+  &lt;/device&gt;
+  &lt;device address="bus3_call_ring_out"&gt;
+     &lt;context context="call_ring"/&gt;
+  &lt;/device&gt;
+  &lt;device address="bus6_notification_out"&gt;
+    &lt;context context="notification"/&gt;
+  &lt;/device&gt;
+&lt;/group&gt;
+&lt;group name="navigation&amp;quot&gt;
+  &lt;device address="bus1_navigation_out"&gt;
+    &lt;context context="navigation"/&gt;
+  &lt;/device&gt;
+  &lt;device address="bus2_voice_command_out"&gt;
+    &lt;context context="voice_command"/&gt;
+  &lt;/device&gt;
+&lt;/group&gt;
+
+</pre> <p>This <a href="configurable-audio-policy-engine#cape-aaos-volume-groups">volume group</a> name must match the volume name defined in CAP engine. In addition, the <code translate="no" dir="ltr">useFixedVolume</code> must also be set to <code translate="no" dir="ltr">false</code>. See <a href="config-flags">Audio configuration AAOS flags</a> for details.</p> <h2 id="occupant-zone">Occupant zone audio configuration</h2> <p>In Android 11, <code translate="no" dir="ltr">car_audio_configuration.xml</code> introduced two new fields, <code translate="no" dir="ltr">audioZoneId</code> and <code translate="no" dir="ltr">occupantZoneId</code>. You can use <code translate="no" dir="ltr">audioZoneId</code> to control audio zone management. You can use <code translate="no" dir="ltr">occupantZoneId</code> to configure routing based on user ID.</p> <aside class="note"><strong>Note:</strong><span> These new fields are required in <code translate="no" dir="ltr">car_audio_configuration.xml</code> version 2.</span></aside> <p>Revisiting the audio configuration, but utilizing the new field for occupant zone ID and audio zone ID mapping, the new configuration without the volume group definitions can be set up as follows:</p> 
+<pre>&lt;audioZoneConfiguration version="2.0"&gt;
+       &lt;zone name="primary zone" isPrimary="true" occupantZoneId="0"&gt;
+         ...
+       &lt;/zone&gt;
+       &lt;zone name="rear seat zone" audioZoneId="1" occupantZoneId="1"&gt;
+         ...
+       &lt;/zone&gt;
+    &lt;/zones&gt;
+&lt;/audioZoneConfiguration&gt;
+</pre> <p>The configuration defines a mapping for primary zone to occupant zone 0 and <code translate="no" dir="ltr">audioZoneId</code> 1 to <code translate="no" dir="ltr">occupantZoneId</code> 1. Any mapping between occupant zone and audio zone can be configured. However, the mapping must be one-to-one. The rules that defined the two new fields are:</p> <ul> <li><p><code translate="no" dir="ltr">audioZoneId</code> for the primary zone is always <code translate="no" dir="ltr">PRIMARY_AUDIO_ZONE</code> ID. If <code translate="no" dir="ltr">isPrimary="true"</code> is defined, then <code translate="no" dir="ltr">audioZoneId</code>is not needed.</p></li> <li><p><code translate="no" dir="ltr">audioZoneId</code> and <code translate="no" dir="ltr">occupantZoneId</code> numbers can't be repeated.</p></li> <li><p><code translate="no" dir="ltr">audioZoneId</code> and <code translate="no" dir="ltr">occupantZoneId</code> can only have a one-to-one mapping.</p></li> </ul> <h2 id="14-config">Android 14 car audio configuration</h2> <p>In Android 14, AAOS introduced the OEM plugin service, which lets you manage audio behavior overseen by the car audio service. Along with the new plugin services, the following changes are added to the car audio configuration file:</p> <ul> <li>OEM-defined car audio context</li> <li>Non-primary zone dynamic configurations</li> </ul> <h3 id="oem-context">OEM-defined car audio context</h3> <p>To enable a flexible audio configuration, in Android 14, car audio service allows for the audio usages to be grouped differently than the static <a href="#static">Audio contexts</a> defined. This OEM-defined context can be defined in the <code translate="no" dir="ltr">car_audio_configuration.xml</code> version 3 file.</p> <aside class="note"><strong>Note:</strong><span> OEM contexts are optional and can be skipped.</span></aside> <p>Instead the predefined static audio contexts are used. The general format of the OEM-defined car audio context is shown later.</p> <p>The OEM contexts each require a <code translate="no" dir="ltr">name</code> along with a list of audio attributes usage that are assigned to the context. In the example earlier, two contexts are defined:</p> 
+<pre>&lt;carAudioConfiguration version="3"&gt;
+    &lt;oemContexts&gt;
+        &lt;oemContext name="media"&gt;
+            &lt;audioAttributes&gt;
+                &lt;usage value="AUDIO_USAGE_MEDIA" /&gt;
+    &lt;usage value="AUDIO_USAGE_UNKNOWN"/&gt;
+            &lt;/audioAttributes&gt;
+        &lt;/oemContext&gt;
+        &lt;oemContext name="game"&gt;
+            &lt;audioAttributes&gt;
+                &lt;usage value="AUDIO_USAGE_GAME" /&gt;
+            &lt;/audioAttributes&gt;
+        &lt;/oemContext&gt;
+...
+</pre> <ul> <li>
+<code translate="no" dir="ltr">media</code> context contains <code translate="no" dir="ltr">AUDIO_USAGE_MEDIA</code> and <code translate="no" dir="ltr">AUDIO_USAGE_UNKNOWN</code>
+</li> <li>
+<code translate="no" dir="ltr">game</code> context contains <strong>only</strong> <code translate="no" dir="ltr">AUDIO_USAGE_GAME</code>
+</li> </ul> <p>The context must be defined at the top of the <code translate="no" dir="ltr">car_audio_configuration.xml</code> file. When the OEM contexts are defined, the rest of car audio configuration can proceed as before. The following rules apply to the car audio context:</p> <ul> <li><p>OEM context definitions are optional. The static <a href="#static">Audio context</a> is used instead.</p></li> <li><p>Don't repeat contexts names.</p></li> <li><p>Don't assign audio attribute usage to multiple contexts.</p></li> <li><p>All audio usages defined in <code translate="no" dir="ltr">AudioAttributes</code> should be used to construct the context.</p></li> </ul> <p>Strictly speaking, the <code translate="no" dir="ltr">android.audio.policy.configuration.V7_0.AudioUsage</code> string representation of the audio usage must be used for the OEM audio context definition. In the future, newer audio attribute usages will be assigned to the most appropriate context to reduce error while migrating from one Android version to another.</p> <p>While the OEM-defined context was introduced to further expand the OEM plugin audio service, it can still be used without the OEM plugin service. The audio behavior resembles that of the static audio service:</p> <ul> <li><p>Audio focus interactions. Audio attribute is used to determine the best matching behavior as set up by the audio focus interaction matrix. For details, see <a href="audio-focus#interaction">Audio focus</a>.</p></li> <li>
+<p>Audio volume control audio attribute is used to determine the best matching:</p> <ul> <li>Volume group based on the OEM-defined context.</li> <li>Priority from the static volume list configured.</li> </ul>
+</li> <li>
+<p>Audio ducking behavior:</p> <ul> <li><p>Audio attribute usage for the current audio focus is used to map to the output audio device information as defined in the car audio configuration file.</p></li> <li><p>Audio attribute is used to map the corresponding static context to duck, based on the static audio ducking matrix.</p></li> </ul>
+</li> </ul> <h4 id="cape-product-strategies">CAP engine product strategies</h4> <p>When a device must use the CAP engine for <a href="#cape-routing">volume or routing management</a>, your OEM-defined context must match the CAP engine product strategy definition. If not, you can use OEM-defined context without the CAP engine.</p> <p>To learn more, see the CAP engine product <a href="configurable-audio-policy-engine#cape-aaos-product-strategies">product strategy</a> in AAOS.</p> <h3 id="dynamic-config">Dynamic audio zones configurations</h3> <p>In Android 14, to accommodate a dynamic audio zones configuration, the car audio configuration schema for defining audio zones is also updated to version 3. The new schema requires a configuration be set up for each zone.</p> 
+<pre>&lt;carAudioConfiguration version="3"&gt;
+    &lt;!-- optional OEM context --&gt;
+    &lt;oemContexts&gt;
+      &lt;oemContext name="media"&gt;
+        &lt;audioAttributes&gt;
+          &lt;usage value="AUDIO_USAGE_MEDIA" /&gt;
+          &lt;usage value="AUDIO_USAGE_UNKNOWN"/&gt;
+        &lt;/audioAttributes&gt;
+      &lt;/oemContext&gt;
+      &lt;oemContext name="game"&gt;
+        &lt;audioAttributes&gt;
+          &lt;usage value="AUDIO_USAGE_GAME" /&gt;
+        &lt;/audioAttributes&gt;
+      &lt;/oemContext&gt;
+...
+    &lt;/oemContexts&gt;
+  &lt;zones&gt;
+    &lt;zone name="primary zone" isPrimary="true" occupantZoneId="0"&gt;
+      &lt;zoneConfigs&gt;
+        &lt;zoneConfig name="primary zone config 0" isDefault="true"&gt;
+          &lt;volumeGroups&gt;
+            &lt;group&gt;
+              &lt;device address="bus0_media_out"&gt;
+                &lt;context context="media"/&gt;
+            &lt;context context="game"/&gt;
+                &lt;context context="announcement"/&gt;
+              &lt;/device&gt;
+              &lt;device address="bus6_notification_out"&gt;
+                &lt;context context="notification"/&gt;
+              &lt;/device&gt;
+            &lt;/group&gt;
+  ...
+      &lt;/zoneConfigs&gt;
+    &lt;/zone
+  &lt;/zones&gt;
+</pre> <p>To learn more, see the version 3 file defined in <code translate="no" dir="ltr">device/generic/car/emulator/audio/car_audio_configuration.xml</code>. Starting in Android 14, the primary zone can have only one (1) configuration. Non-primary zones can have multiple configurations. The following rules apply to car audio configurations:</p> <ul> <li><p>The primary audio zone can have <strong>only</strong> one configuration.</p></li> <li><p>Non-primary audio zones can have multiple configurations.</p></li> <li><p>Name must be unique for each audio zone and audio zone configuration.</p></li> <li>
+<p>Within an audio zone, audio configurations may differ:</p> <ul> <li>Volume groups set-up need not be the same.</li> <li>Audio context assignment need not be the same.</li> </ul>
+</li> <li><p>Audio output device names should be unique across zones or configurations. A device name should appear <strong>only</strong> once in an audio configuration or zones.</p></li> <li><p>Audio devices belonging to the same volume group should have the same audio gain configurations.</p></li> <li><p>All audio contexts (OEM or static) must be assigned for each audio configuration.</p></li> </ul> <aside class="note"><strong>Note:</strong><span> The car audio configuration example uses the OEM-defined context defined in the same file.</span></aside> <h3 id="forward">Forward compatibility</h3> <p>Though the new versions of the <code translate="no" dir="ltr">car_audio_configuration.xml</code> introduce new features in each update, you can still use older files in newer versions of AAOS. OEMs updating to new versions of Android can re-use the <code translate="no" dir="ltr">car_audio_configuration.xml</code> file.</p> <p>To use a new feature that requires new information contained in the <code translate="no" dir="ltr">car_audio_configuration.xml</code>, the version must be updated. Attempting to use an older version of a file with information not supported in that file version throws an <code translate="no" dir="ltr">IllegalStateException</code> when the car service is started. The exception message contains the relevant information about which information is used and which minimum version is required.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/audio/audio-policy-configuration" class="_attribution-link">https://source.android.com/docs/automotive/audio/audio-policy-configuration</a>
+  </p>
+</div>

@@ -1,0 +1,17 @@
+<h1>HIDL VHAL interface</h1>  <p> The HIDL VHAL interface is defined at <a href="https://android.googlesource.com/platform/hardware/interfaces/+/refs/heads/android17-release/automotive/vehicle/2.0/IVehicle.hal"><code translate="no" dir="ltr">IVehicle.hal</code></a> and provides these methods. </p>
+<table class="cyan"> <th width="15%">Method</th> <th>Description</th> <tr> <td colspan="2">
+<code translate="no" dir="ltr">getAllPropConfigs()</code> <strong>generates</strong> <code translate="no" dir="ltr">(vec&lt;VehiclePropConfig&gt;propConfigs);</code> <div style="text-indent:15%"> <p>Lists the configuration of all properties supported by the VHAL. CarService uses supported properties only.</p> </div> </td>
+</tr> <tr class="alt"> <td colspan="2">
+<code translate="no" dir="ltr">ongetPropConfigs(vec<int32_t> props)</int32_t></code> <strong>generates</strong> <code translate="no" dir="ltr">(StatusCode status,vec&lt;VehiclePropConfig&gt; propConfigs);</code> <div style="text-indent:15%"> <p>Returns the configuration of selected properties.</p> </div> </td> </tr> <tr> <td colspan="2">
+<code translate="no" dir="ltr">set(VehiclePropValue propValue)</code> <strong>generates</strong> <code translate="no" dir="ltr">(StatusCodestatus);</code> <div style="text-indent:15%"> <p>Writes a value to a property. The result of the write is defined per property.</p> </div> </td>
+</tr> <tr class="alt"> <td colspan="2">
+<code translate="no" dir="ltr">subscribe(IVehicleCallback callback, vec<subscribeoptions> options)</subscribeoptions></code> <strong>generates</strong> <code translate="no" dir="ltr">(StatusCode status);</code> <div style="text-indent:15%"> <p>Starts monitoring a property value change.</p> </div> </td> </tr> <tr> <td colspan="2">
+<code translate="no" dir="ltr">unsubscribe(IVehicleCallback callback, int32_t propId)</code> <strong>generates</strong> <code translate="no" dir="ltr">(StatusCode status);</code> <div style="text-indent:15%"> <p>Stops monitoring a property value change for a previous subscribed property.</p> </div> </td>
+</tr> </table> <p>The HIDL VHAL uses these callback interfaces:</p> <table class="cyan"> <th width="15%">Callback</th> <th>Description</th> <tr> <td><code translate="no" dir="ltr">oneway</code></td> <td>
+<code translate="no" dir="ltr">onPropertyEvent(vec<vehiclepropvalue>propValues);</vehiclepropvalue></code><br> <p>Notifies vehicle property's value change. Apply only to subscribed properties.</p> </td> </tr> <tr class="alt"> <td><code translate="no" dir="ltr">oneway</code></td> <td>
+<code translate="no" dir="ltr">onPropertySetError(StatusCode errorCode,int32_t propId,int32_tareaId);</code><br> <p>Returns async property set errors that can not be associated with a specific set operation.</p> </td> </tr> </table><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/vhal/hidl-vhal-interface" class="_attribution-link">https://source.android.com/docs/automotive/vhal/hidl-vhal-interface</a>
+  </p>
+</div>

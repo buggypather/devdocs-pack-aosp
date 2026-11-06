@@ -1,0 +1,25 @@
+<h1>Boot image profiles</h1>  <p>A <em>boot image profile</em> is designed to enhance system performance by guiding the optimization of code at compile time. In essence, it's a set of data that informs the system about which parts of the code are most frequently used during the boot process and by core system components. This information allows the system's runtime environment to preemptively compile and optimize this critical code, leading to faster boot times, smoother app launches, and improved overall system responsiveness.</p> <p>For more information on boot image profiles, see <a href="../../core/runtime/boot-image-profiles">Boot image profiles</a>.</p> <h2 id="boot-image-profile-data">Boot image profile data</h2> <p>AAOS boot image profiles include the following:</p> <ul> <li>
+<strong>Profile for the boot classpath</strong> (<code translate="no" dir="ltr">vendor/auto/embedded/products/boot-image-profile.txt</code>). Determines which methods from the boot classpath get optimized.</li> </ul> <h3 id="example-profile-contents">Example profile contents</h3> 
+<pre>Landroid/accounts/AccountManager;
+Landroid/app/ActivityManager;
+Landroid/app/ActivityTaskManager;
+Landroid/app/ActivityThread;
+Landroid/app/AlarmManager;
+Landroid/app/AlertDialog;
+Landroid/car/Car;
+Landroid/car/input/CarInputManager;
+Landroid/car/media/CarAudioManager;
+</pre> <h2 id="generate-boot-image-profiles">Generate boot image profiles</h2> <p>To effectively profile and generate a realistic boot image profile, refer to <a href="../../core/runtime/boot-image-profiles#generating-boot-image-profiles">Generate boot image profiles</a> with your customized CUJs.</p> <p>For a quick generation of a boot image profile specifically for sample AAOS CUJs, that is launching Google Maps and Google Play, use the <code translate="no" dir="ltr">art/tools/boot-image-profile-aaos-sample-generate.py</code> script. This script incorporates the steps outlined in the aforementioned link.</p> <h3 id="get-started">Get started</h3> <p>Run the following to build Android, launch Cuttlefish, and run the script to generate a sample AAOS boot image profile.</p> <h4 id="build-android">Build Android</h4> <p>Choose a target and run the following (for example <code translate="no" dir="ltr">aosp_cf_x86_64_auto-ap4a-userdebug</code>):</p> 
+<pre>source build/envsetup.sh
+lunch &lt;target&gt;
+m</pre> <h4 id="launch-cuttlefish">Launch Cuttlefish</h4> <p>Follow <a href="../../devices/cuttlefish/get-started">Get started</a> to launch the Cuttlefish target.</p> <h4 id="run-the-script">Run the script</h4> 
+<pre>python3 art/tools/boot-image-profile-aaos-sample-generate.py</pre>
+<aside class="note"><strong>Note:</strong><span> The current <code translate="no" dir="ltr">LOGCAT_READY_PATTERN</code> is set to when CarLauncher is displayed, to enable logcat wait functionality. You can customize your <code translate="no" dir="ltr">LOGCAT_READY_PATTERN</code> by modifying the script.</span></aside> <h4 id="specify-adb-device">Optional: Specify ADB device</h4> 
+<pre>export ANDROID_SERIAL=&lt;your_device_serial&gt;</pre>
+<aside class="note"><strong>Note:</strong><span> If multiple devices are connected, set the <code translate="no" dir="ltr">ANDROID_SERIAL</code> environment variable to specify the default ADB device. To revert, run <code translate="no" dir="ltr">unset
+ANDROID_SERIAL</code>.</span></aside><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/system_performance_tools/boot-image-profile" class="_attribution-link">https://source.android.com/docs/automotive/system_performance_tools/boot-image-profile</a>
+  </p>
+</div>

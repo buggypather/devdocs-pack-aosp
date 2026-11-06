@@ -1,0 +1,143 @@
+<h1>CTS development</h1>  <h2 id="initializing-your-repo-client">Initialize your Repo client</h2> <p>Follow the instructions from <a href="../../setup/downloading">Downloading the Source</a> to get and build the Android source code. When issuing the <code translate="no" dir="ltr">repo init</code> command, specify a specific CTS branch using <code translate="no" dir="ltr">-b</code>. This ensures that your CTS changes are included in subsequent CTS releases.</p> <p> The following example code shows how to use <code translate="no" dir="ltr">repo init</code>. </p> <code translate="no" dir="ltr">mkdir android11-tests-dev &amp;&amp; cd android11-tests-dev &amp;&amp; repo init -c -u https://android.googlesource.com/platform/manifest -b android11-tests-dev --use-superproject --partial-clone --partial-clone-exclude=platform/frameworks/base --clone-filter=blob:limit=10M &amp;&amp; repo sync -c -j8</code> <h2 id="building-and-running-cts">Build and run CTS</h2> <p>Execute the following commands to build CTS and start the interactive CTS console:</p> <aside class="note"><strong>Note:</strong> You can use <code translate="no" dir="ltr">aosp_x86_64</code> as an alternative to <code translate="no" dir="ltr">aosp_arm64</code>. </aside> <h3 id="build-command-before-android15">Build CTS (AOSP 14 or earlier)</h3> 
+<pre>
+cd /path/to/android/root
+source build/envsetup.sh
+make cts -j32 TARGET_PRODUCT=aosp_arm64
+cts-tradefed
+</pre> <h3 id="build-command-after-android15">Build CTS (AOSP 15)</h3> 
+<pre>
+cd /path/to/android/root
+source build/envsetup.sh
+make cts -j32 TARGET_PRODUCT=aosp_arm64 TARGET_RELEASE=target-release
+cts-tradefed
+</pre> <p>Please refer to the following table to select the <code translate="no" dir="ltr">target-release</code> value:</p>
+
+<table> <thead> <tr> <th>Branch</th> <th>Target Release</th> </tr> </thead> <tbody> <tr> <td>android15-tests-dev</td> <td>ap3a</td> </tr> </tbody> </table> <h3 id="run-cts-command">Run CTS</h3> <p>In the CTS console, enter:</p> 
+<pre>
+tf&gt; run cts --plan CTS
+</pre> <h2 id="writing-cts-tests">Write CTS tests</h2> <aside class="note">To write a Developer-powered CTS (CTS-D) test, you must first submit a test proposal following the instructions in the <a href="develop-cts-d#submission-process">CTS submission process.</a></aside> <p>CTS tests use JUnit and the Android testing APIs. Review the <a href="https://developer.android.com/studio/test">Test your app</a> tutorial and existing tests under the <code translate="no" dir="ltr">cts/tests</code> directory. CTS tests mostly follow the same conventions used in other Android tests.</p> <p>CTS runs across many production devices, so the tests must follow these rules:</p> <ul> <li>Take into account varying screen sizes, orientations, and keyboard layouts.</li> <li>Use only public API methods. In other words, avoid all classes, methods, and fields with the <code translate="no" dir="ltr">hide</code> annotation.</li> <li>Avoid using view layouts or relying on the dimensions of assets that may not be on some devices.</li> <li>Don't rely on root privileges.</li> </ul> <h3 id="annotation">Add Java annotation</h3> <p>If your test verifies an API behavior, annotate your test code with <code translate="no" dir="ltr">@ApiTest</code> and list all APIs involved in the <code translate="no" dir="ltr">apis</code> field. Use the appropriate format from among the following examples: </p> <table> <thead> <tr> <th>API type</th> <th>Annotation format</th> <th>Notes</th> </tr> </thead> <tbody> <tr> <td>Method</td> <td><code translate="no" dir="ltr">android.example.ClassA#methodA</code></td> <td>The most common use case.</td> </tr> <tr> <td>Method with key values</td> <td><code translate="no" dir="ltr">android.example.ClassB#methodB(KeyA)</code></td> <td>Use only when your test uses an API method to validate a field, as in <a href="https://android.googlesource.com/platform/cts/+/refs/heads/android17-release/tests/camera/src/android/hardware/camera2/cts/StillCaptureTest.java#236">this example.</a>
+</td> </tr> <tr> <td>Field</td> <td><code translate="no" dir="ltr">android.example.ClassC#FieldA</code></td> <td>Use only when your test validates an API field directly, as in <a href="https://developer.android.com/reference/kotlin/android/os/Build.VERSION">this example.</a>
+</td> </tr> </tbody> </table> <p> If your test verifies a CDD requirement, annotate the requirement ID (including CDD Section ID and Requirement ID) with <code translate="no" dir="ltr">@CddTest</code> in the CTS test code as shown in the following example. In your commit message, mention which CDD requirement is tested by your test by referring to CDD requirement IDs. CDD requirement IDs are a combination of section ID and requirement ID, connected by a slash (/) as in 7.3.1/C-1-1. </p> 
+<pre>
+/**
+* Verify Passpoint configuration management APIs for a Passpoint
+* @throws Exception
+*/
+    @CddTest(requirement="7.4.2.3/C-1-1,C-2-1")
+    public void testAddPasspointConfigWithUserCredential() throws Exception {
+        if (!WifiFeature.isWifiSupported(getContext())) {
+            // skip the test if WiFi is not supported
+            return;
+        }      testAddPasspointConfig(generatePasspointConfig(generateUserCredential()));
+    }
+</pre> <p> For CTS Verifier, annotate each Activity in your <code translate="no" dir="ltr">AndroidManifest.xml</code> with the relevant CDD ID. The formats for value fields are similar to formats of Java annotations in CTS. In the commit message, mention which CDD requirement is enforced by referencing the CDD requirement ID. </p> 
+<pre>
+  &lt;activity&gt;
+    ......
+    &lt;!-- OPTIONAL: Add a meta data attribute to indicate CDD requirements. --&gt;
+    &lt;meta-data android:name="cdd_test" android:value="7.4.1/C-4-1" /&gt;
+
+    &lt;!-- OPTIONAL: Add a meta data attribute to indicate APIs being tested. --&gt;
+    &lt;meta-data android:name="api_test"
+               android:value="com.example.MyClass#myMethod" /&gt;
+
+    &lt;!-- OPTIONAL: Add a metadata attribute to indicate the reason why the test doesn't enforce any CDD requirement but still useful in CTS-V. --&gt;
+    &lt;meta-data android:name="non_compliance_test"
+               android:value="detailed reasons" /&gt;
+  &lt;/activity&gt;
+</pre> <h3 id="commit-message">In the commit message</h3> <p> Clearly mention why your test needs to be added, and add relevant links for support. For CTS-D tests, include a link to the test proposal that you created in Google Issue Tracker as part of the <a href="develop-cts-d#submission-process">CTS-D submission process</a>. </p> <h2 id="subplan">Create a subplan</h2> <p>As an example, you can add a SubPlan.xml file in <code translate="no" dir="ltr">android-cts/subplans</code> as follows:</p> 
+<pre>&lt;?xml version="1.0" encoding="utf-8" standalone="no"?&gt;
+&lt;SubPlan version="2.0"&gt;
+&lt;Entry include="CtsSystemIntentTestCases" /&gt;
+&lt;Entry include="CtsSystemUiHostTestCases" /&gt;
+&lt;Entry include="CtsSecurityHostTestCases android.security.cts.SELinuxHostTest#testAospFileContexts" /&gt;
+&lt;Entry include="CtsSecurityHostTestCases android.security.cts.SELinuxHostTest#testAospServiceContexts" /&gt;
+&lt;/SubPlan&gt;</pre> <p>To run the subplan:</p> 
+<pre>
+run cts --subplan aSubPlan
+</pre> <p>The subplan entry format is:</p> 
+<pre>Include a module name as follows:
+&lt;Entry include="MODULE_NAME" /&gt;
+
+Include a package:
+&lt;Entry include="MODULE_NAME PACKAGE_NAME" /&gt;
+
+Include a class:
+&lt;Entry include="MODULE_NAME PACKAGE_NAME.CLASS_NAME" /&gt;
+
+Include an individual test:
+&lt;Entry include="MODULE_NAME PACKAGE_NAME.CLASS_NAME#TEST_NAME" /&gt;</pre> <h3 id="test-naming-and-location">Test naming and location</h3> <p> Most CTS test cases target a specific class in the Android API. These tests have Java package names with a <code translate="no" dir="ltr">cts</code> suffix and class names with a <code translate="no" dir="ltr">Test</code> suffix. Each test case consists of multiple tests, where each test typically exercises a specific method of the class being tested. These tests are arranged in a directory structure where tests are grouped into different categories such as "widgets" or "views". </p> <p> For example, the CTS test for the Java package <code translate="no" dir="ltr">android.widget.TextView</code> is <code translate="no" dir="ltr">android.widget.cts.TextViewTest</code> with its Java package name as <code translate="no" dir="ltr">android.widget.cts</code> and its class name as <code translate="no" dir="ltr">TextViewTest</code>. </p> <ul> <li>
+<strong>Java package name</strong><br>The Java package name for the CTS tests is the package name of the class that the test is testing, followed by <code translate="no" dir="ltr">.cts</code>. For our example, the package name would be <code translate="no" dir="ltr">android.widget.cts</code>.</li> <li>
+<strong>Class name</strong><br>The class name for CTS tests is the name of the class being tested with "Test" appended. For example, if a test is targeting <code translate="no" dir="ltr">TextView</code>, the class name should be <code translate="no" dir="ltr">TextViewTest</code>.</li> <li>
+<strong>Module name (CTS v2 only)</strong><br>CTS v2 organizes tests by module. The module name is usually the second string of the Java package name (in our example, <code translate="no" dir="ltr">widget</code>).</li> </ul> <p> The directory structure and sample code depend on whether you are using CTS v1 or CTS v2. </p> <h4 id="cts-v1">CTS v1</h4> <p> For Android 6.0 or lower, use CTS v1. For CTS v1, the sample code is at <code translate="no" dir="ltr">cts/tests/tests/example</code>. </p> <p> The directory structure in CTS v1 tests looks like this: </p> 
+<pre>
+cts/
+  tests/
+    tests/
+      package-name/
+        Android.mk
+        AndroidManifest.xml
+        src/
+          android/
+            package-name/
+              SampleDeviceActivity.java
+              cts/
+                SampleDeviceTest.java
+</pre> <h4 id="cts-v2">CTS v2</h4> <p> For Android 7.0 or higher, use CTS v2. For details, see <a href="https://android.googlesource.com/platform/cts/+/android17-release/tests/sample/">the sample test in Android Open Source Project (AOSP)</a>. </p> <p> The CTS v2 directory structure looks like this: </p> 
+<pre>
+cts/
+  tests/
+    module-name/
+      Android.mk
+      AndroidManifest.xml
+      src/
+        android/
+          package-name/
+            SampleDeviceActivity.java
+            cts/
+              SampleDeviceTest.java
+</pre> <h3 id="new-sample-packages">New sample packages</h3> <p>When adding new tests, there might not be an existing directory to place your test. In those cases, you need to create the directory and copy the appropriate sample files.</p> <h4 id="cts-v1">CTS v1</h4> <p> If you're using CTS v1, refer to the example under <code translate="no" dir="ltr">cts/tests/tests/example</code> and create a new directory. Also, make sure to add your new package's module name from its <code translate="no" dir="ltr">Android.mk</code> to <code translate="no" dir="ltr">CTS_COVERAGE_TEST_CASE_LIST</code> in <code translate="no" dir="ltr">cts/CtsTestCaseList.mk</code>. <code translate="no" dir="ltr">build/core/tasks/cts.mk</code> uses this makefile to combine all the tests and create the final CTS package.</p> <h4 id="cts-v2">CTS v2</h4> <p> Use the sample test <code translate="no" dir="ltr">
+<a href="https://android.googlesource.com/platform/cts/+/android17-release/tests/sample/">
+  /cts/tests/sample/</a>
+</code> to quick start your new test module with the following steps: </p> <ol> <li>To create the test directory and copy sample files, run: 
+<pre>mkdir cts/tests/module-name &amp;&amp; cp -r cts/tests/sample/* cts/tests/module-name</pre> </li>
+<li>Navigate to <code translate="no" dir="ltr">cts/tests/<em>module-name</em></code> and substitute all instances of "[Ss]ample" with the <a href="development#test-naming-and-location">recommended naming convention</a> from above. </li>
+<li>Update <code translate="no" dir="ltr">SampleDeviceActivity</code> to exercise the feature you're testing. </li>
+<li>Update <code translate="no" dir="ltr">SampleDeviceTest</code> to ensure that the activity succeeds or logs its errors.</li> </ol> <h4 id="additional-directories">Additional directories</h4> <p> Other Android directories such as <code translate="no" dir="ltr">assets</code>, <code translate="no" dir="ltr">jni</code>, <code translate="no" dir="ltr">libs</code>, and <code translate="no" dir="ltr">res</code> can also be added. To add JNI code, create a directory in the root of the project next to <code translate="no" dir="ltr">src</code> with the native code and an <code translate="no" dir="ltr">Android.mk</code> makefile in it.</p> <p> The makefile typically contains the following settings: </p> 
+<pre>
+LOCAL_PATH := $(call my-dir)
+include $(CLEAR_VARS)
+LOCAL_MODULE := libCtsSample_jni
+
+# don't include this package in any target
+LOCAL_MODULE_TAGS := optional
+LOCAL_SRC_FILES := list of source code files
+LOCAL_C_INCLUDES := $(JNI_H_INCLUDE)
+
+# Tag this module as a cts test artifact
+LOCAL_COMPATIBILITY_SUITE := cts
+LOCAL_SHARED_LIBRARIES := libnativehelper
+LOCAL_SDK_VERSION := current
+include $(BUILD_SHARED_LIBRARY)
+</pre> <h4 id="android-mk-file">Android.mk file</h4> <p> Finally, modify the <code translate="no" dir="ltr">Android.mk</code> file in the root of the project to build the native code and depend on it, as shown below:</p> 
+<pre>
+# All tests should include android.test.runner.
+LOCAL_JAVA_LIBRARIES := android.test.runner
+
+# Includes the jni code as a shared library
+LOCAL_JNI_SHARED_LIBRARIES := libCtsSample_jni
+
+# Include for InstrumentationCtsTestRunner
+LOCAL_STATIC_JAVA_LIBRARIES := ctstestrunner...
+LOCAL_SDK_VERSION := currentinclude $(BUILD_CTS_PACKAGE)
+
+#Tells make to look in subdirectories for more make files to include
+include $(call all-makefiles-under,$(LOCAL_PATH))
+</pre> <h2 id="Fix-remove-tests">Fix or remove tests</h2> <p>In addition to adding new tests, you can fix or remove tests annotated with <code translate="no" dir="ltr">BrokenTest</code> or <code translate="no" dir="ltr">KnownFailure</code>.</p> <h2 id="submitting-your-changes">Submit your changes</h2> <p> Follow the <a href="../../setup/contribute/submit-patches">Submitting code changes</a> workflow when contributing changes to CTS. </p> <ul> <li> Choose the <a href="#release-schedule">development branch</a> based on the API levels the patch applies to. </li> <li> Develop or cherrypick the changes to the correct test branch with <strong>DO NOT MERGE</strong> or <strong>RESTRICT AUTOMERGE</strong> in the commit message. </li> </ul> <p> A reviewer is assigned to review your change and cherrypick the change into the internal Gerrit accordingly. </p> <h2 id="release-schedule">Release schedule and branch information</h2> <p>CTS releases follow this schedule.</p> <aside class="note"><strong>Note:</strong> This schedule is tentative and will be updated as the CTS for the given Android version matures.</aside> <table> <thead> <tr> <th>Version</th> <th>API level</th> <th>Development branch</th> <th>Release frequency</th> </tr> </thead> <tbody> <tr> <td>16+</td> <td>36+</td> <td>Internal gerrit</td> <td>Quarterly</td> </tr> <tr> <td>15</td> <td>35</td> <td>android15-tests-dev</td> <td>Quarterly</td> </tr> <tr> <td>14</td> <td>34</td> <td>android14-tests-dev</td> <td>Quarterly</td> </tr> </tbody> </table> <aside class="note"><strong>Note:</strong> No further releases are planned for versions 4.2 through 13. </aside> <h3 id="important-dates">Important dates during the release</h3> <ul> <li>
+<strong>End of the first week:</strong> Code freeze. Changes merged in the branch until the code freeze are considered for the upcoming version of CTS. Submissions to the branch after the code freeze, or after a candidate for release is chosen, are considered for the subsequent release.</li> <li>
+<strong>Second or third week:</strong> CTS is published in the <a href="downloads">Compatibility Test Suite downloads</a> page.</li> </ul> <h3 id="auto-merge">Automerge flow</h3> <p>CTS development branches have been set up so that changes submitted to each branch automatically merge to higher branches.</p> <p>For changes directly to an AOSP test dev branch, the automerge path is:<br> <code translate="no" dir="ltr">android13-tests-dev</code> &gt; <code translate="no" dir="ltr">android14-tests-dev</code> &gt; <code translate="no" dir="ltr">android15-tests-dev</code> </p> <ul> <li>For CTS 16+ versions, a reviewer will cherrypick the change into the internal Gerrit accordingly. </li> </ul> <p>If a changelist (CL) fails to merge correctly, the author of the patch is sent an email with instructions on how to resolve the conflict. In most of the cases, the author of the patch can use the instructions to skip the automerge of the conflicting CL.</p> <p>If an older branch requires the change, then the patch needs to be cherry-picked from the newer branch.</p> <p>For test changes applicable to the next Android version, after you upload a proposed change, Google reviews it and, if accepted, will cherrypick it into the internal Gerrit.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/compatibility/cts/development" class="_attribution-link">https://source.android.com/docs/compatibility/cts/development</a>
+  </p>
+</div>

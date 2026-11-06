@@ -1,0 +1,119 @@
+<h1>Implement Java SDK library</h1>  <p> The Android platform contains a large number of shared Java libraries that can optionally be included in the classpath of apps with the <code translate="no" dir="ltr">&lt;uses-library&gt;</code> tag in the app manifest. Apps link against these libraries, so treat them like the rest of the Android API in terms of compatibility, API review, and tooling support. Note, however, that most libraries don't have these features. </p> <p> The <code translate="no" dir="ltr">java_sdk_library</code> module type helps manage libraries of this kind. Device manufacturers can use this mechanism for their own shared Java libraries, to maintain backward compatibility for their APIs. If device manufacturers use their own shared Java libraries through the <code translate="no" dir="ltr">&lt;uses-library&gt;</code> tag instead of the bootclass path, <code translate="no" dir="ltr">java_sdk_library</code> can verify that those Java libraries are API-stable. </p> <p> The <code translate="no" dir="ltr">java_sdk_library</code> implements optional SDK APIs for use by apps. Libraries implemented through <code translate="no" dir="ltr">java_sdk_library</code> in your build file (<code translate="no" dir="ltr">Android.bp</code>) perform the following operations: </p> <ul> <li>The stubs libraries are generated to include <code translate="no" dir="ltr">stubs</code>, <code translate="no" dir="ltr">stubs.system</code>, and <code translate="no" dir="ltr">stubs.test</code>. These stubs libraries are created by recognizing <code translate="no" dir="ltr">@hide</code>, <code translate="no" dir="ltr">@SystemApi</code>, and <code translate="no" dir="ltr">@TestApi</code> annotations.</li> <li>The <code translate="no" dir="ltr">java_sdk_library</code> manages API specification files (such as <code translate="no" dir="ltr">current.txt</code>) in an API subdirectory. These files are checked against the latest code to ensure that they’re the most current versions. If they aren’t, you receive an error message that explains how to update them. Manually review all update changes to ensure that they match your expectations.<br><br> To update all APIs, use <code translate="no" dir="ltr">m update-api</code>. To verify that an API is up-to-date, use <code translate="no" dir="ltr">m checkapi</code>.</li> <li>The API specification files are checked against the most recently published Android versions to ensure that the API is backward-compatible with earlier releases. The <code translate="no" dir="ltr">java_sdk_library</code> modules provided as part of AOSP place their previously released versions in <code translate="no" dir="ltr">prebuilts/sdk/&lt;latest number&gt;</code>.</li> <li>With respect to the API specification files checks, you can do <strong><em>one</em></strong> of the following three things:</li> <ul> <li>Allow the checks to proceed. (Don’t do anything.)</li> <li>Disable checks by adding the following to <code translate="no" dir="ltr">java_sdk_library</code>:<br> <code translate="no" dir="ltr">unsafe_ignore_missing_latest_api: true,</code>
+</li> <li>Provide empty APIs for new <code translate="no" dir="ltr">java_sdk_library</code> modules by creating empty text files named <code translate="no" dir="ltr">module_name.txt</code> in the <a href="#version-scope"><code translate="no" dir="ltr">version/scope/api</code> directory</a>.</li>
+</ul> <li>If the implementation library for the runtime is installed, an XML file gets generated and installed.</li> </ul> <h2 id="how-java-sdk-library-works">How java_sdk_library works</h2> <p>A <code translate="no" dir="ltr">java_sdk_library</code> called <code translate="no" dir="ltr">X</code> creates the following:</p> <ol> <li>Two copies of the implementation library: one library called <code translate="no" dir="ltr">X</code> and another called <code translate="no" dir="ltr">X.impl</code>. Library <code translate="no" dir="ltr">X</code> is installed on-device. Library <code translate="no" dir="ltr">X.impl</code> is there only if explicit access to the implementation library is needed by other modules, such as for use in testing. Note that explicit access is rarely needed.</li> <li>Scopes can be enabled and disabled to customize access. (Similar to Java keyword-access modifiers, a public scope provides a wide range of access; a test scope contains APIs only used in testing.) For each enabled scope the library creates the following:</li> <ul> <li>A stubs source module (of <code translate="no" dir="ltr">droidstubs</code> module type) - consumes the implementation source and outputs a set of stub sources along with the API specification file.</li> <li>A stubs library (of <code translate="no" dir="ltr">java_library</code> module type) - is the compiled version of the stubs. The libs used to compile this aren’t the same as those supplied to the <code translate="no" dir="ltr">java_sdk_library</code>, which ensures the implementation details don’t leak into the API stubs.</li> <li>If you need additional libraries to compile the stubs, use the <code translate="no" dir="ltr">stub_only_libs</code> and <code translate="no" dir="ltr">stub_only_static_libs</code> properties to supply them.</li> </ul> </ol> <p>If a <code translate="no" dir="ltr">java_sdk_library</code> is called “<code translate="no" dir="ltr">X</code>”, and is being compiled against as “<code translate="no" dir="ltr">X</code>”, always refer to it that way and don’t modify it. The build will select an appropriate library. To ensure that you have the most appropriate library, inspect your stubs to see if the build introduced errors. Make any necessary corrections using this guidance: </p> <ul> <li>Verify you have an appropriate library by looking on the command line and inspecting which stubs are listed there to determine your scope:</li> <ul> <li>Scope is too wide: The depending library needs a certain scope of APIs. But you see APIs included in the library that fall outside of that scope, such as system APIs included with the public APIs.</li> <li>Scope is too narrow: The depending library doesn’t have access to all the requisite libraries. For example, the depending library needs to use the system API but gets the public API instead. This usually results in a compilation error because needed APIs are missing.</li>
+</ul> <li>To fix the library, do only <strong><em>one</em></strong> of the following:</li>
+<ul> <li>Change the <code translate="no" dir="ltr">sdk_version</code> to select the version you need. OR</li> <li>Explicitly specify the appropriate library, such as <code translate="no" dir="ltr">&lt;X&gt;.stubs</code> or <code translate="no" dir="ltr">&lt;X&gt;.stubs.system</code>.</li>
+</ul>
+</ul> <h3 id="java-sdk-library-x-usage">java_sdk_library X usage</h3> <p>The implementation library <code translate="no" dir="ltr">X</code> gets used when it’s referenced from <code translate="no" dir="ltr">apex.java_libs</code>. However, due to a Soong limitation, when library <code translate="no" dir="ltr">X</code> is referenced from another <code translate="no" dir="ltr">java_sdk_library</code> module <em>within the same</em> APEX library, <code translate="no" dir="ltr">X.impl</code> <em>explicitly</em> must be used, not library <code translate="no" dir="ltr">X</code>.</p> <p>When the <code translate="no" dir="ltr">java_sdk_library</code> is referenced from elsewhere, a stubs library is used. The stubs library is selected according to the depending module’s <code translate="no" dir="ltr">sdk_version</code> property setting. For example, a module that specifies <code translate="no" dir="ltr">sdk_version: "current"</code> uses the public stubs, whereas a module that specifies <code translate="no" dir="ltr">sdk_version: "system_current"</code> uses the system stubs. If an exact match can’t be found, the closest stub library gets used. A <code translate="no" dir="ltr">java_sdk_library</code> that only provides a public API will supply the public stubs for everyone. </p> <figure> <img src="https://source.android.com/static/docs/core/architecture/images/build-flow-java-lib.png" class="android-image-dark-theme-background" alt="Build flow with Java SDK library"> <figcaption><b>Figure 1.</b> Build flow with Java SDK library</figcaption> </figure> <h2 id="examples-and-sources">Examples and sources</h2> <p> The <code translate="no" dir="ltr">srcs</code> and <code translate="no" dir="ltr">api_packages</code> properties <em>must</em> be present in the <code translate="no" dir="ltr">java_sdk_library</code>. </p> 
+<pre>java_sdk_library {
+        name: "com.android.future.usb.accessory",
+        srcs: ["src/**/*.java"],
+        api_packages: ["com.android.future.usb"],
+    }</pre> <p> AOSP recommends (but doesn’t require) that new <code translate="no" dir="ltr">java_sdk_library</code> instances explicitly enable the API scopes they want to use. You can also (optionally) migrate existing <code translate="no" dir="ltr">java_sdk_library</code> instances to explicitly enable the API scopes they’ll use: </p> 
+<pre>java_sdk_library {
+         name: "lib",
+         public: {
+           enabled: true,
+         },
+         system: {
+           enabled: true,
+         },
+         …
+    }</pre> <p> To configure the <code translate="no" dir="ltr">impl</code> library used for runtime, use all the normal <code translate="no" dir="ltr">java_library</code> properties, such as <code translate="no" dir="ltr">hostdex</code>, <code translate="no" dir="ltr">compile_dex</code>, and <code translate="no" dir="ltr">errorprone</code>. </p> 
+<pre>java_sdk_library {
+        name: "android.test.base",
+
+        srcs: ["src/**/*.java"],
+
+        errorprone: {
+          javacflags: ["-Xep:DepAnn:ERROR"],
+        },
+
+        hostdex: true,
+
+        api_packages: [
+            "android.test",
+            "android.test.suitebuilder.annotation",
+            "com.android.internal.util",
+            "junit.framework",
+        ],
+
+        compile_dex: true,
+    }</pre> <p>To configure stubs libraries, use the following properties:</p> <ul> <li>
+<code translate="no" dir="ltr">merge_annotations_dirs</code> and <code translate="no" dir="ltr">merge_inclusion_annotations_dirs</code>. </li>
+<li>
+<code translate="no" dir="ltr">api_srcs</code>: The list of optional source files that are part of the API but not part of the runtime library. </li>
+<li>
+<code translate="no" dir="ltr">stubs_only_libs</code>: The list of Java libraries that are in the classpath when building stubs. </li>
+<li>
+<code translate="no" dir="ltr">hidden_api_packages</code>: The list of package names that must be hidden from the API. </li>
+<li>
+<code translate="no" dir="ltr">droiddoc_options</code>: Additional argument for <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:tools/metalava/README.md">metalava</a>. </li>
+<li>
+<code translate="no" dir="ltr">droiddoc_option_files</code>: Lists the files that can be referenced from within <code translate="no" dir="ltr">droiddoc_options</code> using <code translate="no" dir="ltr">$(location &lt;label&gt;)</code>, where <code translate="no" dir="ltr">&lt;file&gt;</code> is an entry in the list. </li>
+<li>
+<code translate="no" dir="ltr">annotations_enabled</code>.</li> </ul> <p>The <code translate="no" dir="ltr">java_sdk_library</code> is a <code translate="no" dir="ltr">java_library</code>, but it isn’t a <code translate="no" dir="ltr">droidstubs</code> module and so doesn't support all of the <code translate="no" dir="ltr">droidstubs</code> properties. The following example was taken from the <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/test-mock/Android.bp">android.test.mock library build</a> file. </p> 
+<pre>java_sdk_library {
+        name: "android.test.mock",
+
+        srcs: [":android-test-mock-sources"],
+        api_srcs: [
+            // Note: The following aren’t APIs of this library. Only APIs under the
+            // android.test.mock package are taken. These do provide private APIs
+            // to which android.test.mock APIs reference. These classes are present
+            // in source code form to access necessary comments that disappear when
+            // the classes are compiled into a Jar library.
+            ":framework-core-sources-for-test-mock",
+            ":framework_native_aidl",
+        ],
+
+        libs: [
+            "framework",
+            "framework-annotations-lib",
+            "app-compat-annotations",
+            "Unsupportedappusage",
+        ],
+
+        api_packages: [
+            "android.test.mock",
+        ],
+        permitted_packages: [
+            "android.test.mock",
+        ],
+        compile_dex: true,
+        default_to_stubs: true,
+    }</pre> <h3 id="maintaining-backward-compatibility">Maintain backward compatibility</h3> <p> The build system checks whether the APIs have maintained backward compatibility by comparing the latest API files with the generated API files at build time. The <code translate="no" dir="ltr">java_sdk_library</code> performs the compatibility check using the information provided by <code translate="no" dir="ltr">prebuilt_apis</code>. All libraries built with <code translate="no" dir="ltr">java_sdk_library</code> must have API files in the latest version of <code translate="no" dir="ltr">api_dirs</code> in <code translate="no" dir="ltr">prebuilt_apis</code>. When you release the version, the API lists files and stubs libraries can be obtained with dist build with <code translate="no" dir="ltr">PRODUCT=sdk_phone_armv7-sdk</code>. </p> <p> The <code translate="no" dir="ltr">api_dirs</code> property is list of API version directories in <code translate="no" dir="ltr">prebuilt_apis</code>. The API-version directories must be located at the <code translate="no" dir="ltr">Android.bp</code> directory level. </p> 
+<pre>prebuilt_apis {
+       name: "foo",
+       api_dirs: [
+           "1",
+           "2",
+             ....
+           "30",
+           "current",
+       ],
+    }</pre> <p> Configure the directories with the <code translate="no" dir="ltr"><var translate="no">version</var>/<var translate="no">scope</var>/api/</code> structure under the prebuilts directory. <code translate="no" dir="ltr"><var translate="no">version</var></code> corresponds to the API level and <code translate="no" dir="ltr"><var translate="no">scope</var></code> defines whether the directory is public, system, or test. </p> <ul> <li>
+<a id="version-scope"><code translate="no" dir="ltr"><var translate="no">version</var>/<var translate="no">scope</var></code></a> contains Java libraries.</li> <li>
+<code translate="no" dir="ltr"><var translate="no">version</var>/<var translate="no">scope</var>/api</code> contains API <code translate="no" dir="ltr">.txt</code> files. Create empty text files named <code translate="no" dir="ltr"><var translate="no">module_name</var>.txt</code> and <code translate="no" dir="ltr"><var translate="no">module_name</var>-removed.txt</code> here. 
+<pre> ├── 30
+ │   ├── public
+ │   │   ├── api
+ │   │   │   ├── android.test.mock-removed.txt
+ │   │   │   └── android.test.mock.txt
+ │   │   └── android.test.mock.jar
+ │   ├── system
+ │   │   ├── api
+ │   │   │   ├── android.test.mock-removed.txt
+ │   │   │   └── android.test.mock.txt
+ │   │   └── android.test.mock.jar
+ │   └── test
+ │       ├── api
+ │       │   ├── android.test.mock-removed.txt
+ │       │   └── android.test.mock.txt
+ │       └── android.test.mock.jar
+ └── Android.bp</pre> </li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/java-library" class="_attribution-link">https://source.android.com/docs/core/architecture/java-library</a>
+  </p>
+</div>

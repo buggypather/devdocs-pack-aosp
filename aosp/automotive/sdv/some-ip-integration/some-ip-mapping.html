@@ -1,0 +1,222 @@
+<h1>Write a SOME/IP mapping file</h1>  <p>This page guides you through writing a SOME/IP mapping file in VSIDL. A SOME/IP mapping file defines how AAOS SDV services map to AUTOSAR SOME/IP service interfaces (<code translate="no" dir="ltr">service_id</code>, <code translate="no" dir="ltr">instance_id</code>, <code translate="no" dir="ltr">eventgroup_id</code>, and <code translate="no" dir="ltr">method_id</code> defined in system ARXML or <code translate="no" dir="ltr">vsomeip</code> configurations), enabling bidirectional communication between SDV virtual machines and external vehicle ECUs.</p> <p>The <code translate="no" dir="ltr">some_ip_mapping</code> <em>field</em> within the <code translate="no" dir="ltr">VsidlEntry</code> message in your <code translate="no" dir="ltr">.vsidl</code> file contains the SOME/IP mapping information. The <code translate="no" dir="ltr">some_ip_mapping</code> field lets you define SOME/IP mappings separately from SDV service definitions.</p> <p>The <code translate="no" dir="ltr">SomeIp Mapping</code> <em>proto</em> contains all information the SOME/IP broker needs for transformations between SDV and SOME/IP ECUs. This proto can map either a SOME/IP service into the SDV ecosystem or SDV service units into the AUTOSAR ecosystem.</p> <h2 id="core-concepts">Core concepts</h2> <p>Before writing your mapping file, understand these key identifiers and concepts:</p> <ul> <li><p><strong>SDV Fully Qualified Instance Name (FQIN):</strong> This unique string identifies SDV service instances. It's composed of the VM name, package name, service name, and instance name.</p></li> <li><p><strong>SDV type:</strong> This name is a unique identifier for the data format of an SDV message payload and corresponds to a proto message.</p></li> <li><p><strong>SOME/IP <code translate="no" dir="ltr">ServiceIdentifier</code> (SOME/IP SID):</strong> Uniquely identifies SOME/IP services with a combination of service ID (<code translate="no" dir="ltr">uint16</code>), instance ID (<code translate="no" dir="ltr">uint16</code>), major version (<code translate="no" dir="ltr">uint8</code>), and minor version (<code translate="no" dir="ltr">uint32</code>).</p></li> <li><p><strong>SDV RPC:</strong> Methods offered by SDV services, identified by <code translate="no" dir="ltr">method name</code> (string), the containing <code translate="no" dir="ltr">Type</code>, and a <code translate="no" dir="ltr">channel</code> name.</p></li> <li><p><strong>SDV Pub/Sub:</strong> Topics published or subscribed to by SDV services and identified by a <code translate="no" dir="ltr">Type</code> and <code translate="no" dir="ltr">Topic</code> name</p></li> <li><p><strong>SOME/IP RPC:</strong> Identified by service ID, instance ID, and method ID (<code translate="no" dir="ltr">uint16</code>).</p></li> <li><p><strong>SOME/IP events:</strong> Published by SOME/IP services for Pub/Sub and identified by service ID, instance ID, event ID (<code translate="no" dir="ltr">uint16</code>), and belonging to an event-group (<code translate="no" dir="ltr">uint16</code>).</p></li> <li><p><strong>SOME/IP broker:</strong> A bridging component in SDV that consumes the SOME/IP mapping file to enable communication between SDV and SOME/IP services.</p></li> </ul> <h2 id="file-structure">File structure and location</h2> <p>The SOME/IP mapping information is included as a repeated field, <code translate="no" dir="ltr">some_ip_mapping</code>, within the <code translate="no" dir="ltr">VsidlEntry</code> message in your <code translate="no" dir="ltr">.vsidl</code> file. This lets the SOME/IP mappings to be defined separately from the SDV service definitions, enabling you to manage the mappings in a dedicated file.</p> 
+<pre>// The root message for VSIDL files.
+message VsidlEntry {
+  // Required. Package name for entities mentioned in the file.
+  string package = 1;
+  // Enables custom extensions beyond the standard VSIDL model.
+  repeated google.protobuf.Any extension = 3;
+
+  // SOMEIP mapping rules.
+  repeated sdv.someip.v1.SomeIpMapping some_ip_mapping = 4;
+  // VHAL mapping rules.
+  repeated VhalMapping vhal_mapping = 5;
+  // List of SDV service bundles defined in the file.
+  repeated ServiceBundle service_bundle = 6;
+}
+</pre> <h2 id="create-file">Create a mapping file</h2> <p>A SOME/IP mapping file typically contains definitions that translate between the SDV ecosystem and the SOME/IP network protocol. You can define mappings in two primary ways:</p> <ul> <li>
+<code translate="no" dir="ltr">sdv_type_mapping</code>: Maps an SDV type (such as an RPC interface or a publication topic) to a SOME/IP service.</li> <li>
+<code translate="no" dir="ltr">someip_service_mapping</code>: Maps a raw SOME/IP service (and its instances, events, or methods) to SDV Pub/Sub topics or RPC channels.</li> </ul> <p>A single mapping file consists of one or more <code translate="no" dir="ltr">SomeIpMapping</code> definitions.</p> <h3 id="sdv-type-mapping">SDV type mapping</h3> <p><code translate="no" dir="ltr">sdv_type_mapping</code> is for existing SDV types that you want to expose to the SOME/IP network.</p> <h4 id="sdv-type-mapping-structure">SDV type mapping structure</h4> <p>You need to specify:</p> <ul> <li>
+<code translate="no" dir="ltr">unit_type</code>: The SDV type being mapped (identified by <code translate="no" dir="ltr">package_name</code> and <code translate="no" dir="ltr">type_name</code>).</li> <li>
+<code translate="no" dir="ltr">someip_service_id</code>: The 16-bit SOME/IP service ID.</li> <li>
+<code translate="no" dir="ltr">version_major</code> and <code translate="no" dir="ltr">version_minor</code>: The versioning of the SOME/IP service.</li> <li>
+<p><code translate="no" dir="ltr">service_oriented_mapping</code>: Defines the specific mapping behavior (either for an RPC interface or a publication).</p> <aside class="note"><strong>Note:</strong><span> Avoid using the deprecated <code translate="no" dir="ltr">interface_type</code> <code translate="no" dir="ltr">oneof</code> and <code translate="no" dir="ltr">service_unit_mapping</code> fields.</span></aside>
+</li> </ul> <h4 id="publication-mapping-example">Publication mapping example</h4> <p>If your SDV type is a topic (publication), use <code translate="no" dir="ltr">publication_mapping</code>. This maps the structure of the data (<code translate="no" dir="ltr">type_definition</code>) and the SOME/IP Event ID or EventGroup ID, followed by mapping specific SDV topics to SOME/IP instances.</p> 
+<pre>sdv_type_mapping {
+  unit_type {
+    package_name: "com.android.sdv.samples"
+    type_name: "SpeedData"
+  }
+  someip_service_id: 0x1001
+  version_major: 1
+  version_minor: 0
+  service_oriented_mapping {
+    publication_mapping {
+      offered_topic {
+        simple_mapping {
+          group_id: 1
+          event_id: 0x8001
+        }
+        # type_definition defines the structural mapping to SOME/IP payloads
+        type_definition {
+          # ... (SomeIpStruct definition) ...
+        }
+      }
+      # Maps the SDV topic name to a specific SOME/IP instance
+      topic_mapping {
+        topic: "vehicle-speed-topic"
+        instance_id: 0x0001
+      }
+    }
+  }
+}
+</pre> <h4 id="rpc-interface-example">RPC interface mapping example</h4> <p>If your SDV type is an RPC interface, use <code translate="no" dir="ltr">rpc_interface_mapping</code>. Map the SDV procedure names to the SOME/IP <code translate="no" dir="ltr">method_id</code> instances, and link SDV channels to SOME/IP instances.</p> 
+<pre>sdv_type_mapping {
+  unit_type {
+    package_name: "com.android.sdv.samples"
+    type_name: "DoorControl"
+  }
+  someip_service_id: 0x2001
+  version_major: 1
+  version_minor: 0
+  service_oriented_mapping {
+    rpc_interface_mapping {
+      offered_interface {
+        method {
+          procedure: "LockDoors"
+          method_id: 0x0001
+          # request_payload_mapping and response_payload_mapping can be defined here
+        }
+      }
+      rpc_channel_mapping {
+        channel: "front-doors"
+        instance_id: 0x0001
+      }
+    }
+  }
+}
+</pre> <h3 id="someip-service-mapping">SOME/IP service mapping</h3> <p><code translate="no" dir="ltr">someip_service_mapping</code> configures how a specific SOME/IP service (discovered or offered on the network) maps onto SDV topics and channels. It allows for complex parameterized mappings of events and RPCs.</p> <h4 id="someip-service-mapping-structure">SOME/IP service mapping structure</h4> <ul> <li>
+<code translate="no" dir="ltr">someip_service_id</code>, <code translate="no" dir="ltr">version_major</code>, <code translate="no" dir="ltr">version_minor</code>: Identify the SOME/IP service.</li> <li><p><code translate="no" dir="ltr">sd_behavior</code> (optional): Defines service discovery behavior (<code translate="no" dir="ltr">EXACT_OR_ANY_MINOR_VERSION</code> or <code translate="no" dir="ltr">MINIMUM_MINOR_VERSION</code>)</p></li> <li>
+<p><code translate="no" dir="ltr">instance</code>: Parameterizes SDV service units and topics for specific SOME/IP <code translate="no" dir="ltr">instance_id</code> instances.</p> <aside class="note"><strong>Note:</strong><span> Don't use <code translate="no" dir="ltr">0</code> as a key value.</span></aside>
+</li> <li><p><code translate="no" dir="ltr">instance_impl</code>: Describes the implementation of the instance, mapping events or methods to the parameterized service units.</p></li> </ul> <h4 id="event-mapping-example">Event mapping example</h4> <p>This example maps a SOME/IP event into an SDV topic. It uses <code translate="no" dir="ltr">instance</code> to map the ID 1 to the literal string <code translate="no" dir="ltr">speed_sensor_unit</code>.</p> 
+<pre>someip_service_mapping {
+  someip_service_id: 0x1001
+  version_major: 1
+  version_minor: 0
+  # Parameterize instances
+  instance {
+    instance_id: 0x0001
+    sdv_service_unit_parameterization {
+      key: 1
+      value: "speed_sensor_unit"
+    }
+    sdv_topic_parameterization {
+      key: 1
+      value {
+        topic: "speed-topic"
+        capacity: 10
+      }
+    }
+  }
+  # Description of all instances
+  instance_impl {
+    offered_event {
+      group_id: 1
+      event_id: 0x8001
+      simple_event {
+        sdv_unit_type {
+          package_name: "com.android.sdv.samples"
+          type_name: "SpeedData"
+        }
+        # Refers to key 1 in sdv_service_unit_parameterization. If unspecified,
+        # service unit name will be automatically generated by the broker
+        service_unit: 1
+        topic: 1        # Refers to key 1 in sdv_topic_parameterization
+        message_translation_mode: REFLECTION
+        type_definition {
+          # ... (SomeIpStruct definition) ...
+        }
+      }
+    }
+  }
+}
+</pre> <h4 id="rpc-mapping-example">RPC mapping example</h4> <p>This example maps a SOME/IP RPC service to an SDV RPC interface. Similar to event mappings, the service uses instance to parameterize the service unit name. This corresponds to the RPC channel name in SDV. The <code translate="no" dir="ltr">instance_impl</code> block then defines an instance of <code translate="no" dir="ltr">offered_interface</code> to link the SOME/IP <code translate="no" dir="ltr">method_id</code> to the SDV procedure name:</p> 
+<pre>someip_service_mapping {
+  someip_service_id: 0x2001
+  version_major: 1
+  version_minor: 0
+  # Parameterize instances
+  instance {
+    instance_id: 0x0001
+    sdv_service_unit_parameterization {
+      key: 1
+      value: "door_control_unit"
+    }
+  }
+  instance_impl {
+    offered_interface {
+      sdv_unit_type {
+        package_name: "com.android.sdv.samples"
+        type_name: "DoorControl"
+      }
+      # Refers to key 1 in sdv_service_unit_parameterization. This corresponds
+      # to the RPC channel name in SDV.
+      service_unit: 1
+      method {
+        procedure: "LockDoors"
+        method_id: 0x0001
+     # request_payload_mapping and response_payload_mapping can be defined here
+      }
+    }
+  }
+}
+</pre> <h3 id="advanced-features">Advanced features</h3> <p>This section describes advanced features supported by the SOME/IP mapping.</p> <h4 id="group-events">Group events</h4> <p><code translate="no" dir="ltr">group_event</code> allows a single SOME/IP event to be split and mapped to multiple SDV topics simultaneously. This is done by specifying multiple <code translate="no" dir="ltr">event_part</code> entries and using <code translate="no" dir="ltr">field_name_mapping</code> to map the incoming SOME/IP payload field names to the SDV payload field names:</p> 
+<pre>offered_event {
+  group_id: 1
+  event_id: 0x8002
+  group_event {
+    type_definition {
+      # Definition of the complete SOME/IP payload
+    }
+    event_part {
+      sdv_unit_type {
+        package_name: "com.android.sdv.samples"
+        type_name: "PartAData"
+      }
+      service_unit: 1
+      topic: 1
+      field_name_mapping {
+        key: "someip_field_a"
+        value: "sdv_field_a"
+      }
+    }
+    event_part {
+      sdv_unit_type {
+        package_name: "com.android.sdv.samples"
+        type_name: "PartBData"
+      }
+      service_unit: 2
+      topic: 2
+      field_name_mapping {
+        key: "someip_field_b"
+        value: "sdv_field_b"
+      }
+    }
+  }
+}
+</pre> <h4 id="fire-forget-mappings">Fire and forget mappings</h4> <p>SOME/IP fire and forget (F&amp;F) methods have no direct equivalent in SDV RPC interfaces. Instead, they are invoked by mapping an SDV topic (publication) to the F&amp;F method using <code translate="no" dir="ltr">publication_mapping</code>. When data is published to the corresponding SDV topic, the broker translates it into a SOME/IP F&amp;F method call.</p> <p>To configure this, you must set <code translate="no" dir="ltr">someip_ff_methods: true</code> within the <code translate="no" dir="ltr">offered_topic</code> block, and provide the destination <code translate="no" dir="ltr">fire_and_forget_method</code> routing details inside your <code translate="no" dir="ltr">topic_mapping</code>.</p> 
+<pre>sdv_type_mapping {
+  unit_type {
+    package_name: "com.android.sdv.sample.someip"
+    type_name: "CounterLoad"
+  }
+  someip_service_id: 0x13
+  version_major: 1
+  version_minor: 0
+  service_oriented_mapping {
+    publication_mapping {
+      offered_topic {
+        type_definition {
+          # ... (SomeIpStruct definition) ...
+        }
+        someip_ff_methods: true
+      }
+      topic_mapping {
+        topic: "counter-load-start-counter"
+        instance_id: 0x1
+        fire_and_forget_method {
+          service_id: 0x3700
+          instance_id: 0x1000
+          version_major: 1
+          version_minor: 0
+          method_id: 0x1000
+        }
+      }
+    }
+  }
+}
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/some-ip-integration/some-ip-mapping" class="_attribution-link">https://source.android.com/docs/automotive/sdv/some-ip-integration/some-ip-mapping</a>
+  </p>
+</div>

@@ -1,0 +1,186 @@
+<h1>Test mapping</h1>  <p>This is a brief introduction of test mapping and an explanation of how to get started configuring tests in the Android Open Source Project (AOSP).</p> <h2 id="about">About test mapping</h2> <p>Test mapping is a Gerrit-based approach that lets developers create presubmit and postsubmit test rules directly in the Android source tree and leave the decisions of branches and devices to be tested to the test infrastructure. Test mapping definitions are JSON files named <code translate="no" dir="ltr">TEST_MAPPING</code> that you can place in any source directory.</p> <p><a href="atest">Atest</a> can use the <code translate="no" dir="ltr">TEST_MAPPING</code> files to run presubmit tests in the associated directories. With test mapping, you can add the same set of tests to presubmit checks with a minimal change inside the Android source tree.</p> <p>See these examples:</p> <ul> <li><p><a href="https://android.googlesource.com/platform/frameworks/base/+/android17-release/services/core/java/com/android/server/pm/dex/TEST_MAPPING">Add presubmit tests to <code translate="no" dir="ltr">TEST_MAPPING</code> for <code translate="no" dir="ltr">services.core</code></a></p></li> <li><p><a href="https://android.googlesource.com/platform/tools/dexter/+/refs/heads/android17-release/TEST_MAPPING">Add presubmit tests to <code translate="no" dir="ltr">TEST_MAPPING</code> for <code translate="no" dir="ltr">tools/dexter</code> using imports</a></p></li> </ul> <p>Test mapping relies on the <a href="../tradefed">Trade Federation (TF) test harness</a> for tests execution and results reporting.</p> <h2 id="define-test-groups">Define test groups</h2> <p>Test mapping groups tests with a <em>test group</em>. The name of a test group can be any string. For example, <em>presubmit</em> can be the name for a group of tests to run when validating changes. And <em>postsubmit</em> can be the tests used to validate the builds after changes are merged.</p> <h2 id="package-rules">Package build script rules</h2> <p>In order for the <a href="../tradefed">Trade Federation test harness</a> to run test modules for a given build, these modules must have a <code translate="no" dir="ltr">test_suites</code> set for <a href="blueprints">Soong</a> or a <code translate="no" dir="ltr">LOCAL_COMPATIBILITY_SUITE</code> set for Make to one of these two suites:</p> <ul> <li>
+<code translate="no" dir="ltr">general-tests</code> is for tests that don't depend on device-specific capabilities (such as vendor-specific hardware that most devices don't have). Most tests should be in the <code translate="no" dir="ltr">general-tests</code> suite, even if they're specific to one ABI or bitness or hardware features like HWASan (there's a separate <code translate="no" dir="ltr">test_suites</code> target for each ABI), and even if they have to run on a device.</li> <li>
+<code translate="no" dir="ltr">device-tests</code> is for tests that depend on device-specific capabilities. Typically these tests are found under <code translate="no" dir="ltr">vendor/</code>. <em>Device-specific</em> refers only to capabilities that are unique to <em>a</em> device, so this applies to JUnit tests as well as GTest tests (which should usually be marked as <code translate="no" dir="ltr">general-tests</code> even if they're ABI specific).</li> </ul> <p>Examples:</p> 
+<pre>Android.bp: test_suites: ["general-tests"],
+Android.mk: LOCAL_COMPATIBILITY_SUITE := general-tests
+</pre> <h2 id="configure-tests">Configure tests to run in a test suite</h2> <p>For a test to run inside of a test suite, the test:</p> <ul> <li>Must not have any build provider.</li> <li>Must clean up after it's finished, for example, by deleting any temporary files generated during the test.</li> <li>Must change system settings to the default or original value.</li> <li>
+<p>Shouldn't assume a device is in a certain state, for example, root ready. Most tests don't require root privilege to run. If a test must require root, it should specify that with <code translate="no" dir="ltr">RootTargetPreparer</code> in its <a href="../tradefed/testing/through-suite/android-test-structure"><code translate="no" dir="ltr">AndroidTest.xml</code></a>, as in the following example:</p> 
+<pre>&lt;target_preparer class="com.android.tradefed.targetprep.RootTargetPreparer"/&gt;
+</pre>
+</li> </ul> <h2 id="create-mapping-files">Create test mapping files</h2> <p>For the directory requiring test coverage, add a <code translate="no" dir="ltr">TEST_MAPPING</code> JSON file resembling the <a href="#example">example</a>. These rules ensure that the tests run in presubmit checks when any files are touched in that directory or any of its subdirectories.</p> <h3 id="example">Follow an example</h3> <p>Here is a sample <code translate="no" dir="ltr">TEST_MAPPING</code> file (it's in JSON format but with comments supported):</p> 
+<pre>{
+  "presubmit": [
+    // JUnit test with options and file patterns.
+    {
+      "name": "CtsWindowManagerDeviceTestCases",
+      "options": [
+        {
+          "include-annotation": "android.platform.test.annotations.RequiresDevice"
+        }
+      ],
+      "file_patterns": ["(/|^)Window[^/]*\\.java", "(/|^)Activity[^/]*\\.java"]
+    },
+    // Device-side GTest with options.
+    {
+      "name" : "hello_world_test",
+      "options": [
+        {
+          "native-test-flag": "\"servicename1 servicename2\""
+        },
+        {
+          "native-test-timeout": "6000"
+        }
+      ]
+    }
+    // Host-side GTest.
+    {
+      "name" : "net_test_avrcp",
+      "host" : true
+    }
+  ],
+  "postsubmit": [
+    {
+      "name": "CtsDeqpTestCases",
+      "options": [
+        {
+          // Use regex in include-filter which is supported in AndroidJUnitTest
+          "include-filter": "dEQP-EGL.functional.color_clears.*"
+        }
+      ]
+    }
+  ],
+  "imports": [
+    {
+      "path": "frameworks/base/services/core/java/com/android/server/am"
+    }
+  ]
+}
+</pre> <h3 id="set-attributes">Set attributes</h3> <p>In the <a href="#example">example</a>, <code translate="no" dir="ltr">presubmit</code> and <code translate="no" dir="ltr">postsubmit</code> are the names of each test group. See <a href="#define-test-groups">Define test groups</a> for more information about test groups.</p> <p>You can set the name of the test module or Trade Federation integration test name (resource path to the test XML file, for example, <a href="https://android.googlesource.com/platform/tools/tradefederation/contrib/+/android17-release/res/config/uiautomator/uiautomator-demo.xml"><code translate="no" dir="ltr">uiautomator/uiautomator-demo</code></a>) in the value of the <code translate="no" dir="ltr">name</code> attribute. Note that the <code translate="no" dir="ltr">name</code> field can't use the class <code translate="no" dir="ltr">name</code> or the test method <code translate="no" dir="ltr">name</code>. To narrow down the tests to run, use options such as <code translate="no" dir="ltr">include-filter</code>. See <a href="https://android.googlesource.com/platform/frameworks/base/+/android17-release/services/core/java/com/android/server/pm/dex/TEST_MAPPING#7"><code translate="no" dir="ltr">include-filter</code> sample usage</a>.</p> <p>The <code translate="no" dir="ltr">host</code> setting of a test indicates whether the test is a deviceless test running on host or not. The default value is <code translate="no" dir="ltr">false</code>, meaning the test requires a device to run. The supported test types are <a href="https://source.android.com/reference/tradefed/com/android/tradefed/testtype/HostGTest"><code translate="no" dir="ltr">HostGTest</code></a> for GTest binaries and <a href="jar"><code translate="no" dir="ltr">HostTest</code></a> for JUnit tests.</p> <p>The <code translate="no" dir="ltr">file_patterns</code> attribute lets you set a list of regular expression strings for matching the relative path of any source code file (relative to the directory containing the <code translate="no" dir="ltr">TEST_MAPPING</code> file). In the <a href="#example">example</a>, test <code translate="no" dir="ltr">CtsWindowManagerDeviceTestCases</code> runs in presubmit only when a Java file starts with <code translate="no" dir="ltr">Window</code> or <code translate="no" dir="ltr">Activity</code>, which exists in the same directory as the <code translate="no" dir="ltr">TEST_MAPPING</code> file or any of its subdirectories. The backslashes (\) need to be escaped as they're in a JSON file.</p> <aside class="note"><strong>Note:</strong><span> In presubmit, a validation check ensures that all regular expressions in <code translate="no" dir="ltr">file_patterns</code> match at least one file in the repository. If a pattern doesn't match any files, for example, due to file renames or deletions, the validation fails.</span></aside> <h3 id="imports">Import TEST_MAPPING files</h3> <p>The <code translate="no" dir="ltr">imports</code> attribute lets you include tests in other <code translate="no" dir="ltr">TEST_MAPPING</code> files without copying the content. The <code translate="no" dir="ltr">TEST_MAPPING</code> files in the parent directories of the imported path are also included. <code translate="no" dir="ltr">TEST_MAPPING</code> allows nested imports, meaning imported files can themselves import other <code translate="no" dir="ltr">TEST_MAPPING</code> files, and test mapping can merge the included tests.</p> <p><code translate="no" dir="ltr">TEST_MAPPING</code> supports both root-level and group-level imports:</p> <ul> <li>
+<strong>Root-level imports:</strong> Specified at the top level of the <code translate="no" dir="ltr">TEST_MAPPING</code> file (outside of any test group). A root-level import imports the whole target <code translate="no" dir="ltr">TEST_MAPPING</code> file (and its parent directories) as if it was written in the path it's being imported to. All test group definitions in the imported file (e.g., <code translate="no" dir="ltr">presubmit</code>, <code translate="no" dir="ltr">postsubmit</code>) are merged into the corresponding test groups of the importing file.</li> <li>
+<strong>Group-level imports:</strong> Specified directly inside a specific test group (such as <code translate="no" dir="ltr">presubmit</code> or <code translate="no" dir="ltr">postsubmit</code>). A group-level import is scoped strictly to that test group, meaning only tests defined under that specific group within the target <code translate="no" dir="ltr">TEST_MAPPING</code> file will be imported. All other test groups in the target file are ignored.</li> </ul> <p>Group-level imports provide fine-grained control over test execution. For example, you can import tests specifically for presubmit without pulling in heavy postsubmit tests from the imported directory.</p> <p>Example of a root-level import:</p> 
+<pre>{
+  "imports": [
+    {
+      "path": "frameworks/base/services/core"
+    }
+  ],
+  "presubmit": [
+    {
+      "name": "MyTestModule"
+    }
+  ]
+}
+</pre> <p>Example of a group-level import:</p> 
+<pre>{
+  "presubmit": [
+    {
+      "name": "MyTestModule"
+    },
+    {
+      "imports": [
+        {
+          "path": "frameworks/base/services/core"
+        }
+      ]
+    }
+  ],
+  "postsubmit": [
+    {
+      "imports": [
+        {
+          "path": "frameworks/base/services/accessibility"
+        }
+      ]
+    }
+  ]
+}
+</pre>
+<aside class="note"><strong>Note:</strong><span> An entry inside a test group that specifies <code translate="no" dir="ltr">imports</code> can't contain a <code translate="no" dir="ltr">name</code> attribute.</span></aside> <p>The <code translate="no" dir="ltr">options</code> attribute contains additional Tradefed command line options.</p> <p>To get a complete list of available options for a given test, run:</p> 
+<pre>
+tradefed.sh run commandAndExit [test_module] --help
+</pre> <p>Refer to <a href="../tradefed/fundamentals/options">Option handling in Tradefed</a> for more details about how options work.</p> <h2 id="test-mapping-validations">TEST_MAPPING validations</h2> <p>When submitting changes that modify <code translate="no" dir="ltr">TEST_MAPPING</code> files, presubmit checks run to ensure correctness:</p> <ul> <li>
+<strong>File patterns validation:</strong> Ensures all regular expressions in <code translate="no" dir="ltr">file_patterns</code> match at least one file in the repository. Stale patterns that don't match any files cause the check to fail.</li> <li>
+<strong>Build-time validation:</strong> Promotes build-time validation warnings that the build collects to blocking errors in presubmit for main branches. Common warnings include: <ul> <li>
+<strong>Nonexistent modules:</strong> Referencing a test module name that doesn't exist in the codebase, such as when the name has a typo.</li> <li>
+<strong>Invalid imports:</strong> Reference paths in <code translate="no" dir="ltr">imports</code> that don't exist or don't contain a <code translate="no" dir="ltr">TEST_MAPPING</code> file.</li> <li>
+<strong>Schema issues:</strong> Using unsupported keys or malformed structures in the JSON configuration.</li> </ul>
+</li> </ul> <h2 id="run-with-atest">Run tests with Atest</h2> <p>To execute the presubmit test rules locally:</p> <ol> <li>Go to the directory containing the <code translate="no" dir="ltr">TEST_MAPPING</code> file.</li> <li>
+<p>Run the command:</p> 
+<pre>
+atest
+</pre>
+</li> </ol> <p>All presubmit tests configured in the <code translate="no" dir="ltr">TEST_MAPPING</code> files of the current directory and its parent directories are run. Atest locates and runs two tests for presubmit (A and B).</p> <p>This is the most straightforward way to run presubmit tests in <code translate="no" dir="ltr">TEST_MAPPING</code> files in the current working directory (CWD) and parent directories. Atest locates and uses the <code translate="no" dir="ltr">TEST_MAPPING</code> file in CWD and all of its parent directories.</p> <h3 id="structure">Structure source code</h3> <p>This example shows how you can configure <code translate="no" dir="ltr">TEST_MAPPING</code> files across the source tree:</p> 
+<pre>src
+├── project_1
+│   └── TEST_MAPPING
+├── project_2
+│   └── TEST_MAPPING
+└── TEST_MAPPING
+</pre> <p>Content of <code translate="no" dir="ltr">src/TEST_MAPPING</code>:</p> 
+<pre>{
+  "presubmit": [
+    {
+      "name": "A"
+    }
+  ]
+}
+</pre> <p>Content of <code translate="no" dir="ltr">src/project_1/TEST_MAPPING</code>:</p> 
+<pre>{
+  "presubmit": [
+    {
+      "name": "B"
+    }
+  ],
+  "postsubmit": [
+    {
+      "name": "C"
+    }
+  ],
+  "other_group": [
+    {
+      "name": "X"
+    }
+  ]}
+</pre> <p>Content of <code translate="no" dir="ltr">src/project_2/TEST_MAPPING</code>:</p> 
+<pre>{
+  "presubmit": [
+    {
+      "name": "D"
+    }
+  ],
+  "import": [
+    {
+      "path": "src/project_1"
+    }
+  ]}
+</pre> <h3 id="target-dirs">Specify target directories</h3> <p>You can specify a target directory to run tests in <code translate="no" dir="ltr">TEST_MAPPING</code> files in that directory. The following command runs two tests (A, B):</p> 
+<pre>
+atest --test-mapping src/project_1
+</pre> <h3 id="postsubmit-rules">Run postsubmit test rules</h3> <p>You can also use this command to run the postsubmit test rules defined in <code translate="no" dir="ltr">TEST_MAPPING</code> in <code translate="no" dir="ltr">src_path</code> (default to CWD) and its parent directories:</p> 
+<pre>
+atest [--test-mapping] [src_path]:postsubmit
+</pre> <h3 id="no-device">Run only tests that require no device</h3> <p>You can use the option <code translate="no" dir="ltr">--host</code> for Atest to run only those tests configured against the host that requires no device. Without this option, Atest runs both tests, those that require a device and those running on a host that requires no device. The tests are run in two separate suites:</p> 
+<pre>
+atest [--test-mapping] --host
+</pre> <h3 id="identify-groups">Identify test groups</h3> <p>You can specify test groups in the Atest command. The following command runs all <code translate="no" dir="ltr">postsubmit</code> tests related to files in the <code translate="no" dir="ltr">src/project_1</code> directory, which contains only one test (C).</p> <p>Or you can use <code translate="no" dir="ltr">:all</code> to run all tests regardless of group. The following command runs four tests (A, B, C, X):</p> 
+<pre>
+atest --test-mapping src/project_1:all
+</pre> <h3 id="include-subdirs">Include subdirectories</h3> <p>By default, running tests in <code translate="no" dir="ltr">TEST_MAPPING</code> with Atest runs only presubmit tests configured in the <code translate="no" dir="ltr">TEST_MAPPING</code> file in CWD (or given directory) and its parent directories. If you want to run tests in all <code translate="no" dir="ltr">TEST_MAPPING</code> files in the subdirectories, use the option <code translate="no" dir="ltr">--include-subdir</code> to force Atest to include those tests, too.</p> 
+<pre>
+atest --include-subdir
+</pre> <p>Without the <code translate="no" dir="ltr">--include-subdir</code> option, Atest runs only test A. With the <code translate="no" dir="ltr">--include-subdir</code> option, Atest runs two tests (A, B).</p> <h3 id="line-level-comment">Line-level comment supported</h3> <p>You can add a line-level <code translate="no" dir="ltr">//</code> format comment to flesh out the <code translate="no" dir="ltr">TEST_MAPPING</code> file with a description of the setting that follows. <a href="https://source.android.com/compatibility/tests/development/atest">ATest</a> and Trade Federation preprocess <code translate="no" dir="ltr">TEST_MAPPING</code> to a valid JSON format without comments. To keep the JSON file clean, only the line-level <code translate="no" dir="ltr">//</code> format comment is supported.</p> <p>Example:</p> 
+<pre>{
+  // For presubmit test group.
+  "presubmit": [
+    {
+      // Run test on module A.
+      "name": "A"
+    }
+  ]
+}
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/development/test-mapping" class="_attribution-link">https://source.android.com/docs/core/tests/development/test-mapping</a>
+  </p>
+</div>

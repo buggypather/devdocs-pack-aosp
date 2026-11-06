@@ -1,0 +1,28 @@
+<h1>Java protobuf descriptor generator tool</h1>  <aside class="tip"><strong>Tip:</strong><span> This tool is required only for Java code, because the on-device Java protobuf library doesn't support reflection. Other languages, such as Rust, can use their respective protobuf library's built-in reflection capabilities instead.</span></aside> <p>To register a Java-based publisher to the <a href="../configurable_publisher_registry">Configurable Publisher Registry</a>, you must provide a serialized protobuf <code translate="no" dir="ltr">FileDescriptorSet</code> containing the definition of the published protobuf message. For more information, see <a href="https://protobuf.dev/programming-guides/techniques/#self-description">Self-describing Messages</a>. However, on-device, only the "lite" version of the Java protobuf library is available, which lacks the necessary protobuf reflection capabilities.</p> <p>To solve this, you can use the Java protobuf descriptor generator tool described on this page to generate the necessary metadata at build time. The tool is a binary you can either build and run manually, or use automatically as part of your Android build.</p> <p>This tool generates a minimal Java class containing the serialized <code translate="no" dir="ltr">FileDescriptorSet</code> representing a protobuf file (with a <code translate="no" dir="ltr">.proto</code> extension) and its dependencies. We recommend integrating it into your build using a <code translate="no" dir="ltr">genrule</code> in <code translate="no" dir="ltr">Android.bp</code>. The following example shows how to generate an <code translate="no" dir="ltr">Example.java</code> file containing a serialized <code translate="no" dir="ltr">FileDescriptorSet</code> from an <code translate="no" dir="ltr">Example.proto</code> file:</p> 
+<pre>genrule {
+    name: "example_descriptors_gen",
+    tools: ["sdv_telemetry_sdk_descriptor_generator_java"],
+    srcs: ["Example.proto"],
+    out: ["Example.java"],
+    cmd: "$(location sdv_telemetry_sdk_descriptor_generator_java) " +
+        "--proto_file $(location Example.proto) " +
+        "--proto_path $$(dirname $(location Example.proto)) " +
+        "--message_full_name com.example.ExampleMessage " +
+        "--output_file $(out) " +
+        "--output_package com.example " +
+        "--output_class Example "
+}
+
+java_library {
+    name: "example_descriptors_lib",
+    srcs: [":example_descriptors_gen"],
+}
+</pre> <p>You can include the resulting <code translate="no" dir="ltr">java_library</code> in your app and use it in conjunction with the <a href="configurable_publisher_registry">Configurable Publisher Registry library</a> of the Telemetry SDK to register your publisher.</p> <p>You can also build and run the tool manually:</p> 
+<pre>mm sdv_telemetry_sdk_descriptor_generator_java     # Build
+sdv_telemetry_sdk_descriptor_generator_java --help # Run
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/telemetry/sdk/descriptor_generator" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/telemetry/sdk/descriptor_generator</a>
+  </p>
+</div>

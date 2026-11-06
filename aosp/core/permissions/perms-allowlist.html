@@ -1,0 +1,36 @@
+<h1>Privileged permission allowlist</h1>  <p>Privileged apps are system apps located in a <code translate="no" dir="ltr">priv-app</code> directory on a system image partition. The partitions used for Android releases are:</p> <ul> <li>Android 9 and higher: <code translate="no" dir="ltr">/system, /product, /vendor</code>
+</li> <li>Android 8.1 and lower: <code translate="no" dir="ltr">/system</code>
+</li> </ul> <aside class="note"> <strong>Note:</strong> On this page, <code translate="no" dir="ltr">/etc/permissions</code> resolves to <code translate="no" dir="ltr"><var translate="no">partition</var>/etc/permissions</code>.</aside> <p>Historically, device manufacturers had little control over which <strong>signature | privileged</strong> permissions could be granted to privileged apps. Starting in Android 8.0, manufacturers can explicitly grant privileged permissions in the system configuration XML files in the <code translate="no" dir="ltr">/etc/permissions</code> directory. As of Android 9, implementors can explicitly grant or deny all privileged permissions. If privileged permissions are not granted, the device won't boot. </p> <p>The <code translate="no" dir="ltr">privapp-permissions.xml</code> file can only grant or deny permissions for privileged apps on the same partition. For example, if an app on the <code translate="no" dir="ltr">/product</code> partition requests privileged permissions, the request can only be granted or denied by a <code translate="no" dir="ltr">privapp-permissions.xml</code> file on <code translate="no" dir="ltr">/product</code>. </p> <aside class="note"> <strong>Note: </strong>Permissions defined by the core platform (the <code translate="no" dir="ltr">android</code> package) and <code translate="no" dir="ltr">CarService</code> (<code translate="no" dir="ltr">com.android.car.updatable</code>) must be allowlisted. Privileged permissions defined by device manufacturers are automatically granted. Only list apps in the <code translate="no" dir="ltr">privapp-permissions.xml</code> file that actually exist on the partition. When an app isn't on the partition, the entry is ignored. Privileged apps on the <code translate="no" dir="ltr">/vendor</code> partition can only have privileged permissions whose protection level is set to <code translate="no" dir="ltr">vendorPrivileged</code>. </aside> <h2 id="adding-allowlists">Add an allowlist</h2> <p> Permission allowlists for apps can be listed in a single XML file or in multiple XML files located in the <code translate="no" dir="ltr">/etc/permissions</code> directory: </p> <ul> <li>
+<code translate="no" dir="ltr">/etc/permissions/privapp-permissions-<var translate="no">OEM_NAME</var>.xml</code> </li>
+<li>
+<code translate="no" dir="ltr">/etc/permissions/privapp-permissions-<var translate="no">DEVICE_NAME</var>.xml</code> </li>
+</ul> <p>No strict rule applies to how content is organized. Device implementers can determine content structure as long as all apps from <code translate="no" dir="ltr">/system/priv-app</code> are allowlisted. For example, Google has developed a single allowlist for all privileged apps. We recommend the following organization: </p> <ul> <li>Permissions for apps already included in the <a href="https://cs.android.com/android/platform/superproject/main">Android Open Source Project (AOSP)</a> tree are listed in <code translate="no" dir="ltr">/etc/permissions/privapp-permissions-platform.xml</code>.</li> <li>For other apps, use files of the form, <code translate="no" dir="ltr">/etc/permissions/privapp-permissions-<var translate="no">DEVICE_NAME</var>.xml</code>. </li> </ul> <h3 id="customizing-allowlists">Customize an allowlist</h3> <p> AOSP includes an allowlist implementation that can be customized as needed. </p> <p> If a permission must be denied, edit the XML to use a <code translate="no" dir="ltr">deny-permission</code> tag instead of a <code translate="no" dir="ltr">permission</code>tag. For example: </p> 
+<pre>&lt;!-- This XML file declares which signature|privileged permissions to grant to
+privileged apps that come with the platform --&gt;
+
+    &lt;permissions&gt;
+      &lt;privapp-permissions package="com.android.backupconfirm"&gt;
+        &lt;permission name="android.permission.BACKUP"/&gt;
+        &lt;permission name="android.permission.CRYPT_KEEPER"/&gt;
+      &lt;/privapp-permissions&gt;
+
+      &lt;privapp-permissions package="com.android.cellbroadcastreceiver"&gt;
+
+        &lt;!-- Don't allow the application to interact across users --&gt;
+
+        &lt;deny-permission name="android.permission.INTERACT_ACROSS_USERS"/&gt;
+        &lt;permission name="android.permission.MANAGE_USERS"/&gt;
+        &lt;permission name="android.permission.MODIFY_PHONE_STATE"/&gt;
+        &lt;permission name="android.permission.READ_PRIVILEGED_PHONE_STATE"/&gt;
+        &lt;permission name="android.permission.RECEIVE_EMERGENCY_BROADCAST"/&gt;
+      &lt;/privapp-permissions&gt;
+    ...</pre> <h3 id="finding-missing-permissions">Find missing permissions</h3> <p> To find missing permissions when starting a new device, enable transitional log mode: </p> 
+<pre>ro.control_privapp_permissions=log</pre> <p> Violations are reported in the log file. Non-privileged permissions are granted. Doing so ensures the device remains in a working state while still providing the list of violations. The error message format is as follows: </p> 
+<pre>
+PackageManager: Privileged permission {PERMISSION_NAME} for package {PACKAGE_NAME} - not in privapp-permissions allowlist
+</pre> <p> All violations must be addressed by adding the missing permissions to the appropriate allowlists. Note that in: </p> <ul> <li>Android 9 and higher, violations of privileged permissions prevent the device from starting. Instead, you must explicitly allow or deny all privileged permissions. </li> <li>Android 8.0 and lower, missing permissions are not granted to the affected apps despite being in the <code translate="no" dir="ltr">priv-app</code> path. </li> </ul> <h2 id="enforcing-allowlists">Enforce an allowlist</h2> <p> After you create your allowlists, enable runtime enforcement by setting the build property <code translate="no" dir="ltr">ro.control_privapp_permissions=enforce</code>. </p> <p> Allowlisting is required only for permissions declared by apps with <code translate="no" dir="ltr">package="android"</code>. The <code translate="no" dir="ltr">ro.control_privapp_permissions</code> property state must adhere to <a href="../../compatibility/14/android-14-cdd#91_permissions">Section 9.1 Permissions</a> in the Compatibility Definition Document (CDD). </p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/permissions/perms-allowlist" class="_attribution-link">https://source.android.com/docs/core/permissions/perms-allowlist</a>
+  </p>
+</div>

@@ -1,0 +1,11 @@
+<h1>Integrate the Car UI library into apps</h1>  <p>Car UI library contains two elements for apps to implement:</p> <ul> <li> <p><strong>Components. </strong>Java classes that implement a specific behavior. For example, CarUiRecyclerView and Toolbar.</p> </li> <li> <p><strong>Resources. </strong>Individual Android resources that represent the <em>knobs</em> available for OEMs to achieve consistency with their own design. The components above use these resources to become <em>customizable</em>.</p> </li> </ul> <p>Apps integrate Car UI library by adding it as a dependency:</p> <ul> <li> <p>Android 9 and Android 10 (<code translate="no" dir="ltr">Android.mk</code> file), add the following:</p> 
+<pre>LOCAL_STATIC_ANDROID_LIBRARIES := car-ui-lib</pre> </li> <li> <p>Android 11 (and higher) (<code translate="no" dir="ltr">Android.bp</code>), add the following:</p> 
+<pre>static_libs: [
+            ...
+    "car-ui-lib-bp",
+    ]</pre> </li> </ul> <h2 id="styling">Style Car UI components</h2> <p>In general, apps should be able to achieve all necessary functionality by providing data and, in certain cases, images and icons. For example, standard icons such as Back, Close, Search, and Menu are provided by the Car UI library. Engage with Android Automotive Partner Engineering if you find there are missing resources or if there is functionality that can't be achieved with the provided components.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/hmi/car_ui/integrate" class="_attribution-link">https://source.android.com/docs/automotive/hmi/car_ui/integrate</a>
+  </p>
+</div>

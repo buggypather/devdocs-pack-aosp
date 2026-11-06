@@ -1,0 +1,194 @@
+<h1>Implement a pKVM vendor module</h1>  <p>This page explains how to implement a protected kernel-based virtual machine (pKVM) vendor module.</p> <p>For android16-6.12 and later, when you are done with these steps, you should have a directory tree similar to:</p> 
+<pre>BUILD.bazel
+el1.c
+hyp/
+    BUILD.bazel
+    el2.c
+</pre> <p>For a complete example, see <a href="https://android.googlesource.com/kernel/build/+/refs/heads/main-kernel/kleaf/tests/ddk_examples/pkvm/README.md">Build a pKVM module with DDK</a> .</p> <p>For android15-6.6 and earlier:</p> 
+<pre>Makefile
+el1.c
+hyp/
+    Makefile
+    el2.c
+</pre> <ol> <li>
+<p>Add the EL2 hypervisor code (<code translate="no" dir="ltr">el2.c</code>). At a minimum, this code must declare an init function accepting a reference to the <code translate="no" dir="ltr">pkvm_module_ops</code> struct:</p> 
+<pre>#include &lt;asm/kvm_pkvm_module.h&gt;
+
+int pkvm_driver_hyp_init(const struct pkvm_module_ops *ops)
+{
+  /* Init the EL2 code */
+
+  return 0;
+}
+</pre> <p>The pKVM vendor module API is a struct encapsulating callbacks to the pKVM hypervisor. This struct follows the same ABI rules as GKI interfaces.</p> <aside class="note"><strong>Note:</strong><span> Unlike the kernel, no symbol is exported and all calls to the hypervisor must happen through the callbacks in the struct <a href="https://android.googlesource.com/kernel/common/+/refs/heads/android14-6.1/arch/arm64/include/asm/kvm_pkvm_module.h#19" title="kvm_pkvm_module.h">pkvm_module_ops</a>.</span></aside>
+</li> <li>
+<p>Create the <code translate="no" dir="ltr">hyp/Makefile</code> to build the hypervisor code:</p> 
+<pre>hyp-obj-y := el2.o
+include $(srctree)/arch/arm64/kvm/hyp/nvhe/Makefile.module
+</pre>
+</li> <li>
+<p>Add the EL1 kernel code (<code translate="no" dir="ltr">el1.c</code>). This code's init section must contain a call to <code translate="no" dir="ltr">pkvm_load_el2 module</code> to load the EL2 hypervisor code from step 1.</p> 
+<pre>#include &lt;linux/init.h&gt;
+#include &lt;linux/module.h&gt;
+#include &lt;linux/kernel.h&gt;
+#include &lt;asm/kvm_pkvm_module.h&gt;
+
+int __kvm_nvhe_pkvm_driver_hyp_init(const struct pkvm_module_ops *ops);
+
+static int __init pkvm_driver_init(void)
+{
+    unsigned long token;
+
+    return pkvm_load_el2_module(__kvm_nvhe_pkvm_driver_hyp_init, &amp;token);
+}
+module_init(pkvm_driver_init);
+</pre>
+<aside class="note"><strong>Note:</strong><span> <code translate="no" dir="ltr">__kvm_nvhe_pkvm_driver_hyp_init</code> is a pointer to the EL2 init function in the EL2 hypervisor code (step 1).</span></aside>
+</li> <li>
+<p>Create the build rules.</p> <p>For android16-6.12 and later, refer to <a href="https://android.googlesource.com/kernel/build/+/refs/heads/main-kernel/kleaf/tests/ddk_examples/pkvm/README.md">Build a pKVM module with DDK</a> to create <code translate="no" dir="ltr">ddk_library()</code> for EL2 and <code translate="no" dir="ltr">ddk_module()</code> for EL1.</p> <p>For android15-6.6 and earlier, create the root makefile to tie the EL1 and EL2 code together:</p> 
+<pre>ifneq ($(KERNELRELEASE),)
+clean-files := hyp/hyp.lds hyp/hyp-reloc.S
+
+obj-m := pkvm_module.o
+pkvm_module-y := el1.o hyp/kvm_nvhe.o
+
+$(PWD)/hyp/kvm_nvhe.o: FORCE
+         $(Q)$(MAKE) $(build)=$(obj)/hyp $(obj)/hyp/kvm_nvhe.o
+else
+all:
+        make -C $(KDIR) M=$(PWD) modules
+clean:
+        make -C $(KDIR) M=$(PWD) clean
+endif
+</pre>
+</li> </ol> <h2 id="load-pkvm-module">Load a pKVM module</h2> <p>As with GKI vendor modules, pKVM vendor modules can be loaded using modprobe. However, for security reasons, loading must occur before deprivileging. To load a pKVM module, you must ensure your modules are included in the root filesystem (<code translate="no" dir="ltr">initramfs</code>) and you must add the following to your kernel command-line:</p> <p><code class="devsite-terminal" translate="no" dir="ltr">kvm-arm.protected_modules=<var translate="no">mod1</var>,<var translate="no">mod2</var>,<var translate="no">mod3</var>,<var translate="no">...</var></code></p> <p>pKVM vendor modules stored in the <code translate="no" dir="ltr">initramfs</code> inherit the signature and protection of <code translate="no" dir="ltr">initramfs</code>.</p> <p>If one of the pKVM vendor modules fails to load, the system is considered insecure and it won't be possible to start a protected virtual machine.</p> <h2 id="implement-hvc">Call an EL2 (hypervisor) function from EL1 (kernel module)</h2> <p>A <em>hypervisor call (HVC)</em> is an instruction that lets the kernel to call the hypervisor. With the introduction of pKVM vendor modules, an HVC can be used to call for a function to run at EL2 (in the hypervisor module) from EL1 (the kernel module):</p> <ol> <li>In the EL2 code (<code translate="no" dir="ltr">el2.c</code>), declare the EL2 handler:</li> </ol> <p><strong>Android 14</strong></p> 
+<pre>   void pkvm_driver_hyp_hvc(struct kvm_cpu_context *ctx)
+   {
+     /* Handle the call */
+
+     cpu_reg(ctx, 1) = 0;
+   }
+</pre> <p><strong>Android 15 or higher</strong></p> 
+<pre>   void pkvm_driver_hyp_hvc(struct user_pt_regs *regs)
+   {
+     /* Handle the call */
+
+     regs-&gt;regs[0] = SMCCC_RET_SUCCESS;
+     regs-&gt;regs[1] = 0;
+   }
+</pre>
+<aside class="note"><strong>Note:</strong><span> EL2 code is nonpreemptable. This section must therefore be as short as possible.</span></aside> <ol> <li>
+<p>In your EL1 code (<code translate="no" dir="ltr">el1.c</code>), register the EL2 handler in your pKVM vendor module:</p> 
+<pre>int __kvm_nvhe_pkvm_driver_hyp_init(const struct pkvm_module_ops *ops);
+void __kvm_nvhe_pkvm_driver_hyp_hvc(struct kvm_cpu_context *ctx); // Android14
+void __kvm_nvhe_pkvm_driver_hyp_hvc(struct user_pt_regs *regs);   // Android15
+
+static int hvc_number;
+
+static int __init pkvm_driver_init(void)
+{
+  long token;
+  int ret;
+
+  ret = pkvm_load_el2_module(__kvm_nvhe_pkvm_driver_hyp_init,token);
+  if (ret)
+    return ret;
+
+  ret = pkvm_register_el2_mod_call(__kvm_nvhe_pkvm_driver_hyp_hvc, token)
+  if (ret &lt; 0)
+    return ret;
+
+  hvc_number = ret;
+
+  return 0;
+}
+module_init(pkvm_driver_init);
+</pre>
+</li> <li>
+<p>In your EL1 code (<code translate="no" dir="ltr">el1.c</code>), call the HVC:</p> 
+<pre>pkvm_el2_mod_call(hvc_number);
+</pre>
+</li> </ol> <h2 id="debug-profile-el2">Debug and profile EL2 code</h2> <p>This section contains several options to debug pKVM module EL2 code.</p> <h3 id="emit-read-events">Emit and read hypervisor trace events</h3> <p>Tracefs supports the pKVM hypervisor. The root user has access to the interface, which is located in <code translate="no" dir="ltr">/sys/kernel/tracing/hypervisor/</code>:</p> <ul> <li>
+<code translate="no" dir="ltr">tracing_on</code>: Turns on or off the tracing.</li> <li>
+<code translate="no" dir="ltr">trace</code>: Writing to this file resets the trace.</li> <li>
+<code translate="no" dir="ltr">trace_pipe</code>: Reading this file prints the hypervisor events.</li> <li>
+<code translate="no" dir="ltr">buffer_size_kb</code>: The size of the per-CPU buffer holding events. Increase this value if events are lost.</li> </ul> <p>By default, events are turned off. To enable events use the corresponding <code translate="no" dir="ltr">/sys/kernel/tracing/hypervisor/events/my_event/enable</code> file in Tracefs. You can also enable any hypervisor event at boot time with the kernel command-line of <code translate="no" dir="ltr">hyp_event=<var translate="no">event1</var>,<var translate="no">event2</var></code>.</p> <p>Before declaring an event, the EL2 code of the module must declare the following boilerplate, where <code translate="no" dir="ltr">pkvm_ops</code> is the <code translate="no" dir="ltr">struct pkvm_module_ops *</code> passed to the module <code translate="no" dir="ltr">init</code> function:</p> 
+<pre>  #include "events.h"
+  #define HYP_EVENT_FILE ../../../../relative/path/to/hyp/events.h
+  #include &lt;nvhe/define_events.h&gt;
+
+  #ifdef CONFIG_TRACING
+  void *tracing_reserve_entry(unsigned long length)
+  {
+      return pkvm_ops-&gt;tracing_reserve_entry(length);
+  }
+
+  void tracing_commit_entry(void)
+  {
+      pkvm_ops-&gt;tracing_commit_entry();
+  }
+  #endif
+</pre> <h4 id="declare-events">Declare events</h4> <p>Declare events in their own <code translate="no" dir="ltr">.h</code> file:</p> 
+<pre>  $ cat hyp/events.h
+  #if !defined(__PKVM_DRIVER_HYPEVENTS_H_) || defined(HYP_EVENT_MULTI_READ)
+  #define __PKVM_DRIVER_HYPEVENTS_H_
+
+  #ifdef __KVM_NVHE_HYPERVISOR__
+  #include &lt;nvhe/trace.h&gt;
+  #endif
+
+  HYP_EVENT(pkvm_driver_event,
+          HE_PROTO(u64 id),
+          HE_STRUCT(
+                  he_field(u64, id)
+          ),
+          HE_ASSIGN(
+                  __entry-&gt;id = id;
+          ),
+          HE_PRINTK("id=0x%08llx", __entry-&gt;id)
+  );
+  #endif
+</pre>
+<aside class="note"><strong>Note:</strong><span> If events are disabled, it has no impact on performance. Events can be safely declared in production code.</span></aside> <h4 id="emit-events">Emit events</h4> <p>You can log events in EL2 code by calling the generated C function:</p> 
+<pre>  trace_pkvm_driver_event(id);
+</pre>
+<aside class="note"><strong>Note:</strong><span> Being readable from the host, events must not contain any hypervisor secret.</span></aside> <h4 id="android-15-notes">Add additional registration (Android 15 or lower)</h4> <p>For Android 15 and lower, include an additional registration during the module initialization. This isn't required in Android 16 and higher.</p> 
+<pre>  #ifdef CONFIG_TRACING
+  extern char __hyp_event_ids_start[];
+  extern char __hyp_event_ids_end[];
+  #endif
+
+  int pkvm_driver_hyp_init(const struct pkvm_module_ops *ops)
+  {
+  #ifdef CONFIG_TRACING
+      ops-&gt;register_hyp_event_ids((unsigned long)__hyp_event_ids_start,
+                                        (unsigned long)__hyp_event_ids_end);
+  #endif
+
+      /* init module ... */
+
+      return 0;
+  }
+</pre> <h3 id="trace-hyp-printk">Emit events without prior declaration (Android 16 and higher)</h3> <p>Declaring events can be cumbersome for quick debugging. <code translate="no" dir="ltr">trace_hyp_printk()</code> lets the caller pass up to four arguments to a format string without any event declaration:</p> 
+<pre>  trace_hyp_printk("This is my debug");
+  trace_hyp_printk("This is my variable: %d", (int)foo);
+  trace_hyp_printk("This is my address: 0x%llx", phys);
+</pre>
+<aside class="note"><strong>Note:</strong><span> The format specifier <code translate="no" dir="ltr">%s</code> isn't permitted.</span></aside> <p>A boilerplate in the EL2 code is also required. <code translate="no" dir="ltr">trace_hyp_printk()</code> is a macro that calls the function <code translate="no" dir="ltr">trace___hyp_printk()</code>:</p> 
+<pre>  #include &lt;nvhe/trace.h&gt;
+
+  #ifdef CONFIG_TRACING
+  void trace___hyp_printk(u8 fmt_id, u64 a, u64 b, u64 c, u64 d)
+  {
+          pkvm_ops-&gt;tracing_mod_hyp_printk(fmt_id, a, b, c, d);
+  }
+  #endif
+</pre> <p>Enable the event <code translate="no" dir="ltr">__hyp_printk</code> in <code translate="no" dir="ltr">/sys/kernel/tracing/hypervisor/events/</code> or at boot time with the kernel command-line <code translate="no" dir="ltr">hyp_event=__hyp_printk</code>.</p> <aside class="note"><strong>Note:</strong><span> This isn't intended for production code.</span></aside> <h3 id="trace-to-dmesg">Redirect events to dmesg</h3> <p>The kernel command-line parameter <code translate="no" dir="ltr">hyp_trace_printk=1</code> makes the hypervisor tracing interface forward each logged event to the kernel's <code translate="no" dir="ltr">dmesg</code>. This is useful to read events when <code translate="no" dir="ltr">trace_pipe</code> is inaccessible.</p> <aside class="note"><strong>Note:</strong><span> Hypervisor events are polled from the kernel. They appear out of sync with the rest of the <code translate="no" dir="ltr">dmesg</code> logs.</span></aside> <h3 id="pkvm-dump-trace">Dump events during a kernel panic (Android 16 and higher)</h3> <p>Hypervisor events are polled. There is therefore a window betwen the last poll and a kernel panic where events have been emitted but not dumped to the console. The kernel config option <code translate="no" dir="ltr">CONFIG_PKVM_DUMP_TRACE_ON_PANIC</code> attempts to dump the most recent events in the console if <code translate="no" dir="ltr">hyp_trace_printk</code> has been enabled.</p> <p>This option is disabled by default for GKI.</p> <h3 id="ftrace">Use Ftrace to trace function call and return (Android 16 and higher)</h3> <p>Ftrace is a kernel feature that lets you trace each function call and return. In a similar fashion, the pKVM hypervisor offers two events <code translate="no" dir="ltr">func</code> and <code translate="no" dir="ltr">func_ret</code>.</p> <p>You can select the traced functions with the kernel command-line <code translate="no" dir="ltr">hyp_ftrace_filter=</code> or with one of the tracefs files:</p> <ul> <li><code translate="no" dir="ltr">/sys/kernel/tracing/hypervisor/set_ftrace_filter</code></li> <li><code translate="no" dir="ltr">/sys/kernel/tracing/hypervisor/set_ftrace_notrace</code></li> </ul> <p>Filters use shell-style glob matching.</p> <aside class="note"><strong>Note:</strong><span> If your function isn't listed, it has been optimized by the compiler.</span></aside> <p>The following filter traces the functions starting with <code translate="no" dir="ltr">pkvm_hyp_driver</code>:</p> 
+<pre>  echo "__kvm_nvhe_pkvm_hyp_driver*" &gt; /sys/kernel/tracing/hypervisor/set_ftrace_filter
+</pre>
+<aside class="note"><strong>Note:</strong><span> All hypervisor functions are prefixed with <code translate="no" dir="ltr">__kvm_nvhe_</code>.</span></aside> <p><code translate="no" dir="ltr">func</code> and <code translate="no" dir="ltr">func_ret</code> events are available only with <code translate="no" dir="ltr">CONFIG_PKVM_FTRACE=y</code>. This option is disabled by default for GKI.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/virtualization/pkvm-modules" class="_attribution-link">https://source.android.com/docs/core/virtualization/pkvm-modules</a>
+  </p>
+</div>

@@ -1,0 +1,46 @@
+<h1>Secure developer options</h1>  <p>Per the <a href="../../../compatibility/cdd">Android Compatibility Definition Document</a>, OEMs must provide a way to enable app development. However, providing mobile-like developer options within cars leaves those cars vulnerable to attack. Access to developer options can now be gated by an OEM using an authenticated cryptographic token mechanism. Specifically, an OEM can:</p> <ul> <li>Specify default restrictions before the first boot.</li> <li>Securely authorize developers, with crypto tokens if preferred.</li> <li>Apply restriction changes once a developer is both authenticated and authorized.</li> </ul> <p>This page describes a reference implementation consisting of a debugging restriction controller app and a remote token issuer endpoint.</p> <h2 id="terminology">Terminology</h2> <p>In addition to <a href="../../../automotive/start/terms">Terminology</a>, these terms are used on this page:</p> <ul> <li>JSON Web Signature (JWS), defined in RFC 7515</li> <li>National Institute of Standards and Technology (NIST)</li> </ul> <h2 id="design">Design</h2> <p>OEMs can authorize developers with JSON Web Signature (JWS) tokens (RFC7515). In the reference implementation, access tokens are issued by OEMs and consumed by the restriction controller app. Access tokens are designed to resist replay attacks and forged tokens.</p> <p><img src="https://source.android.com/static/docs/automotive/images/sdo_01.png" class="android-image-dark-theme-background" width="500px" alt text="Design"></p> <p><strong>Figure 1.</strong> Design</p> <h2 id="integration-and-configuration">Integration and configuration</h2> <p>OEMs must specify default restrictions on the first boot. OEMs do this with several static resource overlays to override the defaults in the AOSP framework.</p> <aside class="caution"> <p><strong>Important:</strong> We strongly recommend that OEMs configure <code translate="no" dir="ltr">no_debugging_features</code>, <code translate="no" dir="ltr">no_install_unknown_sources</code>, and <code translate="no" dir="ltr">no_install_unknown_sources_globally</code> by default across all user profiles on production builds to prevent unauthorized app sideloading and Android Debug Bridge (adb) debugging exposure.</p> </aside> <p>The default restrictions for the headless system user can be configured with the <code translate="no" dir="ltr">config_defaultFirstUserRestrictions</code> string in <code translate="no" dir="ltr">frameworks/base/core/res/res/values/config.xml</code>, for example:</p> 
+<pre>&lt;!-- User restrictions set when the first user is created.
+         Note: Also update appropriate overlay files. --&gt;
+    &lt;string-array translatable="false" name="config_defaultFirstUserRestrictions"&gt;
+        &lt;item&gt;no_debugging_features&lt;/item&gt;
+        &lt;item&gt;no_install_unknown_sources&lt;/item&gt;
+        &lt;item&gt;no_install_unknown_sources_globally&lt;/item&gt;
+    &lt;/string-array&gt;</pre> <p>The default restrictions for drivers, passengers, and guests can be configured in <code translate="no" dir="ltr">frameworks/base/core/res/res/xml/config_user_types.xml</code>. An OEM can overlay these strings to set the default restrictions on each type of user respectively, for example:</p> 
+<pre>&lt;user-types&gt;
+    &lt;full-type name="android.os.usertype.full.SECONDARY" &gt;
+        &lt;default-restrictions
+            no_debugging_features="true"
+            no_install_unknown_sources="true"/&gt;
+    &lt;/full-type&gt;
+    &lt;full-type name="android.os.usertype.full.GUEST" &gt;
+        &lt;default-restrictions
+            no_debugging_features="true"
+            no_install_unknown_sources="true"/&gt;
+    &lt;/full-type&gt;
+&lt;/user-types&gt;</pre> <h3 id="build-number-preference-controller">Build number preference controller</h3> <p>In AAOS, user interaction with the <strong>Build Number</strong> preference row in Settings is handled by <code translate="no" dir="ltr">BuildNumberPreferenceController.java</code> located in <code translate="no" dir="ltr">packages/apps/Car/Settings/src/com/android/car/settings/system/BuildNumberPreferenceController.java</code>.</p> <p>When the <code translate="no" dir="ltr">no_debugging_features</code> (<code translate="no" dir="ltr">UserManager.DISALLOW_DEBUGGING_FEATURES</code>) user restriction is set, <code translate="no" dir="ltr">BuildNumberPreferenceController</code> suppresses the developer countdown on production (<code translate="no" dir="ltr">user</code>) builds when tapped:</p> 
+<pre>@Override
+protected boolean handlePreferenceClicked(Preference preference) {
+    if (DevelopmentSettingsUtil.isDevelopmentSettingsEnabled(getContext())) {
+        return true;
+    }
+
+    // Enforce restriction on production (user) builds
+    if (Build.IS_USER &amp;&amp; mUserManager.hasUserRestriction(UserManager.DISALLOW_DEBUGGING_FEATURES)) {
+        showToast(R.string.dev_access_blocked_toast);
+        return true;
+    }
+
+    mDevHitCountdown--;
+    if (mDevHitCountdown == 0) {
+        DevelopmentSettingsUtil.setDevelopmentSettingsEnabled(getContext(), true);
+        showToast(R.string.show_dev_on);
+    }
+    return true;
+}</pre> <p>Using <code translate="no" dir="ltr">Build.IS_USER</code> ensures that production builds strictly enforce the security lockdown, while internal engineering teams on <code translate="no" dir="ltr">userdebug</code> builds can still access developer options using the 7-tap gesture for testing without manual command-line interface (CLI) overrides.</p> <h3 id="debugging-restriction-controller">Debugging Restriction Controller</h3> <p>A reference implementation of the Debugging Restriction Controller (DRC) is provided in AOSP at <code translate="no" dir="ltr">packages/apps/Car/DebuggingRestrictionController</code>.</p> <p>The DRC lets OEMs dynamically and temporarily lift the <code translate="no" dir="ltr">no_debugging_features</code> restriction on production vehicles for authorized service technicians and developers. Instead of leaving debugging tools permanently open or requiring firmware re-flashes, the in-vehicle DRC app prompts the user to authenticate with the OEM backend and submit a cryptographically signed access token to enable adb and Developer Options for a finite diagnostic session.</p> <p>The DRC reference implementation consists of two core components:</p> <ul> <li>
+<strong>In-vehicle DRC client app (<code translate="no" dir="ltr">app/</code>):</strong> A privileged system app (holding the <code translate="no" dir="ltr">MANAGE_USERS</code> permission) on the head unit that authenticates developers, validates the X.509 certificate signature, hostname, nonce, and expiration of incoming JWS tokens, and dynamically toggles the <code translate="no" dir="ltr">no_debugging_features</code> restriction using <code translate="no" dir="ltr">UserManager</code>.</li> <li>
+<strong>Cloud Token Issuer (<code translate="no" dir="ltr">server/</code>):</strong> A backend web service (deployable as Firebase Cloud Functions) that authenticates developer credentials and issues cryptographically signed RS256 JWS access tokens with a finite expiration window.</li> </ul> <p>For complete setup instructions, certificate generation tooling, and deployment steps, see the <a href="../../../automotive/security/drc">Debugging Restriction Controller integration guide</a>.</p> <h2 id="testing">Testing</h2> <p>Google recommends that OEMs start with the reference implementation and build out from there.</p> <ol> <li>After configuring the restrictions in the overlay files, compile AAOS and validate the defined flows. Use the reference app and local JWS-enabled service to verify your access settings.</li> <li>Optional: Configure the system to use your JWS-enabled cloud service. Verify you're observing the expected flow on your backend service.</li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/devices/automotive/security/secure_dev_options" class="_attribution-link">https://source.android.com/docs/devices/automotive/security/secure_dev_options</a>
+  </p>
+</div>

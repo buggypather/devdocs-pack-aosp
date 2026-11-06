@@ -1,0 +1,371 @@
+<h1>Implement eSIM</h1>  <p>Embedded SIM (eSIM, or eUICC) technology allows mobile users to download a carrier profile and activate a carrier's service without having a physical SIM card. It's a global specification driven by the GSMA that enables remote SIM provisioning (RSP) of any mobile device. Starting with Android 9, the Android framework provides standard APIs for accessing eSIM and managing subscription profiles on the eSIM. These <em>eUICC APIs</em> enable third parties to develop their own carrier apps and local profile assistants (LPAs) on eSIM-enabled Android devices.</p> <p>The LPA is a standalone, system app that should be included in the Android build image. Management of the profiles on the eSIM is generally done by the LPA, as it serves as a bridge between the SM-DP+ (remote service that prepares, stores, and delivers profile packages to devices) and the eUICC chip. The LPA APK can optionally include a UI component, called the LPA UI or LUI, to provide a central place for the end user to manage all embedded subscription profiles. The Android framework automatically discovers and connects to the best available LPA, and routes all the eUICC operations through an LPA instance.</p> <p><img src="https://source.android.com/static/docs/core/connect/images/rsp-architecture.png" alt="Simplified Remote SIM Provisioning (RSP) architecture" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> Simplified RSP architecture</p> <p>Mobile network operators interested in creating a <em>carrier app</em> should look at the APIs in <a href="https://developer.android.com/reference/android/telephony/euicc/EuiccManager"><code translate="no" dir="ltr">EuiccManager</code></a>, which provides high-level profile management operations such as <code translate="no" dir="ltr">downloadSubscription()</code>, <code translate="no" dir="ltr">switchToSubscription()</code>, and <code translate="no" dir="ltr">deleteSubscription()</code>.</p> <p>If you're a device OEM interested in creating your own LPA system app, you must extend <a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/telephony/java/android/service/euicc/EuiccService.java"><code translate="no" dir="ltr">EuiccService</code></a> for the Android framework to connect to your LPA services. In addition, you should use the APIs in <a href="https://android.googlesource.com/platform/frameworks/base/+/android17-release/telephony/java/android/telephony/euicc/EuiccCardManager.java"><code translate="no" dir="ltr">EuiccCardManager</code></a>, which provide ES10x functions based on GSMA RSP v2.0. These functions are used to issue commands to the eUICC chip, such as <code translate="no" dir="ltr">prepareDownload()</code>, <code translate="no" dir="ltr">loadBoundProfilePackage()</code>, <code translate="no" dir="ltr">retrieveNotificationList()</code>, and <code translate="no" dir="ltr">resetMemory()</code>.</p> <p>The APIs in <a href="https://developer.android.com/reference/android/telephony/euicc/EuiccManager"><code translate="no" dir="ltr">EuiccManager</code></a> require a properly implemented LPA app to function and the caller of <a href="https://android.googlesource.com/platform/frameworks/base/+/android17-release/telephony/java/android/telephony/euicc/EuiccCardManager.java"><code translate="no" dir="ltr">EuiccCardManager</code></a> APIs must be an LPA. This is enforced by the Android framework.</p> <p>Devices running Android 10 or higher can support devices with multiple eSIMs. For more information, see <a href="#multi-esim">Supporting multiple eSIMs</a>.</p> <h2 id="make-carrier-app">Make a carrier app</h2> <p>The eUICC APIs in Android 9 make it possible for mobile network operators to create carrier-branded apps to manage their profiles directly. This includes downloading and deleting subscription profiles owned by the carrier, as well as switching to a profile owned by a carrier.</p> <h3 id="euicc-manager">EuiccManager</h3> <p><code translate="no" dir="ltr">EuiccManager</code> is the main entry point for apps to interact with the LPA. This includes carrier apps that download, delete, and switch to subscriptions owned by the carrier. This also includes the LUI system app, which provides a central location/UI for managing <em>all</em> embedded subscriptions, and can be a separate app from the one that provides the <code translate="no" dir="ltr">EuiccService</code>.</p> <p>To use the public APIs, a carrier app must first obtain the instance of <code translate="no" dir="ltr">EuiccManager</code> through <code translate="no" dir="ltr">Context#getSystemService</code>:</p> 
+<pre>EuiccManager mgr = (EuiccManager) context.getSystemService(Context.EUICC_SERVICE);
+</pre> <p>You should check whether eSIM is supported on the device before performing any eSIM operations. <code translate="no" dir="ltr">EuiccManager#isEnabled()</code> generally returns <code translate="no" dir="ltr">true</code> if the <code translate="no" dir="ltr">android.hardware.telephony.euicc</code> feature is defined and an LPA package is present.</p> 
+<pre>if (mgr == null || !mgr.isEnabled()) {
+    return;
+}
+</pre> <p>To get information about the eUICC hardware and the eSIM OS version:</p> 
+<pre>EuiccInfo info = mgr.getEuiccInfo();
+String osVer = info.getOsVersion();
+</pre> <p>Many APIs, such as <code translate="no" dir="ltr">downloadSubscription()</code> and <code translate="no" dir="ltr">switchToSubscription()</code>, use <code translate="no" dir="ltr">PendingIntent</code> callbacks as they may take seconds or even minutes to complete. <code translate="no" dir="ltr">PendingIntent</code> is sent with a result code in the <code translate="no" dir="ltr">EuiccManager#EMBEDDED_SUBSCRIPTION_RESULT_</code> space, which provides framework-defined error codes, as well as an arbitrary detailed result code propagated from the LPA as <code translate="no" dir="ltr">EXTRA_EMBEDDED_SUBSCRIPTION_DETAILED_CODE</code>, allowing the carrier app to track for logging/debugging purposes. The <code translate="no" dir="ltr">PendingIntent</code> callback must be <code translate="no" dir="ltr">BroadcastReceiver</code>.</p> <p>To download a given downloadable subscription (created from an <em>activation code</em> or a QR code):</p> 
+<pre>// Register receiver.
+static final String ACTION_DOWNLOAD_SUBSCRIPTION = "download_subscription";
+static final String LPA_DECLARED_PERMISSION
+    = "com.your.company.lpa.permission.BROADCAST";
+BroadcastReceiver receiver =
+        new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (!action.equals(intent.getAction())) {
+                    return;
+                }
+                resultCode = getResultCode();
+                detailedCode = intent.getIntExtra(
+                    EuiccManager.EXTRA_EMBEDDED_SUBSCRIPTION_DETAILED_CODE,
+                    0 /* defaultValue*/);
+
+                // If the result code is a resolvable error, call startResolutionActivity
+                if (resultCode == EuiccManager.EMBEDDED_SUBSCRIPTION_RESULT_RESOLVABLE_ERROR) {
+                    PendingIntent callbackIntent = PendingIntent.getBroadcast(
+                        getContext(), 0 /* requestCode */, intent,
+                        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE);
+                    mgr.startResolutionActivity(
+                        activity,
+                        0 /* requestCode */,
+                        intent,
+                        callbackIntent);
+                }
+
+                resultIntent = intent;
+            }
+        };
+context.registerReceiver(receiver,
+        new IntentFilter(ACTION_DOWNLOAD_SUBSCRIPTION),
+        LPA_DECLARED_PERMISSION /* broadcastPermission*/,
+        null /* handler */);
+
+// Download subscription asynchronously.
+DownloadableSubscription sub = DownloadableSubscription
+        .forActivationCode(code /* encodedActivationCode*/);
+Intent intent = new Intent(action).setPackage(context.getPackageName());
+PendingIntent callbackIntent = PendingIntent.getBroadcast(
+        getContext(), 0 /* requestCode */, intent,
+        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE);
+mgr.downloadSubscription(sub, true /* switchAfterDownload */,
+        callbackIntent);
+</pre>
+<aside class="note"><strong>Note:</strong><span> For apps targeting Android 14 and higher, mutable pending intents need to specify a component or package name. Otherwise, an exception is thrown. Check <a href="https://developer.android.com/about/versions/14/behavior-changes-14#safer-intents">Restrictions to implicit and pending intents</a> for more details.</span></aside> <p>Define and use the permission in <code translate="no" dir="ltr">AndroidManifest.xml</code>:</p> 
+<pre>    &lt;permission android:protectionLevel="signature" android:name="com.your.company.lpa.permission.BROADCAST" /&gt;
+    &lt;uses-permission android:name="com.your.company.lpa.permission.BROADCAST"/&gt;
+</pre> <p>To switch to a subscription given the subscription ID:</p> 
+<pre>// Register receiver.
+static final String ACTION_SWITCH_TO_SUBSCRIPTION = "switch_to_subscription";
+static final String LPA_DECLARED_PERMISSION
+    = "com.your.company.lpa.permission.BROADCAST";
+BroadcastReceiver receiver =
+        new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (!action.equals(intent.getAction())) {
+                    return;
+                }
+                resultCode = getResultCode();
+                detailedCode = intent.getIntExtra(
+                    EuiccManager.EXTRA_EMBEDDED_SUBSCRIPTION_DETAILED_CODE,
+                    0 /* defaultValue*/);
+                resultIntent = intent;
+            }
+        };
+context.registerReceiver(receiver,
+        new IntentFilter(ACTION_SWITCH_TO_SUBSCRIPTION),
+        LPA_DECLARED_PERMISSION /* broadcastPermission*/,
+        null /* handler */);
+
+// Switch to a subscription asynchronously.
+Intent intent = new Intent(action).setPackage(context.getPackageName());
+PendingIntent callbackIntent = PendingIntent.getBroadcast(
+        getContext(), 0 /* requestCode */, intent,
+        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE);
+mgr.switchToSubscription(1 /* subscriptionId */, callbackIntent);
+</pre>
+<aside class="note"><strong>Note:</strong><span> For apps targeting Android 14 and higher, mutable pending intents need to specify a component or package name. Otherwise, an exception is thrown. Check <a href="https://developer.android.com/about/versions/14/behavior-changes-14#safer-intents">Restrictions to implicit and pending intents</a> for more details.</span></aside> <p>For a complete list of <code translate="no" dir="ltr">EuiccManager</code> APIs and code examples, see <a href="esim-euicc-api">eUICC APIs</a>.</p> <h3 id="resolvable-errors">Resolvable errors</h3> <p>There are some cases where the system is unable to complete the eSIM operation but the error can be resolved by the user. For example, <code translate="no" dir="ltr">downloadSubscription</code> may fail if the profile metadata indicates that a <em>carrier confirmation code</em> is required. Or <code translate="no" dir="ltr">switchToSubscription</code> may fail if the carrier app has carrier privileges over the destination profile (that is, carrier owns the profile) but doesn't have carrier privileges over the currently enabled profile, and hence user consent is required.</p> <p>For these cases, the caller's callback is called with <code translate="no" dir="ltr">EuiccManager#EMBEDDED_SUBSCRIPTION_RESULT_RESOLVABLE_ERROR</code>. The callback <code translate="no" dir="ltr">Intent</code> contains internal extras such that when the caller passes it to <a href="https://developer.android.com/reference/android/telephony/euicc/EuiccManager.html#startResolutionActivity(android.app.Activity,%20int,%20android.content.Intent,%20android.app.PendingIntent)"><code translate="no" dir="ltr">EuiccManager#startResolutionActivity</code></a>, resolution can be requested through the LUI. Using the confirmation code for example again, <a href="https://developer.android.com/reference/android/telephony/euicc/EuiccManager.html#startResolutionActivity(android.app.Activity,%20int,%20android.content.Intent,%20android.app.PendingIntent)"><code translate="no" dir="ltr">EuiccManager#startResolutionActivity</code></a> triggers an LUI screen that allows the user to enter a confirmation code; after the code is entered, the download operation is resumed. This approach provides the carrier app with full control over when the UI is shown, but gives the LPA/LUI an extensible method for adding new handling of user-recoverable issues in the future without needing client apps to change.</p> <p>Android 9 defines these resolvable errors in <a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/telephony/java/android/service/euicc/EuiccService.java"><code translate="no" dir="ltr">EuiccService</code></a>, which the LUI should handle:</p> 
+<pre>/**
+ * Alert the user that this action will result in an active SIM being
+ * deactivated. To implement the LUI triggered by the system, you need to define
+ * this in AndroidManifest.xml.
+ */
+public static final String ACTION_RESOLVE_DEACTIVATE_SIM =
+        "android.service.euicc.action.RESOLVE_DEACTIVATE_SIM";
+/**
+ * Alert the user about a download/switch being done for an app that doesn't
+ * currently have carrier privileges.
+ */
+public static final String ACTION_RESOLVE_NO_PRIVILEGES =
+        "android.service.euicc.action.RESOLVE_NO_PRIVILEGES";
+
+/** Ask the user to resolve all the resolvable errors. */
+public static final String ACTION_RESOLVE_RESOLVABLE_ERRORS =
+        "android.service.euicc.action.RESOLVE_RESOLVABLE_ERRORS";
+</pre> <h3 id="carrier-privileges">Carrier privileges</h3> <p>If you're a carrier developing your own carrier app that calls <code translate="no" dir="ltr">EuiccManager</code> to download profiles onto a device, your profile should include carrier privilege rules corresponding to your carrier app in the metadata. This is because subscription profiles belonging to different carriers can co-exist in the eUICC of a device, and each carrier app should only be allowed to access the profiles owned by that carrier. For example, carrier A should not be able to download, enable, or disable a profile owned by carrier B.</p> <p>To ensure a profile is only accessible to its owner, Android uses a mechanism to grant special privileges to the profile owner's app (that is, carrier app). The Android platform loads certificates stored in the profile's access rule file (ARF) and grants permission to apps signed by these certificates to make calls to <code translate="no" dir="ltr">EuiccManager</code> APIs. The high-level process is described below:</p> <ol> <li>Operator signs the carrier app APK; the <a href="https://developer.android.com/studio/command-line/apksigner">apksigner</a> tool attaches the public-key certificate to the APK.</li> <li>
+<p>Operator/SM-DP+ prepares a profile and its metadata, which include an ARF that contains:</p> <ol> <li>Signature (SHA-1 or SHA-256) of the carrier app's public-key certificate (required)</li> <li>Package name of the carrier app (strongly recommended)</li> </ol>
+</li> <li><p>Carrier app tries to perform an eUICC operation with the <code translate="no" dir="ltr">EuiccManager</code> API.</p></li> <li><p>Android platform verifies SHA-1 or SHA-256 hash of the caller app's certificate matches the signature of the certificate obtained from the target profile's ARF. If the package name of the carrier app is included in the ARF, it must also match the package name of the caller app.</p></li> <li><p>After the signature and the package name (if included) are verified, the carrier privilege is granted to the caller app over the target profile.</p></li> </ol> <p>Because profile metadata can be available outside of the profile itself (so that LPA can retrieve the profile metadata from SM-DP+ before the profile is downloaded, or from ISD-R when the profile is disabled), it should contain the same carrier privilege rules as in the profile.</p> <p>The eUICC OS and SM-DP+ must support a proprietary tag <code translate="no" dir="ltr">BF76</code> in the profile metadata. The tag content should be the same carrier privilege rules as returned by the access rule applet (ARA) defined in <a href="uicc">UICC Carrier Privileges</a>:</p> 
+<pre>RefArDo ::= [PRIVATE 2] SEQUENCE {  -- Tag E2
+    refDo [PRIVATE 1] SEQUENCE {  -- Tag E1
+        deviceAppIdRefDo [PRIVATE 1] OCTET STRING (SIZE(20|32)),  -- Tag C1
+        pkgRefDo [PRIVATE 10] OCTET STRING (SIZE(0..127)) OPTIONAL  -- Tag CA
+    },
+    arDo [PRIVATE 3] SEQUENCE {  -- Tag E3
+        permArDo [PRIVATE 27] OCTET STRING (SIZE(8))  -- Tag DB
+    }
+}
+</pre> <p>For more details on app signing, see <a href="https://developer.android.com/studio/publish/app-signing">Sign your app</a>. For details on carrier privileges, see <a href="uicc">UICC Carrier Privileges</a>.</p> <h2 id="make-lpa-app">Make a local profile assistant app</h2> <p>Device manufacturers can implement their own local profile assistant (LPA), which must be hooked up with Android Euicc APIs. The following sections give a brief overview of making an LPA app and integrating it with the Android system.</p> <h3 id="hardware-reqs">Hardware/modem requirements</h3> <p>The LPA and the eSIM OS on the eUICC chip must support at least GSMA RSP (Remote SIM Provisioning) v2.0 or v2.2. You should also plan to use SM-DP+ and SM-DS servers that have a matching RSP version. For detailed RSP architecture, see <a href="https://www.gsma.com/newsroom/all-documents/sgp-21-rsp-architecture-v2-2/">GSMA SGP.21 RSP Architecture Specification</a>.</p> <p>In addition, to integrate with the eUICC APIs in Android 9, the device modem should send terminal capabilities with the support for eUICC capabilities encoded (local profile management and profile download). It also needs to implement the following methods:</p> <ul> <li>IRadio HAL v1.1: <code translate="no" dir="ltr">setSimPower</code>
+</li> <li>
+<p>IRadio HAL v1.2: <code translate="no" dir="ltr">getIccCardStatus</code></p> <aside class="note"><strong>Note:</strong><span> Support for IRadio HAL v1.4 is required for devices launching with Android 10 and is recommended for all other Android versions.</span></aside>
+</li> <li>
+<p>IRadioConfig HAL v1.0: <code translate="no" dir="ltr">getSimSlotsStatus</code></p> <aside class="note"><strong>Note:</strong><span> Support for IRadioConfig HAL v1.2 is required for devices launching with Android 10 and is recommended for all other Android versions.</span></aside>
+</li> <li>
+<p>IRadioConfig AIDL v1.0: <code translate="no" dir="ltr">getAllowedCarriers</code></p> <p>The Google LPA needs to know the carrier lock status so that it can allow eSIM download or transfer only for the allowed carrier. Otherwise users may end up downloading and transferring a SIM and later realize the device is carrier locked to a different carrier.</p> <ul> <li>
+<p>Vendors or OEMs must implement the IRadioSim.getAllowedCarriers()HAL API.</p> <aside class="note"><strong>Note:</strong><span> This must be done even if the vendor/OEMs are not using IRadioSim.setAllowedCarriers()HAL API for locking the device.</span></aside>
+</li> <li><p>Vendor RIL / Modem shall populate the lock status and carrierId of the carrier where the device is locked to as part of the IRadioSimResponse.getAllowedCarriersResponse()HAL API.</p></li> </ul>
+</li> </ul> <p>The modem should recognize the eSIM with the default boot profile enabled as a valid SIM and keep the SIM power on.</p> <p>For devices running Android 10, a nonremovable eUICC slot ID array must be defined. For example, see <a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/core/res/res/values/arrays.xml"><code translate="no" dir="ltr">arrays.xml</code></a>.</p> 
+<pre>&lt;resources&gt;
+   &lt;!-- Device-specific array of SIM slot indexes which are are embedded eUICCs.
+        e.g. If a device has two physical slots with indexes 0, 1, and slot 1 is an
+        eUICC, then the value of this array should be:
+            &lt;integer-array name="non_removable_euicc_slots"&gt;
+                &lt;item&gt;1&lt;/item&gt;
+            &lt;/integer-array&gt;
+        If a device has three physical slots and slot 1 and 2 are eUICCs, then the value of
+        this array should be:
+            &lt;integer-array name="non_removable_euicc_slots"&gt;
+               &lt;item&gt;1&lt;/item&gt;
+               &lt;item&gt;2&lt;/item&gt;
+            &lt;/integer-array&gt;
+        This is used to differentiate between removable eUICCs and built in eUICCs, and should
+        be set by OEMs for devices which use eUICCs. --&gt;
+
+   &lt;integer-array name="non_removable_euicc_slots"&gt;
+       &lt;item&gt;1&lt;/item&gt;
+   &lt;/integer-array&gt;
+&lt;/resources&gt;
+
+</pre> <p>For a complete list of modem requirements, see <a href="esim-modem-requirements">Modem Requirements for eSIM Support</a>.</p> <h3 id="euicc-service">EuiccService</h3> <p>An LPA consists of two separate components (may both be implemented in the same APK): the LPA backend, and the LPA UI or LUI.</p> <p>To implement the LPA backend, you must extend <a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/telephony/java/android/service/euicc/EuiccService.java"><code translate="no" dir="ltr">EuiccService</code></a> and declare this service in your manifest file. The service must require the <code translate="no" dir="ltr">android.permission.BIND_EUICC_SERVICE</code> system permission to ensure that only the system can bind to it. The service must also include an intent filter with the <code translate="no" dir="ltr">android.service.euicc.EuiccService</code> action. The priority of the intent filter should be set to a non-zero value in case multiple implementations are present on the device. For example:</p> 
+<pre>&lt;service
+    android:name=".EuiccServiceImpl"
+    android:permission="android.permission.BIND_EUICC_SERVICE"&gt;
+    &lt;intent-filter android:priority="100"&gt;
+        &lt;action android:name="android.service.euicc.EuiccService" /&gt;
+    &lt;/intent-filter&gt;
+&lt;/service&gt;
+</pre> <p>Internally, the Android framework determines the active LPA and interacts with it as needed to support the Android eUICC APIs. <code translate="no" dir="ltr">PackageManager</code> is queried for all apps with the <code translate="no" dir="ltr">android.permission.WRITE_EMBEDDED_SUBSCRIPTIONS</code> permission, which specifies a service for the <code translate="no" dir="ltr">android.service.euicc.EuiccService</code> action. The service with the highest priority is selected. If no service is found, LPA support is disabled.</p> <p>To implement the LUI, you must provide an activity for the following actions:</p> <ul> <li><code translate="no" dir="ltr">android.service.euicc.action.MANAGE_EMBEDDED_SUBSCRIPTIONS</code></li> <li><code translate="no" dir="ltr">android.service.euicc.action.PROVISION_EMBEDDED_SUBSCRIPTION</code></li> </ul> <p>As with the service, each activity must require the <code translate="no" dir="ltr">android.permission.BIND_EUICC_SERVICE</code> system permission. Each should have an intent filter with the appropriate action, the <code translate="no" dir="ltr">android.service.euicc.category.EUICC_UI</code> category, and a non-zero priority. Similar logic is used to pick the implementations for these activities as with picking the implementation of <a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/telephony/java/android/service/euicc/EuiccService.java"><code translate="no" dir="ltr">EuiccService</code></a>. For example:</p> 
+<pre>&lt;activity android:name=".MyLuiActivity"
+          android:exported="true"
+          android:permission="android.permission.BIND_EUICC_SERVICE"&gt;
+    &lt;intent-filter android:priority="100"&gt;
+        &lt;action android:name="android.service.euicc.action.MANAGE_EMBEDDED_SUBSCRIPTIONS" /&gt;
+        &lt;action android:name="android.service.euicc.action.PROVISION_EMBEDDED_SUBSCRIPTION" /&gt;
+        &lt;category android:name="android.intent.category.DEFAULT" /&gt;
+        &lt;category android:name="android.service.euicc.category.EUICC_UI" /&gt;
+    &lt;/intent-filter&gt;
+&lt;/activity&gt;
+</pre> <p>This implies that the UI implementing these screens can come from a different APK from the one that implements <a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/telephony/java/android/service/euicc/EuiccService.java"><code translate="no" dir="ltr">EuiccService</code></a>. Whether to have a single APK or multiple APKs (for example, one that implements <code translate="no" dir="ltr">EuiccService</code> and one that provides LUI activities) is a design choice.</p> <h3 id="EuiccCardManager">EuiccCardManager</h3> <p><code translate="no" dir="ltr">EuiccCardManager</code> is the interface for communicating with the eSIM chip. It provides ES10 functions (as described in the GSMA RSP spec) and handles the low-level APDU request/response commands as well as ASN.1 parsing. <code translate="no" dir="ltr">EuiccCardManager</code> is a system API and can be called only by system-privileged apps.</p> <p><img src="https://source.android.com/static/docs/core/connect/images/carrier-app-euicc-apis.png" alt="Carrier apps, LPA, and Euicc APIs" class="android-image-dark-theme-background"> </p> <p><strong>Figure 2.</strong> Both carrier app and LPA use Euicc APIs</p> <p>The profile operation APIs through <code translate="no" dir="ltr">EuiccCardManager</code> require the caller to be an LPA. This is enforced by the Android framework. This means the caller must extend <code translate="no" dir="ltr">EuiccService</code> and be declared in your manifest file, as described in the previous sections.</p> <p>Similar to <code translate="no" dir="ltr">EuiccManager</code>, to use the <code translate="no" dir="ltr">EuiccCardManager</code> APIs, your LPA must first obtain the instance of <code translate="no" dir="ltr">EuiccCardManager</code> through <code translate="no" dir="ltr">Context#getSystemService</code>:</p> 
+<pre>EuiccCardManager cardMgr = (EuiccCardManager) context.getSystemService(Context.EUICC_CARD_SERVICE);
+</pre> <p>Then, to get all the profiles on the eUICC:</p> 
+<pre>ResultCallback&lt;EuiccProfileInfo[]&gt; callback =
+       new ResultCallback&lt;EuiccProfileInfo[]&gt;() {
+           @Override
+           public void onComplete(int resultCode,
+                   EuiccProfileInfo[] result) {
+               if (resultCode == EuiccCardManagerReflector.RESULT_OK) {
+                   // handle result
+               } else {
+                   // handle error
+               }
+           }
+       };
+
+cardMgr.requestAllProfiles(eid, AsyncTask.THREAD_POOL_EXECUTOR, callback);
+</pre> <p>Internally, <code translate="no" dir="ltr">EuiccCardManager</code> binds to <code translate="no" dir="ltr">EuiccCardController</code> (which runs in the phone process) through an AIDL interface, and each <code translate="no" dir="ltr">EuiccCardManager</code> method receives its callback from the phone process through a different, dedicated AIDL interface. When using <code translate="no" dir="ltr">EuiccCardManager</code> APIs, the caller (LPA) must provide an <a href="https://developer.android.com/reference/java/util/concurrent/Executor"><code translate="no" dir="ltr">Executor</code></a> object through which the callback is invoked. This <code translate="no" dir="ltr">Executor</code> object may run on a single thread or on a thread pool of your choice.</p> <p>Most <code translate="no" dir="ltr">EuiccCardManager</code> APIs have the same usage pattern. For example, to load a bound profile package onto the eUICC:</p> 
+<pre>...
+cardMgr.loadBoundProfilePackage(eid, boundProfilePackage,
+        AsyncTask.THREAD_POOL_EXECUTOR, callback);
+</pre> <p>To switch to a different profile with a given ICCID:</p> 
+<pre>...
+cardMgr.switchToProfile(eid, iccid, true /* refresh */,
+        AsyncTask.THREAD_POOL_EXECUTOR, callback);
+</pre> <p>To get the default SM-DP+ address from the eUICC chip:</p> 
+<pre>...
+cardMgr.requestDefaultSmdpAddress(eid, AsyncTask.THREAD_POOL_EXECUTOR,
+        callback);
+</pre> <p>To retrieve a list of notifications of the given notification events:</p> 
+<pre>...
+cardMgr.listNotifications(eid,
+        EuiccNotification.Event.INSTALL
+              | EuiccNotification.Event.DELETE /* events */,
+        AsyncTask.THREAD_POOL_EXECUTOR, callback);
+</pre> <h2 id="activate-esim-carrier-app">Activate an eSIM profile through a carrier app</h2> <aside class="caution"><strong>Caution:</strong><span> Certain parts of this section might require an allowlist from the LPA.</span></aside> <p>On devices running Android 9 or higher, you can use a carrier app to activate the eSIM and download profiles. The carrier app can download profiles by calling <a href="https://developer.android.com/reference/android/telephony/euicc/EuiccManager#downloadSubscription(android.telephony.euicc.DownloadableSubscription,%20boolean,%20android.app.PendingIntent)"><code translate="no" dir="ltr">downloadSubscription</code></a> directly or by providing an activation code to the LPA.</p> <p>When a carrier app downloads a profile by calling <a href="https://developer.android.com/reference/android/telephony/euicc/EuiccManager#downloadSubscription(android.telephony.euicc.DownloadableSubscription,%20boolean,%20android.app.PendingIntent)"><code translate="no" dir="ltr">downloadSubscription</code></a>, the call enforces that the app can manage the profile through a <code translate="no" dir="ltr">BF76</code> <a href="esim-overview#carrier-privileges">metadata tag</a> that encodes <a href="uicc">carrier privilege rules</a> for the profile. If a profile doesn't have a <code translate="no" dir="ltr">BF76</code> tag or if its <code translate="no" dir="ltr">BF76</code> tag doesn't match the calling carrier app's signature, the download is rejected.</p> <p>The section below describes activating an eSIM through a carrier app using an activation code.</p> <h3 id="activation-code">Activate eSIM using an activation code</h3> <p>When using an activation code to activate an eSIM profile, the LPA fetches an activation code from the carrier app and downloads the profile. This flow can be initiated by the LPA and the LPA can control the entire UI flow, meaning that no carrier app UI is shown. This approach bypasses the <code translate="no" dir="ltr">BF76</code> tag check, and network operators don't need to implement the entire eSIM activation UI flow including downloading an eSIM profile and error handling.</p> <h4 id="define-euicc-provisioning">Define the carrier eUICC provisioning service</h4> <p>The LPA and carrier app communicate through two <a href="https://developer.android.com/guide/components/aidl">AIDL</a> interfaces: <code translate="no" dir="ltr">ICarrierEuiccProvisioningService</code> and <code translate="no" dir="ltr">IGetActivationCodeCallback</code>. The carrier app must implement an <code translate="no" dir="ltr">ICarrierEuiccProvisioningService</code> interface and expose it in its <a href="https://developer.android.com/guide/topics/manifest/service-element">manifest declaration</a>. The LPA must bind to <code translate="no" dir="ltr">ICarrierEuiccProvisioningService</code> and implement <code translate="no" dir="ltr">IGetActivationCodeCallback</code>. For more information on how to implement and expose an AIDL interface, see <a href="https://developer.android.com/guide/components/aidl#Defining">Defining and AIDL interface</a>.</p> <p>To define the AIDL interfaces, create the following AIDL files for both the LPA and carrier apps.</p> <ul> <li>
+<p><code translate="no" dir="ltr">ICarrierEuiccProvisioningService.aidl</code></p> 
+<pre>package android.service.euicc;
+
+import android.service.euicc.IGetActivationCodeCallback;
+
+oneway interface ICarrierEuiccProvisioningService {
+    // The method to get the activation code from the carrier app. The caller needs to pass in
+    // the implementation of IGetActivationCodeCallback as the parameter.
+    void getActivationCode(in IGetActivationCodeCallback callback);
+
+    // The method to get the activation code from the carrier app. The caller needs to pass in
+    // the activation code string as the first parameter and the implementation of
+    // IGetActivationCodeCallback as the second parameter. This method provides the carrier
+    // app the device EID which allows a carrier to pre-bind a profile to the device's EID before
+    // the download process begins.
+    void getActivationCodeForEid(in String eid, in IGetActivationCodeCallback callback);
+}
+
+</pre>
+</li> <li>
+<p><code translate="no" dir="ltr">IGetActivationCodeCallback.aidl</code></p> 
+<pre>package android.service.euicc;
+
+oneway interface IGetActivationCodeCallback {
+    // The call back method needs to be called when the carrier app gets the activation
+    // code successfully. The caller needs to pass in the activation code string as the
+    // parameter.
+    void onSuccess(String activationCode);
+
+    // The call back method needs to be called when the carrier app failed to get the
+    // activation code.
+    void onFailure();
+}
+</pre>
+</li> </ul> <p><strong>Example LPA implementation</strong></p> <p>To bind to the carrier app's <code translate="no" dir="ltr">ICarrierEuiccProvisioningService</code> implementation, the LPA must copy both <code translate="no" dir="ltr">ICarrierEuiccProvisioningService.aidl</code> and <code translate="no" dir="ltr">IGetActivationCodeCallback.aidl</code> to your project and implement <code translate="no" dir="ltr">ServiceConnection</code>.</p> 
+<pre>@Override
+public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
+    mCarrierProvisioningService = ICarrierEuiccProvisioningService.Stub.asInterface(iBinder);
+}
+
+</pre> <p>After binding to the carrier app's <code translate="no" dir="ltr">ICarrierEuiccProvisioningService</code> implementation, the LPA calls either <code translate="no" dir="ltr">getActivationCode</code> or <code translate="no" dir="ltr">getActivationCodeForEid</code> to get the activation code from the carrier app by passing the implementation of the <code translate="no" dir="ltr">IGetActivationCodeCallback</code> stub class.</p> <p>The difference between <code translate="no" dir="ltr">getActivationCode</code> and <code translate="no" dir="ltr">getActivationCodeForEid</code> is that <code translate="no" dir="ltr">getActivationCodeForEid</code> allows a carrier to pre-bind a profile to the device's EID before the download process begins.</p> 
+<pre>void getActivationCodeFromCarrierApp() {
+    IGetActivationCodeCallback.Stub callback =
+            new IGetActivationCodeCallback.Stub() {
+                @Override
+                public void onSuccess(String activationCode) throws RemoteException {
+                    // Handle the case LPA success to get activation code from a carrier app.
+                }
+
+                @Override
+                public void onFailure() throws RemoteException {
+                    // Handle the case LPA failed to get activation code from a carrier app.
+                }
+            };
+    
+    try {
+        mCarrierProvisioningService.getActivationCode(callback);
+    } catch (RemoteException e) {
+        // Handle Remote Exception
+    }
+}
+</pre> <p><strong>Example implementation for carrier app</strong></p> <p>For the LPA to bind to the carrier app, the carrier app must copy both <code translate="no" dir="ltr">ICarrierEuiccProvisioningService.aidl</code> and <code translate="no" dir="ltr">IGetActivationCodeCallback.aidl</code> to your project and declare the <code translate="no" dir="ltr">ICarrierEuiccProvisioningService</code> service in the <code translate="no" dir="ltr">AndroidManifest.xml</code> file. The service must require the <code translate="no" dir="ltr">android.permission.WRITE_EMBEDDED_SUBSCRIPTIONS</code> system permission to ensure that only the LPA, a system-privileged app, can bind to it. The service must also include an intent filter with the <code translate="no" dir="ltr">android.service.euicc.action.BIND_CARRIER_PROVISIONING_SERVICE</code> action.</p> <ul> <li>
+<p><code translate="no" dir="ltr">AndroidManifest.xml</code></p> 
+<pre>&lt;application&gt;
+  ...
+  &lt;service
+      android:name=".CarrierEuiccProvisioningService"
+      android:exported="true"
+      android:permission="android.permission.WRITE_EMBEDDED_SUBSCRIPTIONS"&gt;
+    &lt;intent-filter&gt;
+      &lt;action android:name="android.service.euicc.action.BIND_CARRIER_PROVISIONING_SERVICE"/&gt;
+    &lt;/intent-filter&gt;
+  &lt;/service&gt;
+  ...
+&lt;/application&gt;
+</pre>
+</li> </ul> <p>To implement the AIDL carrier app service, create a service, extend the <code translate="no" dir="ltr">Stub</code> class and implement the <code translate="no" dir="ltr">getActivationCode</code> and <code translate="no" dir="ltr">getActivationCodeForEid</code> methods. The LPA can then call either method to fetch the profile activation code. The carrier app should respond by calling <code translate="no" dir="ltr">IGetActivationCodeCallback#onSuccess</code> with the activation code if the code was fetched from the carrier's server successfully. If unsuccessful, the carrier app should respond with <code translate="no" dir="ltr">IGetActivationCodeCallback#onFailure</code>.</p> <ul> <li>
+<p><code translate="no" dir="ltr">CarrierEuiccProvisioningService.java</code></p> 
+<pre>import android.service.euicc.ICarrierEuiccProvisioningService;
+import android.service.euicc.ICarrierEuiccProvisioningService.Stub;
+import android.service.euicc.IGetActivationCodeCallback;
+
+public class CarrierEuiccProvisioningService extends Service {
+    private final ICarrierEuiccProvisioningService.Stub binder =
+        new Stub() {
+          @Override
+          public void getActivationCode(IGetActivationCodeCallback callback) throws RemoteException {
+            String activationCode = // do whatever work necessary to get an activation code (HTTP requests to carrier server, fetch from storage, etc.)
+            callback.onSuccess(activationCode);
+          }
+
+          @Override
+          public void getActivationCodeForEid(String eid, IGetActivationCodeCallback callback) throws RemoteException {
+            String activationCode = // do whatever work necessary (HTTP requests, fetch from storage, etc.)
+            callback.onSuccess(activationCode);
+          }
+      }
+}
+</pre>
+</li> </ul> <h4 id="carrier-app-ui">Start the carrier app UI in the LPA activation flow</h4> <p>On devices running Android 11 and higher, the LPA can start a carrier app's UI. This is useful as a carrier app might require additional information from the user before supplying an activation code to the LPA. For example, carriers might require users to log in to activate their phone numbers or perform other porting services.</p> <p>This is the process for starting a carrier app's UI in the LPA:</p> <ol> <li>
+<p>The LPA launches the carrier app's activation flow by sending the <code translate="no" dir="ltr">android.service.euicc.action.START_CARRIER_ACTIVATION</code> intent to the carrier app package containing the action. (The carrier app receiver must be protected in the manifest declaration with <code translate="no" dir="ltr">android:permission="android.permission.WRITE_EMBEDDED_SUBSCRIPTIONS"</code> to avoid receiving intents from non-LPA apps.)</p> 
+<pre>String packageName = // The carrier app's package name
+
+Intent carrierAppIntent =
+    new Intent(“android.service.euicc.action.START_CARRIER_ACTIVATION”)
+        .setPackage(packageName);
+
+ResolveInfo activity =
+    context.getPackageManager().resolveActivity(carrierAppIntent, 0);
+
+carrierAppIntent
+    .setClassName(activity.activityInfo.packageName, activity.activityInfo.name);
+
+startActivityForResult(carrierAppIntent, requestCode);
+</pre>
+</li> <li><p>The carrier app does its work using its own UI. For example, logging in the user or sending HTTP requests to the carrier's backend.</p></li> <li>
+<p>The carrier app responds to the LPA by calling <code translate="no" dir="ltr">setResult(int, Intent)</code> and <code translate="no" dir="ltr">finish()</code>.</p> <ol> <li>If the carrier app responds with <code translate="no" dir="ltr">RESULT_OK</code>, the LPA continues the activation flow. If the carrier app determines that the user should scan a QR code instead of letting the LPA bind the carrier app's service, the carrier app responds to the LPA using <code translate="no" dir="ltr">setResult(int, Intent)</code> with <code translate="no" dir="ltr">RESULT_OK</code> and an <code translate="no" dir="ltr">Intent</code> instance containing the boolean extra <code translate="no" dir="ltr">android.telephony.euicc.extra.USE_QR_SCANNER</code> set to <code translate="no" dir="ltr">true</code>. The LPA then checks the extra and launches the QR scanner instead of binding the carrier app's <code translate="no" dir="ltr">ICarrierEuiccProvisioningService</code> implementation.</li> <li>If the carrier app crashes or responds with <code translate="no" dir="ltr">RESULT_CANCELED</code> (this is the default response code), the LPA cancels the eSIM activation flow.</li> <li>If the carrier app responds with something other than <code translate="no" dir="ltr">RESULT_OK</code> or <code translate="no" dir="ltr">RESULT_CANCELED</code>, the LPA treats it as an error.</li> </ol> <p>For security reasons, the LPA <strong>should not</strong> directly accept an activation code supplied in the result intent to ensure that non-LPA callers can't get an activation code from the carrier app.</p>
+</li> </ol> <h3 id="lpa-flow">Launch the LPA activation flow in a carrier app</h3> <p>Starting in Android 11, carrier apps can use eUICC APIs to start an LUI for eSIM activation. This method surfaces the LPA's eSIM activation flow UI to activate the eSIM profile. The LPA then sends a broadcast when the eSIM profile activation finishes.</p> <ol> <li>
+<p>The LPA must declare an activity including an intent filter with the <code translate="no" dir="ltr">android.service.euicc.action.START_EUICC_ACTIVATION</code> action. The priority of the intent filter should be set to a non-zero value in case multiple implementations are present on the device. For example:</p> 
+<pre>&lt;application&gt;
+  ...
+&lt;activity
+    android:name=".CarrierAppInitActivity"
+    android:exported="true"&gt;
+
+    &lt;intent-filter android:priority="100"&gt;
+        &lt;action android:name="android.service.euicc.action.START_EUICC_ACTIVATION" /&gt;
+    &lt;/intent-filter&gt;
+&lt;/activity&gt;
+  ...
+&lt;/application&gt;
+</pre>
+</li> <li><p>The carrier app does its work using its own UI. For example, logging in the user or sending HTTP requests to the carrier's backend.</p></li> <li><p>At this point, the carrier app must be ready to supply an activation code through its <code translate="no" dir="ltr">ICarrierEuiccProvisioningService</code> implementation. The carrier app launches the LPA by calling <code translate="no" dir="ltr">startActivityForResult(Intent, int)</code> with the <code translate="no" dir="ltr">android.telephony.euicc.action.START_EUICC_ACTIVATION</code> action. The LPA also checks the boolean extra <code translate="no" dir="ltr">android.telephony.euicc.extra.USE_QR_SCANNER</code>. If the value is <code translate="no" dir="ltr">true</code>, the LPA launches the QR scanner to let the user scan the profile QR code.</p></li> <li><p>On the LPA side, the LPA binds to the carrier app's <code translate="no" dir="ltr">ICarrierEuiccProvisioningService</code> implementation to fetch the activation code and download the corresponding profile. The LPA displays all necessary UI elements during the download, such as a loading screen.</p></li> <li>
+<p>When the LPA activation flow is complete, the LPA responds to the carrier app with a result code, which the carrier app handles in <code translate="no" dir="ltr">onActivityResult(int, int, Intent)</code>.</p> <ol> <li>If the LPA succeeds in downloading the new eSIM profile, it responds with <code translate="no" dir="ltr">RESULT_OK</code>.</li> <li>If the user cancels the eSIM profile activation in the LPA, it responds with <code translate="no" dir="ltr">RESULT_CANCELED</code>.</li> <li>If the LPA responds with something other than <code translate="no" dir="ltr">RESULT_OK</code> or <code translate="no" dir="ltr">RESULT_CANCELED</code>, the carrier app treats this as an error.</li> </ol> <p>For security reasons, the LPA <strong>does not</strong> accept an activation code directly in the supplied intent to ensure that non-LPA callers can't get the activation code from the carrier app.</p>
+</li> </ol> <h2 id="multi-esim">Support multiple eSIMs</h2> <aside class="note"><strong>Note:</strong><span> Devices running Android 13 or higher can support multiple enabled profiles, which let a single eSIM support multiple profiles at the same time. For more information, see <a href="esim-mep">Multiple Enabled Profiles</a>.</span></aside> <p>For devices running Android 10 or higher, the <code translate="no" dir="ltr">EuiccManager</code> class supports devices with multiple eSIMs. Devices with a single eSIM that are upgrading to Android 10 don't require any modification to the LPA implementation as the platform automatically associates the <code translate="no" dir="ltr">EuiccManager</code> instance with the default eUICC. The default eUICC is determined by the platform for devices with radio HAL version 1.2 or higher and by the LPA for devices with radio HAL versions lower than 1.2.</p> <h3 id="multi-esim-reqs">Requirements</h3> <p>To support multiple eSIMs, the device must have more than one eUICC, which can be either a built-in eUICC or a physical SIM slot where removable eUICCs can be inserted.</p> <p>Radio HAL version 1.2 or higher is required to support multiple eSIMs. Radio HAL version 1.4 and RadioConfig HAL version 1.2 are recommended.</p> <h3 id="multi-esim-implementation">Implementation</h3> <p>To support multiple eSIMs (including removable eUICCs or programmable SIMs), the LPA must implement <a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/telephony/java/android/service/euicc/EuiccService.java"><code translate="no" dir="ltr">EuiccService</code></a>, which receives the slot ID corresponding to the caller-provided card ID.</p> <p>The <a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/core/res/res/values/arrays.xml#202"><code translate="no" dir="ltr">non_removable_euicc_slots</code></a> resource specified in <a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/core/res/res/values/arrays.xml"><code translate="no" dir="ltr">arrays.xml</code></a> is an array of integers that represent the slot IDs of a device's built-in eUICCs. You must specify this resource to allow the platform to determine whether an inserted eUICC is removable or not.</p> <h3 id="multi-esim-app">Carrier app for device with multiple eSIMs</h3> <p>When making a carrier app for a device with multiple eSIMs, use the <a href="https://developer.android.com/reference/android/telephony/euicc/EuiccManager#createForCardId(int)"><code translate="no" dir="ltr">createForCardId</code></a> method in <code translate="no" dir="ltr">EuiccManager</code> to create an <code translate="no" dir="ltr">EuiccManager</code> object that is pinned to a given card ID. The card ID is an integer value that uniquely identifies a UICC or an eUICC on the device.</p> <p>To get the card ID for the device's default eUICC, use the <a href="https://developer.android.com/reference/android/telephony/TelephonyManager#getCardIdForDefaultEuicc()"><code translate="no" dir="ltr">getCardIdForDefaultEuicc</code></a> method in <code translate="no" dir="ltr">TelephonyManager</code>. This method returns <a href="https://developer.android.com/reference/android/telephony/TelephonyManager#UNSUPPORTED_CARD_ID"><code translate="no" dir="ltr">UNSUPPORTED_CARD_ID</code></a> if the radio HAL version is lower than 1.2 and returns <a href="https://developer.android.com/reference/android/telephony/TelephonyManager#UNINITIALIZED_CARD_ID"><code translate="no" dir="ltr">UNINITIALIZED_CARD_ID</code></a> if the device hasn't read the eUICC.</p> <p>You can also get card IDs from <a href="https://developer.android.com/reference/android/telephony/TelephonyManager#getUiccCardsInfo()"><code translate="no" dir="ltr">getUiccCardsInfo</code></a> and <code translate="no" dir="ltr">getUiccSlotsInfo</code> (system API) in <code translate="no" dir="ltr">TelephonyManager</code>, and <a href="https://developer.android.com/reference/android/telephony/SubscriptionInfo#getCardId()"><code translate="no" dir="ltr">getCardId</code></a> in <code translate="no" dir="ltr">SubscriptionInfo</code>.</p> <p>When an <code translate="no" dir="ltr">EuiccManager</code> object has been instantiated with a specific card ID, all operations are directed to the eUICC with that card ID. If the eUICC becomes unreachable (for example, when it is turned off or removed) <code translate="no" dir="ltr">EuiccManager</code> no longer works.</p> <p>You can use the following code samples to create a carrier app.</p> <p>Example 1: Get active subscription and instantiate <code translate="no" dir="ltr">EuiccManager</code></p> 
+<pre>// Get the active subscription and instantiate an EuiccManager for the eUICC which holds
+// that subscription
+SubscriptionManager subMan = (SubscriptionManager)
+        mContext.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE);
+int cardId = subMan.getActiveSubscriptionInfo().getCardId();
+EuiccManager euiccMan = (EuiccManager) mContext.getSystemService(Context.EUICC_SERVICE)
+            .createForCardId(cardId);
+</pre> <p>Example 2: Iterate through UICCs and instantiate <code translate="no" dir="ltr">EuiccManager</code> for a removable eUICC</p> 
+<pre>// On a device with a built-in eUICC and a removable eUICC, iterate through the UICC cards
+// to instantiate an EuiccManager associated with a removable eUICC
+TelephonyManager telMan = (TelephonyManager)
+        mContext.getSystemService(Context.TELEPHONY_SERVICE);
+List&lt;UiccCardInfo&gt; infos = telMan.getUiccCardsInfo();
+int removableCardId = -1; // valid cardIds are 0 or greater
+for (UiccCardInfo info : infos) {
+    if (info.isRemovable()) {
+        removableCardId = info.getCardId();
+        break;
+    }
+}
+if (removableCardId != -1) {
+    EuiccManager euiccMan = (EuiccManager) mContext.getSystemService(Context.EUICC_SERVICE)
+            .createForCardId(removableCardId);
+}
+</pre> <h2 id="validation">Validation</h2> <p>AOSP doesn't come with an LPA implementation and you aren't expected to have an LPA available on all Android builds (not every phone supports eSIM). For this reason, there are no end-to-end CTS test cases. However, basic test cases are available in AOSP to ensure the exposed eUICC APIs are valid in Android builds.</p> <p>You should make sure the builds pass the following CTS test cases (for public APIs): <a href="https://android.googlesource.com/platform/cts/+/android17-release/tests/tests/telephony/current/src/android/telephony/euicc/cts">/platform/cts/tests/tests/telephony/current/src/android/telephony/euicc/cts</a>.</p> <p>Carriers implementing a carrier app should go through their normal in-house quality assurance cycles to ensure all implemented features are working as expected. At the minimum, the carrier app should be able to list all the subscription profiles owned by the same operator, download and install a profile, activate a service on the profile, switch between profiles, and delete profiles.</p> <p>If you're making your own LPA, you should go through much more rigorous testing. You should work with your modem vendor, eUICC chip or eSIM OS vendor, SM-DP+ vendors, and carriers to resolve issues and ensure interoperability of your LPA within the RSP architecture. A good amount of manual testing is inevitable. For best test coverage, you should follow the <a href="https://www.gsma.com/newsroom/wp-content/uploads//SGP.23-v1.4.pdf">GSMA SGP.23 RSP Test Plan</a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/connect/esim-overview" class="_attribution-link">https://source.android.com/docs/core/connect/esim-overview</a>
+  </p>
+</div>

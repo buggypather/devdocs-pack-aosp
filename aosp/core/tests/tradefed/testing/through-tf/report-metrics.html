@@ -1,0 +1,93 @@
+<h1>Report metrics or data from a Tradefed test</h1>  <p>This page describes how to report metrics along with test results when writing a test in Tradefed.</p> <p>The benefit of logging through Tradefed pipeline is to find your metrics along side your functional results. The logging of metrics can be done very naturally within tests, which makes it convenient for test writers to add more instrumentation.</p> <h2 id="devicetestcase_-_junit3_style">DeviceTestCase - JUnit3 style</h2> <p>If your test extends <a href="https://android.googlesource.com/platform/tools/tradefederation/+/refs/heads/android17-release/test_framework/com/android/tradefed/testtype/DeviceTestCase.java">DeviceTestCase</a> in a JUnit3-style kind of test, you can call the method <code translate="no" dir="ltr">addTestMetric(String key, String value)</code> from inside any test cases to report a metric. This can be called multiple times as long as the key is unique.</p> <p>Example:</p> 
+<pre>    public static class TestMetricTestCase extends DeviceTestCase {
+
+        public void testPass() {
+            addTestMetric("key1", "metric1");
+        }
+
+        public void testPass2() {
+            addTestMetric("key2", "metric2");
+        }
+    }
+</pre> <p>If you want to log a file to be available in the <code translate="no" dir="ltr">result_reporters</code>, you can call the method <code translate="no" dir="ltr">addTestLog(String dataName, LogDataType dataType, InputStreamSource dataStream)</code> from inside any test cases to report a file to log.</p> <p>Example:</p> 
+<pre>    public static class TestLogTestCase extends DeviceTestCase {
+
+        public void testPass() {
+            try (InputStreamSource source = getDevice().getScreenshot()) {
+                addTestLog("screenshot", LogDataType.PNG, source);
+            }
+        }
+    }
+</pre> <h2 id="testcase_-_regular_junit3_test">TestCase - regular JUnit3 test</h2> <p>If you want to report metrics inside Tradefed from a regular JUnit3 TestCase class, it will need to be converted to a <code translate="no" dir="ltr">MetricTestCase</code> instead which is the exact same class with an extra method: <code translate="no" dir="ltr">addTestMetric(String key, String value)</code></p> <h2 id="devicejunit4classrunner_-_junit4_style">DeviceJUnit4ClassRunner - JUnit4 style</h2> <p>If your JUnit4 style test is running with <a href="https://android.googlesource.com/platform/tools/tradefederation/+/refs/heads/android17-release/test_framework/com/android/tradefed/testtype/DeviceJUnit4ClassRunner.java">DeviceJUnit4ClassRunner</a>, then you can also log metrics within a test case (inside @Test) to be reported by Tradefed. You will need to use <code translate="no" dir="ltr">TestMetrics</code> rules to report your metrics.</p> <p>Example:</p> 
+<pre>    @RunWith(DeviceJUnit4ClassRunner.class)
+    public static class Junit4TestClass {
+
+        @Rule
+        public TestMetrics metrics = new TestMetrics();
+
+        @Test
+        public void testPass5() {
+            // test log through the rule.
+            metrics.addTestMetric("key", "value");
+        }
+
+        @Test
+        public void testPass6() {
+            metrics.addTestMetric("key2", "value2");
+        }
+    }
+</pre> <p>In order to report files, you will use the <code translate="no" dir="ltr">TestLogData</code> rule to report it.</p> <p>Example:</p> 
+<pre>    @RunWith(DeviceJUnit4ClassRunner.class)
+    public static class Junit4TestClass {
+
+        @Rule
+        public TestLogData logs = new TestLogData();
+
+        @Test
+        public void testPass5() {
+            // test log through the rule.
+            try (InputStreamSource source = getDevice().getScreenshot()) {
+                logs.addTestLog("screenshot", LogDataType.PNG, source);
+            }
+        }
+    }
+</pre> <h2 id="iremotetest_-_pure_tradefed_test">IRemoteTest - pure Tradefed Test</h2> <p>If you are writing your own Tradefed Test class or runner you will implemement <a href="https://android.googlesource.com/platform/tools/tradefederation/+/refs/heads/android17-release/invocation_interfaces/com/android/tradefed/testtype/IRemoteTest.java">IRemoteTest</a> and get a <code translate="no" dir="ltr">ITestInvocationListener</code> through the <code translate="no" dir="ltr">run()</code> method. This listener can be used to log metrics as follows:</p> 
+<pre>    listener.testLog(String dataName, LogDataType type of data, InputStreamSource data);
+</pre> <h2 id="tradefed_metrics_collectors">Tradefed metrics collectors</h2> <p>Tradefed provides a dedicated <code translate="no" dir="ltr">metrics_collector</code> object to collect metrics in parallel of the tests.</p> <h3 id="on_the_host_side">On the host side</h3> <p><a href="https://android.googlesource.com/platform/tools/tradefederation/+/refs/heads/android17-release/src/com/android/tradefed/device/metric/BaseDeviceMetricCollector.java">BaseDeviceMetricCollector</a> can be implemented to collect any metrics from the host-side and report them as part of the test invocation. A number of generic collectors are already available for different use cases, but we always welcome new contributions.</p> <p>In order to specify the collector to be used in your Tradefed invocation, you simply need to add the object to your Tradefed XML configuration:</p> <p>Example:</p> 
+<pre>  &lt;metrics_collector class="com.android.tradefed.device.metric.AtraceCollector"&gt;
+      &lt;option name="categories" value="freq"/&gt;
+  &lt;/metrics_collector&gt;
+</pre> <p>Some currently existing collectors: * <a href="https://android.googlesource.com/platform/tools/tradefederation/+/refs/heads/android17-release/test_framework/com/android/tradefed/device/metric/TemperatureCollector.java">TemperatureCollector</a> that collects the temperature periodically during the test run. * <a href="https://android.googlesource.com/platform/tools/tradefederation/+/refs/heads/android17-release/test_framework/com/android/tradefed/device/metric/AtraceCollector.java">AtraceCollector</a> that collects using 'atrace' for each test case.</p> <h3 id="on_the_device_side">On the device side</h3> <p>When running device-side tests (Instrumentations, UIAutomator tests, etc.), having a collector on the host-side collecting asynchronously might not be ideal. For example, a screenshot taken asynchronously will most likely miss the wanted screen and be useless.</p> <p>In order to meet these use cases, a device-side version of our collectors exists and can be use in any 'AndroidJUnitRunner' instrumentation. <a href="https://android.googlesource.com/platform/platform_testing/+/refs/heads/android17-release/libraries/device-collectors/src/main/java/android/device/collectors/BaseMetricListener.java">BaseMetricListener</a> can be implemented in order to automatically report metrics that are collected in a way fully compatible with the Tradefed reporting pipeline.</p> <p>If you are using the '<a href="https://android.googlesource.com/platform/tools/tradefederation/+/refs/heads/android17-release/test_framework/com/android/tradefed/testtype/AndroidJUnitTest.java">AndroidJUnitTest</a>' runner from Tradefed, you can simply specify the following command line option to have your collector running with your tests:</p> 
+<pre>  --device-listeners android.device.collectors.ScreenshotListener
+</pre> <p>CAUTION: In order for the collector classes to be resolved at runtime, your instrumentation APK will most likely need to statically include them by adding to your makefile the following:</p> 
+<pre>  LOCAL_STATIC_JAVA_LIBRARIES += collector-device-lib
+</pre> <p>Contributions to device-side collectors are also welcome.</p> <h3 id="special_consideration_for_suites">Special consideration for suites</h3> <p>For suites like CTS that have a top-level configuration running some module configurations, there is no need to specify <code translate="no" dir="ltr">metrics_collector</code> in each module configuration (<code translate="no" dir="ltr">AndroidTest.xml</code>). It is actually forbidden.</p> <p>To ensure the metric collection is applied equally to each module, only the top-level configuration (for example, <code translate="no" dir="ltr">cts.xml</code>) can specify <code translate="no" dir="ltr">metrics_collector</code> as explained above. These collectors will be applied and run against each module of the suite.</p> <h3 id="collect_device_log_files_from_a_module">Collect device log files from a module</h3> <p>A setup is available in order for a device side test to notify that some files should be collected.</p> <p><code translate="no" dir="ltr">AndroidTest.xml</code> can specify a collector that will look for file on the device and pull them.</p> 
+<pre>  &lt;metrics_collector class="com.android.tradefed.device.metric.FilePullerLogCollector"&gt;
+      &lt;!-- repeatable: Pattern of key of a FILE we listen on that should be pulled --&gt;
+      &lt;option name = "pull-pattern-keys" value = "ScreenshotListener_.*" /&gt;
+
+      &lt;!-- repeatable: The key of the DIRECTORY to pull --&gt;
+      &lt;option name = "directory-keys" value = "&lt;example-key: /sdcard/atrace_logs&gt;" /&gt;
+  &lt;/metrics_collector&gt;
+</pre> <p>By specifying these patterns and key, the collector if it sees the key will attempt to pull and log the associated file.</p> <p>In order for these keys to be generated, a device-side test (instrumentation) should specify the file that should be logged. It is done in a similar manner as the host-side (described above).</p> <ol> <li>Add the <code translate="no" dir="ltr">collector-device-lib</code> to your test APK in the make files:</li> </ol> 
+<pre>  LOCAL_STATIC_JAVA_LIBRARIES += collector-device-lib
+</pre> <ol> <li>Use the @rule we provide to log files:</li> </ol> 
+<pre>    @RunWith(AndroidJUnit4.class)
+    public static class Junit4TestClass {
+
+        @Rule
+        public TestLogData logs = new TestLogData();
+
+        @Test
+        public void testPass5() {
+            // test log through the rule.
+            File logFile = new File("whatever");
+            logs.addTestLog("KEY", logFile);
+        }
+    }
+</pre> <p>The <code translate="no" dir="ltr">KEY</code> name in the example above is the name under which the file will be reported. This is the name you should match in the <code translate="no" dir="ltr">FilePullerDeviceMetricCollector</code> to get it automatically pulled. it should be a unique name.</p> <p>NOTE: Once the file is pulled, <code translate="no" dir="ltr">FilePullerDeviceMetricCollector</code> automatically cleans it from the device.</p> <h2 id="where_do_i_find_the_metrics">Where do I find the metrics?</h2> <p>It depends of the <code translate="no" dir="ltr">result_reporter</code> specified in your XML configuration.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/tradefed/testing/through-tf/report-metrics" class="_attribution-link">https://source.android.com/docs/core/tests/tradefed/testing/through-tf/report-metrics</a>
+  </p>
+</div>

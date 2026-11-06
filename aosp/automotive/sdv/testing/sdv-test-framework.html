@@ -1,0 +1,172 @@
+<h1>SDV Test Framework library</h1>  <p>This page provides an overview of the SDV Test Framework library and guides you through setting up, configuring, and executing tests. Use the SDV Test Framework for end-to-end testing. The tool builds on Mobly; you write tests in Python.</p> <h2 id="choose-test-approach">Choose a test approach</h2> <p>Before writing a test, choose the test runner that matches your verification scope:</p> <table> <thead> <tr> <th>Test scope</th> <th>Soong module type</th> <th>Execution tool</th> <th>When to use</th> </tr> </thead> <tbody> <tr> <td>Service bundle unit tests</td> <td>
+<code translate="no" dir="ltr">rust_test</code>, <code translate="no" dir="ltr">rust_test_host</code>, or <code translate="no" dir="ltr">cc_test</code>
+</td> <td><code translate="no" dir="ltr">atest</code></td> <td> Verify isolated Rust or C++ business logic, data transformations, or helper crates on the host or a single Cuttlefish virtual machine (VM). </td> </tr> <tr> <td>End-to-end and multi-VM system tests</td> <td>
+<code translate="no" dir="ltr">python_test_host</code> (SDV Test Framework)</td> <td>
+<code translate="no" dir="ltr">atest</code> or <code translate="no" dir="ltr">CATBox</code>
+</td> <td> Verify service bundle lifecycle orchestration, inter-VM communication, SOME/IP bridging, or hardware targets across one to three VMs. </td> </tr> </tbody> </table> <h2 id="setup-environment">Set up the environment</h2> <p>This page assumes you already set up your workstation for SDV. To run Framework tests, install <code translate="no" dir="ltr">virtualenv</code>.</p> <h2 id="python-dependencies">Python dependencies</h2> <p>The recommended approach for managing dependencies in Android is to package tests, Python, and their dependencies as an executable using the build configuration. You must follow this approach in the SDV testing repository.</p> <p>The SDV Test Framework library provides these dependencies by default:</p> <ul> <li><code translate="no" dir="ltr">mobly</code></li> <li>
+<code translate="no" dir="ltr">absl-py</code> Required to use parameterization in tests.</li> <li>
+<code translate="no" dir="ltr">pexpect</code> Required for interactive commands functionality.</li> <li>
+<code translate="no" dir="ltr">ptyprocess</code> Required for interactive commands functionality.</li> </ul> <p>If you need test-specific dependencies, include them in the test's <code translate="no" dir="ltr">Android.bp</code> file:</p> 
+<pre>python_test_host {
+    …
+    libs: [
+        "&lt;DEPENDENCY1&gt;",
+        "&lt;DEPENDENCY2&gt;",
+        …
+    ],
+    …
+}
+</pre> <h2 id="system-test-types">System test types</h2> <p>You create system tests using the SDV Test Framework. The framework distinguishes between the following types. Categorize the tests correctly:</p> <ul> <li>
+<strong>Sample tests:</strong> Execute SDV sample services and verify that the result matches the expected output.</li> <li>
+<strong>E2E tests:</strong> Don't use SDV sample services.</li> <li>
+<strong>Long-running tests:</strong> Designed for extended execution periods.</li> <li>
+<strong>Performance tests:</strong> Use the <code translate="no" dir="ltr">perfetto</code> library.</li> <li>
+<strong>Hardware tests:</strong> Designed to be executed exclusively on a physical device, not in a Cuttlefish (CF).</li> </ul> <h2 id="test-creation">Create a test</h2> <p>All tests written using the framework must be located in the testing repository. The exact location of the test depends on its type. For directory paths, Python test class templates, <code translate="no" dir="ltr">Android.bp</code> rules, and Mobly coding guidelines, see <a href="sdv-system-tests-creation">SDV system test creation</a>.</p> <h2 id="test-config">Configure a test</h2> <p>Configure all tests to run using both atest and CATBox.</p> <h3 id="atest-configuration">Configure atest</h3> <p>The framework provides templates for one, two, and three VM tests. Add the following to your <code translate="no" dir="ltr">Android.bp</code> file:</p> <ul> <li>
+<p><strong>One VM:</strong></p> 
+<pre>python_test_host {
+  ...
+  test_config_template: ":sdv_one_device",
+}
+</pre>
+</li> <li>
+<p><strong>Two VMs:</strong></p> 
+<pre>python_test_host {
+  ...
+  test_config_template: ":sdv_two_devices",
+}
+</pre>
+</li> <li>
+<p><strong>Three VMs:</strong></p> 
+<pre>python_test_host {
+  ...
+  test_config_template: ":sdv_three_devices",
+}
+</pre>
+</li> </ul> <p>The default template is sufficient for most tests. Avoid creating custom configurations unless there is a compelling reason.</p> <h3 id="update-default-timeout">Update the default timeout</h3> <p>The default timeout should be sufficient to execute the tests locally.</p> <p>If your test fails locally due to a timeout, consider splitting it into different tests. Very long tests with many test cases can cause a bottleneck in execution.</p> <p>If you must set a higher timeout than the default, continue reading.</p> <h4 id="override-timeout">Override the default timeout</h4> <p>The framework doesn't support extending the template for <code translate="no" dir="ltr">atest</code> execution. Therefore, use the provided templates that offer an extended timeout.</p> <ul> <li>
+<p><strong>One VM long test:</strong></p> 
+<pre>python_test_host {
+  ...
+  test_config_template: ":sdv_one_device_long_test",
+}
+</pre>
+</li> <li>
+<p><strong>Two VMs long test:</strong></p> 
+<pre>python_test_host {
+  ...
+  test_config_template: ":sdv_two_devices_long_test",
+}
+</pre>
+</li> </ul> <p>Add a comment that clearly indicates the purpose of using this template and explains why the extended time is necessary (for example, if the test requires downloading an artifact that takes a specific amount of time).</p> <h3 id="push-files-to-device">Push files to a device</h3> <p>The following steps describe how to push files to a device for <code translate="no" dir="ltr">atest</code> configurations.</p> <h4 id="push-files-device">Push files to a device</h4> <p>The framework doesn't support extending the template for <code translate="no" dir="ltr">atest</code> execution. Therefore, you must create an <code translate="no" dir="ltr">AndroidTest.xml</code> file that fully replaces the default template and includes the corresponding <code translate="no" dir="ltr">target_preparer</code> options for the devices.</p> <ol> <li>
+<p>Copy the contents of the template:</p> <ul> <li><code translate="no" dir="ltr">sdv-one-device.xml</code></li> <li><code translate="no" dir="ltr">sdv-two-devices.xml</code></li> <li><code translate="no" dir="ltr">sdv-three-devices.xml</code></li> </ul>
+</li> <li><p>Update <code translate="no" dir="ltr">{MODULE}</code> with the module name of your test.</p></li> <li><p>Add <code translate="no" dir="ltr">com.android.tradefed.targetprep.PushFilePreparer</code> to each device.</p></li> </ol> 
+<pre>&lt;device name="device1"&gt;
+  &lt;target_preparer class="com.android.tradefed.targetprep.PushFilePreparer"&gt;
+    &lt;option name="cleanup" value="true" /&gt;
+    &lt;option name="push-file" key="&lt;FILE_NAME&gt;" value="&lt;REMOTE_FILE_PATH&gt;" /&gt;
+  &lt;/target_preparer&gt;
+&lt;/device&gt;
+</pre> <h3 id="catbox-configuration">Configure CATBox</h3> <p>To run the test as a suite, a CATBox configuration is required.</p> <ol> <li>
+<p>Create a new configuration file in <code translate="no" dir="ltr">libraries/sdv/sdv_catbox/res/config/</code> and follow these naming conventions:</p> <ul> <li>
+<strong>Sample test:</strong> <code translate="no" dir="ltr">sdv-sample-&lt;NAME&gt;-test.xml</code>
+</li> <li>
+<strong>E2E test:</strong> <code translate="no" dir="ltr">sdv-e2e-&lt;NAME&gt;-test.xml</code>
+</li> <li>
+<strong>Long-running test:</strong> <code translate="no" dir="ltr">sdv-long-running-&lt;NAME&gt;-test.xml</code>
+</li> <li>
+<strong>Performance test:</strong> <code translate="no" dir="ltr">sdv-performance-&lt;NAME&gt;-test.xml</code>
+</li> <li>
+<strong>Hardware test:</strong> <code translate="no" dir="ltr">sdv-hw-&lt;NAME&gt;-test.xml</code>
+</li> </ul>
+</li> <li><p>Add the corresponding information based on the test type:</p></li> </ol> <ul> <li>
+<p><strong>One VM test config:</strong></p> 
+<pre>&lt;configuration description="SDV &lt;NAME&gt; Test"&gt;
+    &lt;!-- Template for Device Configuration --&gt;
+    &lt;template-include name="device-config" default="sdv-device-config/one-device" /&gt;
+
+    &lt;!-- Plan. Use the same name as the file name --&gt;
+    &lt;option name="plan" value="&lt;CONFIG_FILE_NAME&gt;"/&gt;
+
+    &lt;!-- Test: mobly-par-file-name should match the module name --&gt;
+    &lt;option name="mobly-host:mobly-par-file-name" value="&lt;ModuleName&gt;" /&gt;
+&lt;/configuration&gt;
+</pre>
+</li> <li>
+<p><strong>Two VMs test config:</strong></p> 
+<pre>&lt;configuration description="SDV &lt;NAME&gt; Test"&gt;
+    &lt;!-- Template for Device Configuration --&gt;
+    &lt;template-include name="device-config" default="sdv-device-config/two-devices" /&gt;
+
+    &lt;!-- Plan. Use the same name as the file name --&gt;
+    &lt;option name="plan" value="&lt;CONFIG_FILE_NAME&gt;"/&gt;
+
+    &lt;!-- Test: mobly-par-file-name should match the module name --&gt;
+    &lt;option name="mobly-host:mobly-par-file-name" value="&lt;ModuleName&gt;" /&gt;
+&lt;/configuration&gt;
+</pre>
+</li> <li>
+<p><strong>Three VMs test config:</strong></p> 
+<pre>&lt;configuration description="SDV &lt;NAME&gt; Test"&gt;
+    &lt;!-- Template for Device Configuration --&gt;
+    &lt;template-include name="device-config" default="sdv-device-config/three-devices" /&gt;
+
+    &lt;!-- Plan. Use the same name as the file name --&gt;
+    &lt;option name="plan" value="&lt;CONFIG_FILE_NAME&gt;"/&gt;
+
+    &lt;!-- Test: mobly-par-file-name should match the module name --&gt;
+    &lt;option name="mobly-host:mobly-par-file-name" value="&lt;ModuleName&gt;" /&gt;
+&lt;/configuration&gt;
+</pre>
+</li> </ul> <p>The default template is sufficient for most tests. Avoid creating custom configurations unless there is a compelling reason.</p> <h3 id="update-default-timeout-catbox">Update the default timeout</h3> <p>If the default timeout is not sufficient for your test, you can override it.</p> <h4 id="override-timeout-catbox">Override the default timeout</h4> <p>To override the default timeout, add the following to the end of your configuration file. Long tests should have a maximum timeout of 10 minutes.</p> 
+<pre>  &lt;!-- Long Test - 10 minutes timeout: &lt;REASON&gt; --&gt;
+  &lt;option name="mobly-host:mobly-test-timeout" value="600000" /&gt;
+</pre> <h3 id="push-files-catbox">Push files to a device</h3> <p>The following section describes how to push files to a device when configuring CATBox.</p> <h4 id="push-files-device-catbox">Push files to a device</h4> <p>To push files to the corresponding device, add the following configuration after the <code translate="no" dir="ltr">plan</code> option:</p> 
+<pre>&lt;!-- Automatically pushes config file to device--&gt;
+&lt;device name="device1"&gt;
+  &lt;target_preparer class="com.android.tradefed.targetprep.PushFilePreparer"&gt;
+    &lt;option name="cleanup" value="true" /&gt;
+    &lt;option name="push-file"
+      key="&lt;FILE_NAME&gt;"
+      value="&lt;REMOTE_FILE_PATH&gt;"
+    /&gt;
+  &lt;/target_preparer&gt;
+&lt;/device&gt;
+</pre> <p>If you require the files on each device, add the configuration for each device (for example, <code translate="no" dir="ltr">name=device1</code>, <code translate="no" dir="ltr">name=device2</code>).</p> <h2 id="test-execution">Test execution</h2> <p>These instructions assume you completed setting up a working SDV environment.</p> <h3 id="setup-execution">Set up the environment</h3> <p>The framework does not start Cloud Virtual Device (CVD) instances, so you must start them before running the tests.</p> <ol> <li>
+<p>Set up the environment and launch the SDV target:</p> 
+<pre>. build/envsetup.sh
+lunch &lt;TARGET&gt;
+</pre>
+</li> <li>
+<p>Start the first CVD instance:</p> 
+<pre>cvd create --config=sdv_core_instance1
+</pre>
+</li> <li>
+<p>Start the second CVD instance (for multi-VM tests):</p> 
+<pre>cvd create --config=sdv_core_instance2
+</pre>
+</li> <li>
+<p>Start the third CVD instance (for multi-VM tests):</p> 
+<pre>cvd create --config=sdv_core_instance3
+</pre>
+</li> </ol> <h3 id="run-atest">Run atest</h3> 
+<pre>atest &lt;TestModuleName&gt;
+</pre> <h3 id="run-catbox">Run CATBox</h3> <p>These commands assume you are in the root directory of the repository.</p> <ol> <li>Build CATBox: <code translate="no" dir="ltr">m catbox</code>
+</li> <li>(Optional) View all available SDV test plans in CATBox:</li> </ol> 
+<pre>out/host/linux-x86/catbox/android-catbox/tools/catbox-tradefed l p | grep sdv-
+</pre> <p>Run a test:</p> <ul> <li>
+<p><strong>Run one VM test:</strong></p> 
+<pre>NOTIFY_AS_NATIVE=0.0.0.0:6520 out/host/linux-x86/catbox/android-catbox/tools/catbox-tradefed run commandAndExit TEST_PLAN_NAME --{device1}serial 0.0.0.0:6520
+</pre>
+</li> <li>
+<p><strong>Run two VMs test:</strong></p> 
+<pre>NOTIFY_AS_NATIVE=0.0.0.0:6520,0.0.0.0:6521 out/host/linux-x86/catbox/android-catbox/tools/catbox-tradefed run commandAndExit TEST_PLAN_NAME --{device1}serial 0.0.0.0:6520 --{device2}serial 0.0.0.0:6521
+</pre>
+</li> <li>
+<p><strong>Run three VMs test:</strong></p> 
+<pre>NOTIFY_AS_NATIVE=0.0.0.0:6520,0.0.0.0:6521,0.0.0.0:6522 out/host/linux-x86/catbox/android-catbox/tools/catbox-tradefed run commandAndExit TEST_PLAN_NAME --{device1}serial 0.0.0.0:6520 --{device2}serial 0.0.0.0:6521 --{device3}serial 0.0.0.0:6522
+</pre>
+</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/testing/sdv-test-framework" class="_attribution-link">https://source.android.com/docs/automotive/sdv/testing/sdv-test-framework</a>
+  </p>
+</div>

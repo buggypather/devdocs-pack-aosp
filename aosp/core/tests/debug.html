@@ -1,0 +1,161 @@
+<h1>Debug native Android platform code</h1>  <p>This section summarizes useful tools and related commands for debugging, tracing, and profiling native Android platform code when developing platform-level features.</p> <p class="note"><strong>Note:</strong> The pages in this section and elsewhere within this site recommend the use of <code translate="no" dir="ltr">adb</code> in conjunction with the <code translate="no" dir="ltr">setprop</code> argument to debug certain aspects of Android. In Android 7.x and lower, property names had a length limit of 32 characters. This meant that to create a wrap property with the name of the app, it was necessary to truncate the name to fit. In Android 8.0 and higher, this limit is much greater and shouldn't require truncation.</p> <p>This page covers the basics surrounding crash dumps found in logcat output. Other pages have far more detail about <a href="debug/native-crash">diagnosing native crashes</a>, exploring system services with <a href="https://developer.android.com/studio/command-line/dumpsys"> <code translate="no" dir="ltr">dumpsys</code></a>, viewing <a href="debug/native-memory">native memory</a>, <a href="https://developer.android.com/studio/command-line/dumpsys#network">network</a>, and <a href="https://developer.android.com/studio/command-line/dumpsys#procstats">RAM</a> usage, using <a href="../../security/test/asan">AddressSanitizer</a> to detect memory bugs in native code, evaluating <a href="debug/eval_perf"> performance issues</a> (includes <a href="debug/systrace">systrace</a>), and using <a href="debug/gdb">debuggers</a>.</p> <h2 id="debuggerd">Crash dumps and tombstones</h2> <p>When a dynamically linked executable starts, several signal handlers are registered that, in the event of a crash, cause a basic crash dump to be written to logcat and a more detailed <em>tombstone</em> file to be written to <code translate="no" dir="ltr">/data/tombstones/</code>. The tombstone is a file with extra data about the crashed process. In particular, it contains stack traces for all the threads in the crashing process (not just the thread that caught the signal), a full memory map, and a list of all open file descriptors.</p> <p>Before Android 8.0, crashes were handled by the <code translate="no" dir="ltr">debuggerd</code> and <code translate="no" dir="ltr">debuggerd64</code> daemons. In Android 8.0 and higher, <code translate="no" dir="ltr">crash_dump32</code> and <code translate="no" dir="ltr">crash_dump64</code> are spawned as needed.</p> <p>It's possible for the crash dumper to attach only if nothing else is already attached, which means that using tools such as <code translate="no" dir="ltr">strace</code> or <code translate="no" dir="ltr">lldb</code> prevent crash dumps from occurring.</p> <p>Example output (with timestamps and extraneous information removed):</p> 
+<pre>
+*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+Build fingerprint: 'Android/aosp_angler/angler:7.1.1/NYC/enh12211018:eng/test-keys'
+Revision: '0'
+ABI: 'arm'
+pid: 17946, tid: 17949, name: crasher  &gt;&gt;&gt; crasher &lt;&lt;&lt;
+signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0xc
+    r0 0000000c  r1 00000000  r2 00000000  r3 00000000
+    r4 00000000  r5 0000000c  r6 eccdd920  r7 00000078
+    r8 0000461a  r9 ffc78c19  sl ab209441  fp fffff924
+    ip ed01b834  sp eccdd800  lr ecfa9a1f  pc ecfd693e  cpsr 600e0030
+
+backtrace:
+    #00 pc 0004793e  /system/lib/libc.so (pthread_mutex_lock+1)
+    #01 pc 0001aa1b  /system/lib/libc.so (readdir+10)
+    #02 pc 00001b91  /system/xbin/crasher (readdir_null+20)
+    #03 pc 0000184b  /system/xbin/crasher (do_action+978)
+    #04 pc 00001459  /system/xbin/crasher (thread_callback+24)
+    #05 pc 00047317  /system/lib/libc.so (_ZL15__pthread_startPv+22)
+    #06 pc 0001a7e5  /system/lib/libc.so (__start_thread+34)
+Tombstone written to: /data/tombstones/tombstone_06
+</pre> <p>The last line of output gives the location of the full tombstone on disk.</p> <p>If you have the unstripped binaries available, you can get a more detailed unwind with line number information by pasting the stack into <code translate="no" dir="ltr">development/scripts/stack</code>:</p> 
+<pre>
+development/scripts/stack
+</pre> <p class="key-point"><strong>Tip:</strong> For convenience, if you've run <code translate="no" dir="ltr">lunch</code>, then <code translate="no" dir="ltr">stack</code> is already on your <code translate="no" dir="ltr">$PATH</code> so you don't need to provide the full path.</p> <p>Example output (based on the logcat output above):</p> 
+<pre>
+Reading native crash info from stdin
+03-02 23:53:49.477 17951 17951 F DEBUG   : *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+03-02 23:53:49.477 17951 17951 F DEBUG   : Build fingerprint: 'Android/aosp_angler/angler:7.1.1/NYC/enh12211018:eng/test-keys'
+03-02 23:53:49.477 17951 17951 F DEBUG   : Revision: '0'
+03-02 23:53:49.477 17951 17951 F DEBUG   : ABI: 'arm'
+03-02 23:53:49.478 17951 17951 F DEBUG   : pid: 17946, tid: 17949, name: crasher  &gt;&gt;&gt; crasher &lt;&lt;&lt;
+03-02 23:53:49.478 17951 17951 F DEBUG   : signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0xc
+03-02 23:53:49.478 17951 17951 F DEBUG   :     r0 0000000c  r1 00000000  r2 00000000  r3 00000000
+03-02 23:53:49.478 17951 17951 F DEBUG   :     r4 00000000  r5 0000000c  r6 eccdd920  r7 00000078
+03-02 23:53:49.478 17951 17951 F DEBUG   :     r8 0000461a  r9 ffc78c19  sl ab209441  fp fffff924
+03-02 23:53:49.478 17951 17951 F DEBUG   :     ip ed01b834  sp eccdd800  lr ecfa9a1f  pc ecfd693e  cpsr 600e0030
+03-02 23:53:49.491 17951 17951 F DEBUG   :
+03-02 23:53:49.491 17951 17951 F DEBUG   : backtrace:
+03-02 23:53:49.492 17951 17951 F DEBUG   :     #00 pc 0004793e  /system/lib/libc.so (pthread_mutex_lock+1)
+03-02 23:53:49.492 17951 17951 F DEBUG   :     #01 pc 0001aa1b  /system/lib/libc.so (readdir+10)
+03-02 23:53:49.492 17951 17951 F DEBUG   :     #02 pc 00001b91  /system/xbin/crasher (readdir_null+20)
+03-02 23:53:49.492 17951 17951 F DEBUG   :     #03 pc 0000184b  /system/xbin/crasher (do_action+978)
+03-02 23:53:49.492 17951 17951 F DEBUG   :     #04 pc 00001459  /system/xbin/crasher (thread_callback+24)
+03-02 23:53:49.492 17951 17951 F DEBUG   :     #05 pc 00047317  /system/lib/libc.so (_ZL15__pthread_startPv+22)
+03-02 23:53:49.492 17951 17951 F DEBUG   :     #06 pc 0001a7e5  /system/lib/libc.so (__start_thread+34)
+03-02 23:53:49.492 17951 17951 F DEBUG   :     Tombstone written to: /data/tombstones/tombstone_06
+Reading symbols from /huge-ssd/aosp-arm64/out/target/product/angler/symbols
+Revision: '0'
+pid: 17946, tid: 17949, name: crasher  &gt;&gt;&gt; crasher &lt;&lt;&lt;
+signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0xc
+     r0 0000000c  r1 00000000  r2 00000000  r3 00000000
+     r4 00000000  r5 0000000c  r6 eccdd920  r7 00000078
+     r8 0000461a  r9 ffc78c19  sl ab209441  fp fffff924
+     ip ed01b834  sp eccdd800  lr ecfa9a1f  pc ecfd693e  cpsr 600e0030
+Using arm toolchain from: /huge-ssd/aosp-arm64/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/bin/
+
+Stack Trace:
+  RELADDR   FUNCTION                   FILE:LINE
+  0004793e  pthread_mutex_lock+2       bionic/libc/bionic/pthread_mutex.cpp:515
+  v------&gt;  ScopedPthreadMutexLocker   bionic/libc/private/ScopedPthreadMutexLocker.h:27
+  0001aa1b  readdir+10                 bionic/libc/bionic/dirent.cpp:120
+  00001b91  readdir_null+20            system/core/debuggerd/crasher.cpp:131
+  0000184b  do_action+978              system/core/debuggerd/crasher.cpp:228
+  00001459  thread_callback+24         system/core/debuggerd/crasher.cpp:90
+  00047317  __pthread_start(void*)+22  bionic/libc/bionic/pthread_create.cpp:202 (discriminator 1)
+  0001a7e5  __start_thread+34          bionic/libc/bionic/clone.cpp:46 (discriminator 1)
+</pre> <aside class="note"><strong>Note:</strong> Some system libraries are built with <code translate="no" dir="ltr">LOCAL_STRIP_MODULE := keep_symbols</code> to provide usable backtraces directly, taking much less space than an unstripped version.</aside> <p>You can use <code translate="no" dir="ltr">stack</code> on an entire tombstone. Example:</p> 
+<pre>
+stack &lt; FS/data/tombstones/tombstone_05
+</pre> <p>This is useful if you've just unzipped a bug report in the current directory. For more information about diagnosing native crashes and tombstones, see <a href="debug/native-crash">Diagnosing Native Crashes</a>. </p> <h2 id="tombstone">Get a stack trace or tombstone from a running process</h2> <p>You can use the <code translate="no" dir="ltr">debuggerd</code> tool to get a stack dump from a running process. From the command line, invoke <code translate="no" dir="ltr">debuggerd</code> using a process ID (PID) to dump a full tombstone to <code translate="no" dir="ltr">stdout</code>. To get just the stack for every thread in the process, include the <code translate="no" dir="ltr">-b</code> or <code translate="no" dir="ltr">--backtrace</code> flag.</p> <h2 id="complex">Understand a complex unwind</h2> <p>When an app crashes, the stack tends to be pretty complex. The following detailed example highlights many of the complexities:</p> 
+<pre>
+    #00 pc 00000000007e6918  /system/priv-app/Velvet/Velvet.apk (offset 0x346b000)
+    #01 pc 00000000001845cc  /system/priv-app/Velvet/Velvet.apk (offset 0x346b000)
+    #02 pc 00000000001847e4  /system/priv-app/Velvet/Velvet.apk (offset 0x346b000)
+    #03 pc 00000000001805c0  /system/priv-app/Velvet/Velvet.apk (offset 0x346b000) (Java_com_google_speech_recognizer_AbstractRecognizer_nativeRun+176)
+</pre> <p>Frames #00–#03 are from native JNI code that was stored uncompressed in the APK to save disk space rather than being extracted into a separate <code translate="no" dir="ltr">.so</code> file. The stack unwinder in Android 9 and higher doesn't need the extracted <code translate="no" dir="ltr">.so</code> file to cope with this common Android-specific case.</p> <p>Frames #00–#02 don't have symbol names because they were stripped by the developer.</p> <p>Frame #03 shows that where symbols are available, the unwinder uses them.</p> 
+<pre>
+    #04 pc 0000000000117550  /data/dalvik-cache/arm64/system@priv-app@Velvet@Velvet.apk@classes.dex (offset 0x108000) (com.google.speech.recognizer.AbstractRecognizer.nativeRun+160)
+</pre> <p>Frame #04 is ahead-of-time compiled Java code. The old unwinder would have stopped here, unable to unwind through Java.</p> 
+<pre>
+    #05 pc 0000000000559f88  /system/lib64/libart.so (art_quick_invoke_stub+584)
+    #06 pc 00000000000ced40  /system/lib64/libart.so (art::ArtMethod::Invoke(art::Thread*, unsigned int*, unsigned int, art::JValue*, char const*)+200)
+    #07 pc 0000000000280cf0  /system/lib64/libart.so (art::interpreter::ArtInterpreterToCompiledCodeBridge(art::Thread*, art::ArtMethod*, art::ShadowFrame*, unsigned short, art::JValue*)+344)
+    #08 pc 000000000027acac  /system/lib64/libart.so (bool art::interpreter::DoCall&lt;false, false&gt;(art::ArtMethod*, art::Thread*, art::ShadowFrame&amp;, art::Instruction const*, unsigned short, art::JValue*)+948)
+    #09 pc 000000000052abc0  /system/lib64/libart.so (MterpInvokeDirect+296)
+    #10 pc 000000000054c614  /system/lib64/libart.so (ExecuteMterpImpl+14484)
+</pre> <p>Frames #05–#10 are from the ART interpreter implementation. The stack unwinder in releases lower than Android 9 would have shown these frames without the context of frame #11 explaining what code the interpreter was interpreting. These frames are useful if you're debugging ART itself. If you're debugging an app, you can ignore them. Some tools, such as <code translate="no" dir="ltr">simpleperf</code>, automatically omit these frames.</p> 
+<pre>
+    #11 pc 00000000001992d6  /system/priv-app/Velvet/Velvet.apk (offset 0x26cf000) (com.google.speech.recognizer.AbstractRecognizer.run+18)
+</pre> <p>Frame #11 is the Java code being interpreted.</p> 
+<pre>
+    #12 pc 00000000002547a8  /system/lib64/libart.so (_ZN3art11interpreterL7ExecuteEPNS_6ThreadERKNS_20CodeItemDataAccessorERNS_11ShadowFrameENS_6JValueEb.llvm.780698333+496)
+    #13 pc 000000000025a328  /system/lib64/libart.so (art::interpreter::ArtInterpreterToInterpreterBridge(art::Thread*, art::CodeItemDataAccessor const&amp;, art::ShadowFrame*, art::JValue*)+216)
+    #14 pc 000000000027ac90  /system/lib64/libart.so (bool art::interpreter::DoCall&lt;false, false&gt;(art::ArtMethod*, art::Thread*, art::ShadowFrame&amp;, art::Instruction const*, unsigned short, art::JValue*)+920)
+    #15 pc 0000000000529880  /system/lib64/libart.so (MterpInvokeVirtual+584)
+    #16 pc 000000000054c514  /system/lib64/libart.so (ExecuteMterpImpl+14228)
+</pre> <p>Frames #12–#16 are the interpreter implementation itself.</p> 
+<pre>
+    #17 pc 00000000002454a0  /system/priv-app/Velvet/Velvet.apk (offset 0x1322000) (com.google.android.apps.gsa.speech.e.c.c.call+28)
+</pre> <p>Frame #17 is the Java code being interpreted. This Java method corresponds to interpreter frames #12–#16.</p> 
+<pre>
+    #18 pc 00000000002547a8  /system/lib64/libart.so (_ZN3art11interpreterL7ExecuteEPNS_6ThreadERKNS_20CodeItemDataAccessorERNS_11ShadowFrameENS_6JValueEb.llvm.780698333+496)
+    #19 pc 0000000000519fd8  /system/lib64/libart.so (artQuickToInterpreterBridge+1032)
+    #20 pc 00000000005630fc  /system/lib64/libart.so (art_quick_to_interpreter_bridge+92)
+</pre> <p>Frames #18–#20 are the VM itself, code to transition from compiled Java code to interpreted Java code.</p> 
+<pre>
+    #21 pc 00000000002ce44c  /system/framework/arm64/boot.oat (offset 0xdc000) (java.util.concurrent.FutureTask.run+204)
+</pre> <p>Frame #21 is the compiled Java method that calls the Java method in #17.</p> 
+<pre>
+    #22 pc 0000000000559f88  /system/lib64/libart.so (art_quick_invoke_stub+584)
+    #23 pc 00000000000ced40  /system/lib64/libart.so (art::ArtMethod::Invoke(art::Thread*, unsigned int*, unsigned int, art::JValue*, char const*)+200)
+    #24 pc 0000000000280cf0  /system/lib64/libart.so (art::interpreter::ArtInterpreterToCompiledCodeBridge(art::Thread*, art::ArtMethod*, art::ShadowFrame*, unsigned short, art::JValue*)+344)
+    #25 pc 000000000027acac  /system/lib64/libart.so (bool art::interpreter::DoCall&lt;false, false&gt;(art::ArtMethod*, art::Thread*, art::ShadowFrame&amp;, art::Instruction const*, unsigned short, art::JValue*)+948)
+    #26 pc 0000000000529880  /system/lib64/libart.so (MterpInvokeVirtual+584)
+    #27 pc 000000000054c514  /system/lib64/libart.so (ExecuteMterpImpl+14228)
+</pre> <p>Frames #22–#27 are the interpreter implementation, making a method invocation from interpreted code to a compiled method.</p> 
+<pre>
+    #28 pc 00000000003ed69e  /system/priv-app/Velvet/Velvet.apk (com.google.android.apps.gsa.shared.util.concurrent.b.e.run+22)
+</pre> <p>Frame #28 is the Java code being interpreted.</p> 
+<pre>
+    #29 pc 00000000002547a8  /system/lib64/libart.so (_ZN3art11interpreterL7ExecuteEPNS_6ThreadERKNS_20CodeItemDataAccessorERNS_11ShadowFrameENS_6JValueEb.llvm.780698333+496)
+    #30 pc 0000000000519fd8  /system/lib64/libart.so (artQuickToInterpreterBridge+1032)
+    #31 pc 00000000005630fc  /system/lib64/libart.so (art_quick_to_interpreter_bridge+92)
+</pre> <p>Frames #29–#31 are another transition between compiled code and interpreted code.</p> 
+<pre>
+    #32 pc 0000000000329284  /system/framework/arm64/boot.oat (offset 0xdc000) (java.util.concurrent.ThreadPoolExecutor.runWorker+996)
+    #33 pc 00000000003262a0  /system/framework/arm64/boot.oat (offset 0xdc000) (java.util.concurrent.ThreadPoolExecutor$Worker.run+64)
+    #34 pc 00000000002037e8  /system/framework/arm64/boot.oat (offset 0xdc000) (java.lang.Thread.run+72)
+</pre> <p>Frames #32–#34 are compiled Java frames calling each other directly. In this case the native call stack is the same as the Java call stack.</p> 
+<pre>
+    #35 pc 0000000000559f88  /system/lib64/libart.so (art_quick_invoke_stub+584)
+    #36 pc 00000000000ced40  /system/lib64/libart.so (art::ArtMethod::Invoke(art::Thread*, unsigned int*, unsigned int, art::JValue*, char const*)+200)
+    #37 pc 0000000000280cf0  /system/lib64/libart.so (art::interpreter::ArtInterpreterToCompiledCodeBridge(art::Thread*, art::ArtMethod*, art::ShadowFrame*, unsigned short, art::JValue*)+344)
+    #38 pc 000000000027acac  /system/lib64/libart.so (bool art::interpreter::DoCall&lt;false, false&gt;(art::ArtMethod*, art::Thread*, art::ShadowFrame&amp;, art::Instruction const*, unsigned short, art::JValue*)+948)
+    #39 pc 0000000000529f10  /system/lib64/libart.so (MterpInvokeSuper+1408)
+    #40 pc 000000000054c594  /system/lib64/libart.so (ExecuteMterpImpl+14356)
+</pre> <p>Frames #35–#40 are the interpreter itself.</p> 
+<pre>
+    #41 pc 00000000003ed8e0  /system/priv-app/Velvet/Velvet.apk (com.google.android.apps.gsa.shared.util.concurrent.b.i.run+20)
+</pre> <p>Frame #41 is the Java code being interpreted.</p> 
+<pre>
+    #42 pc 00000000002547a8  /system/lib64/libart.so (_ZN3art11interpreterL7ExecuteEPNS_6ThreadERKNS_20CodeItemDataAccessorERNS_11ShadowFrameENS_6JValueEb.llvm.780698333+496)
+    #43 pc 0000000000519fd8  /system/lib64/libart.so (artQuickToInterpreterBridge+1032)
+    #44 pc 00000000005630fc  /system/lib64/libart.so (art_quick_to_interpreter_bridge+92)
+    #45 pc 0000000000559f88  /system/lib64/libart.so (art_quick_invoke_stub+584)
+    #46 pc 00000000000ced40  /system/lib64/libart.so (art::ArtMethod::Invoke(art::Thread*, unsigned int*, unsigned int, art::JValue*, char const*)+200)
+    #47 pc 0000000000460d18  /system/lib64/libart.so (art::(anonymous namespace)::InvokeWithArgArray(art::ScopedObjectAccessAlreadyRunnable const&amp;, art::ArtMethod*, art::(anonymous namespace)::ArgArray*, art::JValue*, char const*)+104)
+    #48 pc 0000000000461de0  /system/lib64/libart.so (art::InvokeVirtualOrInterfaceWithJValues(art::ScopedObjectAccessAlreadyRunnable const&amp;, _jobject*, _jmethodID*, jvalue*)+424)
+    #49 pc 000000000048ccb0  /system/lib64/libart.so (art::Thread::CreateCallback(void*)+1120)
+</pre> <p>Frames #42–#49 are the VM itself. This time it's the code that starts running Java on a new thread.</p> 
+<pre>
+    #50 pc 0000000000082e24  /system/lib64/libc.so (__pthread_start(void*)+36)
+    #51 pc 00000000000233bc  /system/lib64/libc.so (__start_thread+68)
+</pre> <p>Frames #50–#51 are how all threads should start. This is the <code translate="no" dir="ltr">libc</code> new thread start code.</p> <aside class="note"><strong>Tip:</strong> If you see these frames at the bottom of the stack, the unwind is successful and complete. If you don't see these frames, the stack is either truncated or corrupted. Don't assume that the stack is correct if it doesn't end this way.</aside><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/debug" class="_attribution-link">https://source.android.com/docs/core/tests/debug</a>
+  </p>
+</div>

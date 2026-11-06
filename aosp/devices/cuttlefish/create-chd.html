@@ -1,0 +1,34 @@
+<h1>Create a Cuttlefish hybrid device</h1>  <p>This page describes how to create a Cuttlefish hybrid device (CHD).</p> <p>A CHD is a hybrid virtual Cuttlefish device, which runs a physical device's system image instead of a Cuttlefish system image on the device's HALs. This offers the following advantages:</p> <ul> <li><p><strong>Early development and testing:</strong> CHDs allow for early development and testing of next-generation system software before the physical hardware is available.</p></li> <li><p><strong>Scalability:</strong> CHDs facilitate easier expansion of development and testing capacity.</p></li> </ul> <aside class="note"><strong>Note:</strong><span> You can use Cuttlefish hybrid devices (CHDs) only on Android 15 (API level 35) and higher.</span></aside> <h2 id="create-chd-image">Create a CHD image</h2> <p>To create a CHD image, follow these steps:</p> <ol> <li>
+<p>Generate the target files for the vendor target and the physical device using <code translate="no" dir="ltr">make dist</code>. Generate the vendor target files using one of the following options:</p> <ul> <li>An existing full Cuttlefish target</li> <li>A Cuttlefish target that builds only Cuttlefish vendor files. For more information, see <a href="#cuttlefish-vendor-target">Create a Cuttlefish vendor target</a>.</li> </ul>
+</li> <li>
+<p>Combine the two target files into a CHD target file and generate the CHD images from the CHD target file by running the <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:tools/treble/cuttlefish/build_cf_hybrid_device.py"><code translate="no" dir="ltr">build_cf_hybrid_device.py</code></a> script. This script combines the two target files into a CHD target file using <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:build/make/tools/releasetools/merge/merge_target_files.py"><code translate="no" dir="ltr">merge_target_files.py</code></a> and generates the CHD images from the CHD target file using <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:build/make/tools/releasetools/img_from_target_files.py"><code translate="no" dir="ltr">img_from_target_files</code></a>.</p> 
+<pre>python3 tools/treble/cuttlefish/build_cf_hybrid_device.py \
+  --framework_target_files_zip &lt;physical_device_target_files.zip&gt; \
+  --vendor_target_files_zip &lt;cuttlefish_device_target_files.zip&gt; \
+  --otatools_zip &lt;cuttlefish_otatools.zip&gt; \
+  --target chd \
+  --output_dir &lt;output_directory&gt;
+</pre>
+</li> </ol> <h2 id="cuttlefish-vendor-target">Create a Cuttlefish vendor target</h2> <p>You can use <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:device/google/cuttlefish/vsoc_arm64/phone/aosp_cf_vendor.mk"><code translate="no" dir="ltr">aosp_cf_vendor.mk</code></a> to define the <code translate="no" dir="ltr">aosp_cf_arm64_phone_vendor</code> target, which you can use as the vendor target file for a CHD image.</p> <p>To create a Cuttlefish vendor-only target, follow these steps:</p> <ol> <li>
+<p>Inherit the Cuttlefish target that builds full artifacts:</p> 
+<pre>$(call inherit-product, device/google/cuttlefish/vsoc_arm64/phone/aosp_cf.mk)
+</pre>
+</li> <li>
+<p>Define the target name:</p> 
+<pre>PRODUCT_NAME := aosp_cf_arm64_phone_vendor
+</pre>
+</li> <li>
+<p>Disable unnecessary builds from the full artifacts:</p> 
+<pre>PRODUCT_BUILD_SYSTEM_IMAGE := false
+PRODUCT_BUILD_SYSTEM_OTHER_IMAGE := false
+PRODUCT_BUILD_PRODUCT_IMAGE := false
+PRODUCT_BUILD_SYSTEM_EXT_IMAGE := false
+PRODUCT_BUILD_SUPER_PARTITION := false
+TARGET_SKIP_OTA_PACKAGE := true
+</pre>
+</li> </ol> <h2 id="choose-host-environment">Choose a host environment to launch a CHD</h2> <p>To set up a scalable host environment for launching and managing ARM64-based CHDs, choose a setup based on your workflow:</p> <ul> <li><p><strong>Google Cloud C4A bare metal (recommended):</strong> <a href="https://cloud.google.com/compute/docs/general-purpose-machines#c4a_series">Google Cloud C4A bare metal</a> instances, such as <code translate="no" dir="ltr">c4a-standard-96-metal</code> or <code translate="no" dir="ltr">c4a-highmem-96-metal</code>, provide native ARM64 KVM hardware acceleration powered by Google Axion processors. This setup delivers high-performance, highly scalable execution for ARM64 CHDs in the cloud without nested virtualization overhead. Furthermore, <a href="../../core/tests/development/android-test-station/ats-cloud-orchestration">OmniLab ATS Cloud Orchestration</a> integrates with <code translate="no" dir="ltr">c4a-metal</code> to automate device allocation, test orchestration, and infrastructure management.</p></li> <li><p><strong>Manual host or on-premises setup (alternative):</strong> If you're running on custom local or lab ARM hardware, or manually configuring a host environment without OmniLab ATS, see <a href="on-premises">Run Cuttlefish on an on-premises server</a>.</p></li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/devices/cuttlefish/create-chd" class="_attribution-link">https://source.android.com/docs/devices/cuttlefish/create-chd</a>
+  </p>
+</div>

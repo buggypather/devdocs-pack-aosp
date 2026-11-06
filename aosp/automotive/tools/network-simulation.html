@@ -1,0 +1,82 @@
+<h1>Simulate networks in Android Automotive OS (AAOS)</h1>  <p>This page describes how to simulate different network conditions on Android Automotive hardware devices in a scalable, low-maintenance way. This environment agnostic network simulation uses commonly available Linux tools that can run on Android Automotive hardware devices.</p> <p>The following sections describe how to set up and run a network simulation on Android Automotive hardware devices.</p> <h2 id="kernel-req">Kernel requirement</h2> <p>To enable network simulation on a device under test (DUT), the Linux <a href="http://linux-ip.net/gl/tc-filters/tc-filters-node3.html"><code translate="no" dir="ltr">ifb</code></a> and <a href="https://man7.org/linux/man-pages/man8/tc-netem.8.html"><code translate="no" dir="ltr">netem</code></a> modules must be configured in the kernel config file, as shown below:</p> 
+<pre># Network simulation config fragment start
+CONFIG_NET_SCH_NETEM=y
+CONFIG_IFB=y
+CONFIG_NET_ACT_MIRRED=y
+# Network simulation config fragment end
+</pre> <h2 id="sim-setup">Set up simulation</h2> <p>All network simulations or throttling simulations must be conducted on a device under test (DUT). This simulation uses the Linux <a href="https://man7.org/linux/man-pages/man8/tc.8.html"><code translate="no" dir="ltr">tc</code></a> and <a href="https://man7.org/linux/man-pages/man8/tc-netem.8.html"><code translate="no" dir="ltr">NetEm</code></a> utilities to control network traffic on the network interface controller (NIC) based on the control policy and rules.</p> <p>To set up the simulation, do the following:</p> <ol> <li>Connect the DUT and the host server to the internet.</li> <li>Create the <code translate="no" dir="ltr">NetworkSimulation.sh</code> script by copying it from the code provided in the <a href="#nw-sim-script"><code translate="no" dir="ltr">NetworkSimulation.sh</code> script</a> section and download it on the host server.</li> <li>Connect the host server to the DUT. Ensure that the DUT appears in the list of connected devices by running <code translate="no" dir="ltr">adb devices -l</code>.</li> </ol> <p>For an illustration of the setup architecture, see the following figure:</p> <p><img src="https://source.android.com/static/docs/automotive/images/tools-nw-sim.png" alt="nw-sim" title="nw-sim" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> Setup architecture.</p> <h3 id="nw-sim-script">NetworkSimulation.sh script</h3> <p>The <code translate="no" dir="ltr">NetworkSimulation.sh</code> script file contains <code translate="no" dir="ltr">adb</code> commands that run the network simulation. Copy the following into a file named <code translate="no" dir="ltr">NetworkSimulation.sh</code>:</p> 
+<pre>  #!/bin/bash
+
+  latency=$1
+  bandwidth=$2
+  packetloss=$3
+
+  # root device and set it to permissive mode
+  adb root
+  adb shell setenforce 0
+
+  #Clear the current tc control
+  adb shell tc qdisc del dev ifb0 root
+  adb shell ip link set dev ifb0 down
+  adb shell tc qdisc del dev wlan0 ingress
+  adb shell tc qdisc del dev wlan0 root
+
+  # Create a virtual device for ingress
+  adb shell ip link set dev wlan0 up
+  adb shell ip link set dev ifb0 up
+  adb shell tc qdisc del dev wlan0 clsact
+  adb shell tc qdisc add dev wlan0 handle ffff: ingress
+  adb shell tc filter add dev wlan0 parent ffff: protocol all u32 match u32 0 0 action mirred egress redirect dev ifb0
+
+  # Throttle upload bandwidth / latency / packet loss
+  adb shell tc qdisc add dev wlan0 root handle 1: htb default 11
+  adb shell tc class add dev wlan0 parent 1: classid 1:1 htb rate "$bandwidth"
+  adb shell tc class add dev wlan0 parent 1:1 classid 1:11 htb rate "$bandwidth"
+  adb shell tc qdisc add dev wlan0 parent 1:11 handle 10: netem delay "$latency" loss "$packetloss"
+
+  # Throttle download bandwidth
+  adb shell tc qdisc add dev ifb0 root handle 1: htb default 10
+  adb shell tc class add dev ifb0 parent 1: classid 1:1 htb rate "$bandwidth"
+  adb shell tc class add dev ifb0 parent 1:1 classid 1:10 htb rate "$bandwidth"
+</pre> <h2 id="exec">Execute simulation</h2> <p>To execute a network simulation, the <code translate="no" dir="ltr">adb</code> commands in the <code translate="no" dir="ltr">NetworkSimulation.sh</code> script file use command line arguments to set values.</p> <p>To specify the latency, bandwidth, and packet loss you want to simulate, run the <code translate="no" dir="ltr">NetworkSimulation.sh</code> script with the following command line arguments:</p> <ul> <li>Latency, specified in ms.</li> <li>Bandwidth, specified in kbit or mbit.</li> <li>Packet loss, as a percentage.</li> </ul> <p>For example, to set a 300ms latency, 100kbit bandwidth and 50% packet loss, run:</p> 
+<pre>bash NetworkSimulation.sh 300ms 100kbit 50%
+</pre> <p>To set a 100ms latency, 1mbit bandwidth and 0% packet loss, run:</p> 
+<pre>bash NetworkSimulation.sh 100ms 1mbit 0%
+</pre> <h2 id="verification">Verify simulation</h2> <p>After executing the <code translate="no" dir="ltr">NetworkSimulation.sh</code> script, verify that the network simulation is configured correctly and is running as expected using the Linux <a href="https://linux.die.net/man/8/ping"><code translate="no" dir="ltr">ping</code></a> and <a href="https://man7.org/linux/man-pages/man1/curl.1.html"><code translate="no" dir="ltr">curl</code></a> commands. Use the <code translate="no" dir="ltr">ping</code> command to verify the latency and the <code translate="no" dir="ltr">curl</code> command to verify the bandwidth.</p> <p>For example, the following is the expected output of <code translate="no" dir="ltr">ping</code> for a simulation executed with <code translate="no" dir="ltr">bash NetworkSimulation.sh 100ms 500kbit 10%</code>:</p> 
+<pre>
+BUILD:/ # ping -c 20 www.google.com
+PING www.google.com (172.217.5.100) 56(84) bytes of data.
+64 bytes from sfo03s07-in-f4.1e100.net (172.217.5.100): icmp_seq=1 ttl=119 time=103 ms
+64 bytes from sfo03s07-in-f4.1e100.net (172.217.5.100): icmp_seq=2 ttl=119 time=105 ms
+64 bytes from sfo03s07-in-f4.1e100.net (172.217.5.100): icmp_seq=3 ttl=119 time=103 ms
+64 bytes from sfo03s07-in-f4.1e100.net (172.217.5.100): icmp_seq=5 ttl=119 time=103 ms
+64 bytes from sfo03s07-in-f4.1e100.net (172.217.5.100): icmp_seq=6 ttl=119 time=103 ms
+64 bytes from sfo03s07-in-f4.1e100.net (172.217.5.100): icmp_seq=7 ttl=119 time=103 ms
+64 bytes from sfo03s07-in-f4.1e100.net (172.217.5.100): icmp_seq=9 ttl=119 time=103 ms
+64 bytes from sfo03s07-in-f4.1e100.net (172.217.5.100): icmp_seq=10 ttl=119 time=103 ms
+64 bytes from sfo03s07-in-f4.1e100.net (172.217.5.100): icmp_seq=11 ttl=119 time=185 ms
+64 bytes from sfo03s07-in-f4.1e100.net (172.217.5.100): icmp_seq=12 ttl=119 time=103 ms
+64 bytes from sfo03s07-in-f4.1e100.net (172.217.5.100): icmp_seq=13 ttl=119 time=103 ms
+64 bytes from sfo03s07-in-f4.1e100.net (172.217.5.100): icmp_seq=14 ttl=119 time=103 ms
+64 bytes from sfo03s07-in-f4.1e100.net (172.217.5.100): icmp_seq=15 ttl=119 time=103 ms
+64 bytes from sfo03s07-in-f4.1e100.net (172.217.5.100): icmp_seq=16 ttl=119 time=103 ms
+64 bytes from sfo03s07-in-f4.1e100.net (172.217.5.100): icmp_seq=17 ttl=119 time=103 ms
+64 bytes from sfo03s07-in-f4.1e100.net (172.217.5.100): icmp_seq=18 ttl=119 time=103 ms
+64 bytes from sfo03s07-in-f4.1e100.net (172.217.5.100): icmp_seq=19 ttl=119 time=103 ms
+64 bytes from sfo03s07-in-f4.1e100.net (172.217.5.100): icmp_seq=20 ttl=119 time=103 ms
+
+--- www.google.com ping statistics ---
+20 packets transmitted, 18 received, 10% packet loss, time 19040ms
+rtt min/avg/max/mdev = 103.394/108.307/185.756/18.791 ms
+</pre> <p>This example shows that <code translate="no" dir="ltr">ping</code> reports a packet loss at 10% and average latency close to 108ms, which is as expected for the 100ms value specified in the simulation. It's normal for the reported latency to differ from the specified value by a small amount.</p> <p>For the same example, the following is the expected output of running the <code translate="no" dir="ltr">curl</code> command.</p> 
+<pre>
+BUILD:/sdcard/DCIM # curl https://images-assets.nasa.gov/image/PIA15416/PIA15416~orig.jpg -o foo.jpg
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100 6598k  100 6598k    0     0  49220      0  0:02:17  0:02:17 --:--:-- 47574
+</pre> <p>This example shows that <code translate="no" dir="ltr">curl</code> reports the average download speed at 49220 Bps, which is as expected for the 500kbit specified in the simulation. It's normal for the reported bandwidth to differ from the specified value by a small amount.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/tools/network-simulation" class="_attribution-link">https://source.android.com/docs/automotive/tools/network-simulation</a>
+  </p>
+</div>

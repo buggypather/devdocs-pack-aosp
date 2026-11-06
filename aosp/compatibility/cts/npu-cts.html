@@ -1,0 +1,24 @@
+<h1>Run NPU Manager Mobly tests</h1> <p>The <code translate="no" dir="ltr">CtsNpuManagerMoblyTestCases</code> suite verifies device compatibility with the <code translate="no" dir="ltr">NpuManager</code> service, added in Android 17 (API level 37). These Mobly-based tests evaluate NPU workload prioritization, ensure foreground app NPU workloads receive higher priority than background ones, and validate NPU access control.</p> <h2 id="test-config">Test configuration</h2> <p>The global default parameters for this test suite are optimized for reference devices. Because NPU hardware capabilities can vary across different devices, adjust the test configuration parameters to ensure the tests run properly on your hardware.</p> <h3 id="tuning-necessary">Why tuning is necessary</h3> <p>The core of the prioritization test <code translate="no" dir="ltr">test_foreground_app_finishes_first</code> relies on a race condition by evaluating whether the foreground app finishes its inferences before the background app. To ensure the test reliably meets its stability requirement for passing two out of three runs, configure these parameters to match your device's specific NPU speeds.</p> <p>The configuration file is located in the Android source tree at <code translate="no" dir="ltr">packages/modules/NpuManager/tests/cts/mobly_config.yaml</code>.</p> <h3 id="configurable-parameters">Configurable parameters</h3> <p>When tuning the tests for your device, adjust the following parameters within the YAML file. All numerical values must be greater than zero, and foreground delay specifically must be at least <code translate="no" dir="ltr">0.5 seconds</code>, the default value.</p> <ul> <li>
+<p><code translate="no" dir="ltr">foreground_delay_seconds</code></p> <ul> <li>
+<strong>Description:</strong> The head start in seconds given to the background app before the foreground app triggers its inference. The sequence is: Background app starts inferences -&gt; [test waits for <code translate="no" dir="ltr">foreground_delay_seconds</code>] -&gt; foreground app starts inferences.</li> <li>
+<strong>Default:</strong> <code translate="no" dir="ltr">0.5</code>
+</li> <li>
+<strong>Tuning guidance:</strong> A larger delay gives the background app more time to process inferences before the foreground app starts. The foreground app should begin its inferences roughly halfway through the background app's workload.</li> </ul>
+</li> <li>
+<p><code translate="no" dir="ltr">foreground_test_num_iterations_per_thread</code></p> <ul> <li>
+<strong>Description:</strong> The number of consecutive inference loops each individual thread executes for the <code translate="no" dir="ltr">test_foreground_app_finishes_first</code> test for both the foreground and background app.</li> <li>
+<strong>Default:</strong> <code translate="no" dir="ltr">30</code>
+</li> </ul>
+</li> <li>
+<p><code translate="no" dir="ltr">foreground_test_num_threads</code></p> <ul> <li>
+<strong>Description:</strong> The number of concurrent threads spawned to run inferences simultaneously for the <code translate="no" dir="ltr">test_foreground_app_finishes_first</code> test for both the foreground and background app.</li> <li>
+<strong>Default:</strong> <code translate="no" dir="ltr">4</code>
+</li> </ul>
+</li> </ul> <aside class="note"><strong>Note:</strong><span> With default values, the test spawns a background app that runs 120 inferences across four threads. The test then waits 0.5 seconds and spawns a foreground app that runs 120 inferences. Adjust the iterations, threads, and delay to accommodate the processing speed of your NPU.</span></aside> <h2 id="run-tests">Run the tests</h2> <p>After your device is configured and connected, run the suite using standard CTS Tradefed commands.</p> <p>To run the module using CTS Tradefed:</p> 
+<pre>cts-tradefed run cts -m CtsNpuManagerMoblyTestCases
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/compatibility/cts/npu-cts" class="_attribution-link">https://source.android.com/docs/compatibility/cts/npu-cts</a>
+  </p>
+</div>

@@ -1,0 +1,19 @@
+<h1>Configure identity for native services</h1>  <p>SDV derives the identity of service bundles and Java apps from their automatically generated <a href="../../../../core/permissions/filesystem">Android ID (AID)</a>. Because native services, such as vendor hardware abstraction layers (HALs), lack this automatic mechanism, you must manually configure them to associate an SDV identity with each service's program.</p> <p>To associate an SDV identity with a native service program, follow these steps:</p> <ol> <li>
+<p>Define a unique AID for the service in the reserved range for the partition where the service is located, such as the vendor or product range.</p> <p>For more information about partition-specific ranges, see <a href="../../../../core/permissions/filesystem#configuring-aids">Configure AIDs</a>.</p> <p>Define a unique AID for each native service, rather than sharing a single AID across multiple services. Because service identities are assigned to a service process based on its AID, sharing an AID results in sharing service identities and their <a href="../core/comms-authorization/overview">authorizations</a>.</p>
+</li> <li>
+<p>Configure your service under the unique AID you created using the <code translate="no" dir="ltr">user</code> option in your service's <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:system/core/init/README.md"><code translate="no" dir="ltr">.rc</code> file</a>.</p> <p>For example:</p> 
+<pre>service native_sdv_gateway_client_service /vendor/bin/native_sdv_gateway_client_service
+    [..]
+    user vendor_gateway_client
+    [..]
+</pre>
+</li> <li>
+<p>Map the numeric value of the unique AID to the <a href="../../core-areas/service-identity">service identity</a> designated for the service in the <code translate="no" dir="ltr">sdv_native_services_names</code> configuration file of the partition where the service is located.</p> <p>The service identity consists of the package name, service bundle name, and service instance name. It's encoded as a string of the form <code translate="no" dir="ltr">packageName.serviceBundleName/serviceInstanceName</code>.</p> <p>For example, if your service runs on the vendor partition with the AID <code translate="no" dir="ltr">vendor_gateway_client</code> and has the numeric value <code translate="no" dir="ltr">2902</code>, you must add the mapping to the <code translate="no" dir="ltr">/vendor/etc/sdv_native_services_names</code> file:</p> 
+<pre>2902,android.sdv.samples.gateway.client.NativeTestApp/default
+</pre>
+</li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/identity-and-attestation/identity-for-native-services" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/identity-and-attestation/identity-for-native-services</a>
+  </p>
+</div>

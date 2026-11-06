@@ -1,0 +1,97 @@
+<h1>Implement text classifier</h1>  <p>Text classifier uses machine learning techniques to help developers classify text.</p> <h2 id="11-release">Android 11 release text classifier</h2> <p>Android 11 introduces an updatable default implementation of the text classifier service in the <a href="../architecture/modular-system/extservices"> ExtServices module</a>. On devices running Android 11 or higher, the <a href="https://developer.android.com/reference/android/view/textclassifier/TextClassificationManager#getTextClassifier()"> <code translate="no" dir="ltr">getTextClassifier()</code></a> method returns this default implementation in the ExtServices module. Device manufacturers are recommended to use this implementation of <code translate="no" dir="ltr">TextClassifierService</code> as it can be updated through Mainline OTA updates.</p> <p>Android 11 also removes the local text classifier default implementation previously introduced in <a href="#8_1release"> Android 8.1</a>. As a result, <a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/core/java/android/service/textclassifier/TextClassifierService.java#388"> <code translate="no" dir="ltr">getLocalTextClassifier()</code></a> returns a <code translate="no" dir="ltr">NO_OP</code> text classifier. Instead of the local implementation, you should use the <a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/core/java/android/service/textclassifier/TextClassifierService.java#399"> <code translate="no" dir="ltr">getDefaultTextClassifierImplementation()</code></a> method.</p> <p>For device manufacturers who might want to use their own text classifying algorithms, they can implement a custom text classifier service by specifying <code translate="no" dir="ltr">config_defaultTextClassifierPackage</code> in the <code translate="no" dir="ltr">config.xml</code> file. If this configuration isn't specified, the default system implementation is used. Custom implementations can get an instance of the default implementation by calling <a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/core/java/android/service/textclassifier/TextClassifierService.java#398"> <code translate="no" dir="ltr">TextClassifierService.getDefaultTextClassifierImplementation(Context)</code></a>. For more information, see <a href="#custom-text-classifier"> Implementing a custom text classifier service</a>.</p> <h3 id="11-testing">Testing</h3> <p>To validate your implementation of the text classifier service, use the Compatibility Test Suite (CTS) tests in <a href="https://android.googlesource.com/platform/cts/+/refs/heads/android17-release/tests/tests/textclassifier/"> <code translate="no" dir="ltr">platform/cts/tests/tests/textclassifier/</code></a>.</p> <h2 id="android-10-release-text-classifier-enhancements">Android 10 release text classifier enhancements</h2> <p>Android 10 introduces two methods to the TextClassifier API: <a href="https://developer.android.com/reference/android/view/textclassifier/TextClassifier#suggestConversationActions(android.view.textclassifier.ConversationActions.Request)"> <code translate="no" dir="ltr">suggestConversationActions</code></a> and <a href="https://developer.android.com/reference/android/view/textclassifier/TextClassifier#detectLanguage(android.view.textclassifier.TextLanguage.Request)"> <code translate="no" dir="ltr">detectLanguage</code></a>. The <code translate="no" dir="ltr">suggestConversationActions</code> method generates suggested replies and actions from a given conversation and the <code translate="no" dir="ltr">detectLanguage</code> method detects the language of the text.</p> <p>The model files for these methods are shown below and can be found in <a href="https://android.googlesource.com/platform/external/libtextclassifier/+/refs/heads/android17-release/models/"> <code translate="no" dir="ltr">external/libtextclassifier/models/</code></a>.</p> <ul> <li>
+<strong><code translate="no" dir="ltr">suggestionConversationActions</code>:</strong> <code translate="no" dir="ltr">actions_suggestions.universal.model</code>
+</li> <li>
+<strong><code translate="no" dir="ltr">detectLanguage</code>:</strong> <code translate="no" dir="ltr">lang_id.model</code>
+</li> </ul> <p>To release a device with the latest model files in your factory image, do the following:</p> <ol> <li>
+<p>Fetch the latest model files.</p> 
+<pre>
+external/libtextclassifier/models/update.sh
+</pre>
+</li> <li>Rename the downloaded files to replace the existing ones.</li> <li>Verify the setup. 
+<pre>
+adb shell dumpsys textclassification
+</pre> <p>This is a sample of the output of that command.</p> 
+<pre>TextClassifierImpl:
+  Annotator model file(s):
+    ModelFile { path=/etc/textclassifier/textclassifier.universal.model name=textclassifier.universal.model version=608 locales=und }
+    ModelFile { path=/etc/textclassifier/textclassifier.en.model name=textclassifier.en.model version=608 locales=en }
+  LangID model file(s):
+    ModelFile { path=/etc/textclassifier/lang_id.model name=lang_id.model version=0 locales=und }
+  Actions model file(s):
+    ModelFile { path=/etc/textclassifier/actions_suggestions.universal.model name=actions_suggestions.universal.model version=0 locales=und }</pre> </li> </ol> <h2 id="10-release">Android 9 release text classifier enhancements</h2> <p>Android 9 extended the <a href="#8_1release">text classification framework introduced in Android 8.1</a> with the new text classifier service. The text classifier service is the recommended way for OEMs to provide text classification system support. The text classifier service can be part of any system APK and can be updated when necessary.</p> <p>Android 9 includes a default text classifier service implementation (<a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:external/libtextclassifier/java/src/com/android/textclassifier/TextClassifierImpl.java"> <code translate="no" dir="ltr">TextClassifierImpl</code></a>) that is used unless you replace it with a custom text classifier service implementation.</p> <h3 id="custom-text-classifier">Implement a custom text classifier service</h3> <p>The following sections describe how to implement a custom text classifier service that you develop.</p> <h4 id="extend-text-classifier">Extend android.service.textclassifier.TextClassifierService</h4> 
+<pre>public final class TextClassifierServiceImpl
+        extends TextClassifierService {
+
+    // Returns TextClassifierImpl.
+    private final TextClassifier tc = getLocalTextClassifier();
+
+    @Override
+    public void onSuggestSelection(
+            @Nullable TextClassificationSessionId sessionId,
+            @NonNull TextSelection.Request request,
+            @NonNull CancellationSignal cancellationSignal,
+            @NonNull Callback&lt;TextSelection&gt; callback) {
+        CompletableFuture.supplyAsync(
+                () -&gt; tc.suggestSelection(request))
+                .thenAccept(r -&gt; callback.onSuccess(r));
+    }
+
+    @Override
+    public void onClassifyText(
+            @Nullable TextClassificationSessionId sessionId,
+		@NonNull TextClassification.Request request,
+		@NonNull CancellationSignal cancellationSignal,
+		@NonNull Callback&lt;TextClassification&gt; callback) {
+        ...
+    }
+
+    @Override
+    public void onGenerateLinks(
+            @Nullable TextClassificationSessionId sessionId,
+            @NonNull TextLinks.Request request,
+            @NonNull CancellationSignal cancellationSignal,
+            @NonNull Callback&lt;TextLinks&gt; callback) {
+        ...
+    }
+    ...
+}</pre> <h4 id="define-manifest">Define the service in the Android manifest</h4> <p><em>[AndroidManifest.xml]</em></p> 
+<pre>&lt;service android:name=".TextClassifierServiceImpl"
+  android:permission="android.permission.BIND_TEXTCLASSIFIER_SERVICE"&gt;
+    &lt;intent-filter&gt;
+      &lt;action android:name=
+        "android.service.textclassifier.TextClassifierService"/&gt;
+    &lt;/intent-filter&gt;
+&lt;/service&gt;</pre> <p> Note that the service must require the <code translate="no" dir="ltr">android.permission.BIND_TEXTCLASSIFIER_SERVICE</code> permission and must specify the <code translate="no" dir="ltr">android.service.textclassifier.TextClassifierService</code> intent action.</p> <h4 id="set-default">Set a system default text classifier service in the config overlay</h4> <p>[<em>config.xml</em>]</p> 
+<pre>&lt;string name="config_defaultTextClassifierPackage" translatable="false"&gt;com.example.textclassifierservice&lt;/string&gt;</pre> <h4 id="build-the-text-classifier-service-into-the-system-image">Build the text classifier service into the system image</h4> <p>Your custom text classifier service can be a standalone APK that is built into the system image or a part of another system APK. The system uses <code translate="no" dir="ltr">PackageManager.MATCH_SYSTEM_ONLY</code> to resolve the service.</p> <h3 id="9-testing">Testing</h3> <p>Run tests in <code translate="no" dir="ltr">android.view.textclassifier.cts</code>.</p> <h3 id="changes-9">Other text classification changes in Android 9</h3> <p>Refer to <a href="textclassifier#inspecting-installed-language-modules"> Inspecting installed language modules</a>.</p> <p>Android 9 model files are incompatible with Android 8.x model files.</p> <p>Android 9 model files have the naming pattern: <code translate="no" dir="ltr">texclassifier.[language-code].model</code> (for example, <code translate="no" dir="ltr">textclassifier.en.model</code>) instead of <code translate="no" dir="ltr">textclassifier.smartselection.en.model</code> in Android 8.x.</p> <h3 id="get-model-files">Obtain the latest text classification model files</h3> <p>To obtain the most up-to-date models the following script can be run, which updates the TextClassifier models in the source tree:</p> 
+<pre>
+external/libtextclassifier/native/models/update.sh
+</pre> <h2 id="8_1release">Android release 8.1 text classifier</h2> <p>Android 8.1 introduced the TextClassfier API to implement text classification.</p> 
+<pre>TextClassificationManager tcm =
+    context.getSystemService(TextClassificationManager.class);
+TextClassifier classifier = tcm.getTextClassifier();
+TextSelection selection = classifier.suggestSelection(...);
+TextClassification classification = classifier.classifyText(...);</pre> <p> Developers can set a custom text classifier: </p> <p> <code translate="no" dir="ltr">tcm.setTextClassifier(customTextClassifier);</code> </p> <p> But if an app developer sets the text classifier to <code translate="no" dir="ltr">null</code>, a system default text classifier is returned for <code translate="no" dir="ltr">getTextClassifier()</code>. </p> <p> See <code translate="no" dir="ltr">android.view.textclassifier.TextClassifierImpl</code>. </p> <p> TextView and WebView use TextClassifier for smart selection and smart text share features. </p> <img alt="Text classifier usage" src="https://source.android.com/static/docs/core/display/images/textclassifier.png" class="android-image-dark-theme-background"> <p class="img-caption"> <b>Figure 1.</b> TextClassifier usage </p> <h3 id="textclassifier-neural-net-models">TextClassifier neural-net models</h3> <p> The Android Open Source Project (AOSP) features a number of neural network models for classifying text. Each model file is trained for a single language. You can install any combination of models. The models are defined in: </p> <p> <code translate="no" dir="ltr">external/libtextclassifier/Android.mk</code> </p> <h3 id="preinstalling-language-models-on-devices">Preinstall language models on devices</h3> <p> You can specify a bundle of language models and install them on a device: </p> 
+<pre># -----------------------
+# Smart Selection bundles
+# -----------------------
+
+include $(CLEAR_VARS)
+LOCAL_MODULE           := textclassifier.smartselection.bundle1
+LOCAL_REQUIRED_MODULES := textclassifier.smartselection.en.model
+LOCAL_REQUIRED_MODULES += textclassifier.smartselection.es.model
+LOCAL_REQUIRED_MODULES += textclassifier.smartselection.de.model
+LOCAL_REQUIRED_MODULES += textclassifier.smartselection.fr.model
+include $(BUILD_STATIC_LIBRARY)</pre> <p> For example, in <code translate="no" dir="ltr">device/google/marlin/device-common.mk</code>. </p> 
+<pre># TextClassifier smart selection model files
+PRODUCT_PACKAGES += \
+    textclassifier.smartselection.bundle1</pre> <h3 id="inspecting-installed-language-modules">Inspect installed language modules</h3> <p> Use ADB to list the files in the directory: </p> 
+<pre>$ adb shell ls -l /etc/textclassifier
+-rw-r--r-- 1 root root ... textclassifier.smartselection.de.model
+-rw-r--r-- 1 root root ... textclassifier.smartselection.en.model
+-rw-r--r-- 1 root root ... textclassifier.smartselection.es.model
+-rw-r--r-- 1 root root ... textclassifier.smartselection.fr.model</pre> <h3 id="gservices-model-updates">Model updates</h3> <p> Models can be updated either by having a new model included as part of a system image update, or dynamically by having a system component that triggers an update through the system <code translate="no" dir="ltr">API ACTION_UPDATE_SMART_SELECTION</code> intent. By broadcasting this system API intent, the framework is able to update the language model of the currently set language. The models themselves contain the supported language and a version number so the latest appropriate model is used. </p> <p> So you don't need to preload models for all languages because they can be added later. If no model file is found for the specified language, text classification returns no-op values. </p> <h3 id="compatibility-test-suite-tests">Compatibility Test Suite tests</h3> <p> The associated Android Compatibility Test Suite (CTS) tests can be found in: </p> <p> <code translate="no" dir="ltr">cts/tests/tests/view/src/android/view/textclassifier/cts/TextClassificationManagerTest.java</code> </p> <p> <code translate="no" dir="ltr">cts/tests/tests/widget/src/android/widget/cts/TextViewTest.java</code> </p> <ul> <li><code translate="no" dir="ltr">testSmartSelection</code></li> <li><code translate="no" dir="ltr">testSmartSelection_dragSelection</code></li> <li><code translate="no" dir="ltr">testSmartSelection_resetSelection</code></li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/display/textclassifier" class="_attribution-link">https://source.android.com/docs/core/display/textclassifier</a>
+  </p>
+</div>

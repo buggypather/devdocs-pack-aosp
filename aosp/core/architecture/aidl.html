@@ -1,0 +1,17 @@
+<h1>AIDL overview</h1>  <p>The Android Interface Definition Language (AIDL) is a tool that lets users abstract away IPC. Given an interface (specified in a <code translate="no" dir="ltr">.aidl</code> file), various build systems use the <code translate="no" dir="ltr">aidl</code> binary to construct C++ or Java bindings so that this interface can be used across processes, regardless of the runtime or bitness there.</p> <p>AIDL can be used between any process in Android: between platform components or between apps. However, it is never used as an API for apps. AIDL may be used to implement an SDK API in the platform, for example, but the SDK API surface never contains AIDL APIs directly. For documentation about how to use AIDL between apps directly, see corresponding <a href="https://developer.android.com/guide/components/aidl">Android developers documentation</a>. When AIDL is used between platform components that are updated separately, such as APEXes (starting in Android 10) or HALs (starting in Android 11), the versioning system known as <a href="aidl/stable-aidl">Stable AIDL</a> must be used.</p> <h2 id="example">Example</h2> <p>Here is an example AIDL interface:</p> 
+<pre>    package my.package;
+
+    import my.package.Baz; // defined elsewhere
+
+    interface IFoo {
+        void doFoo(Baz baz);
+    }
+</pre> <p>A <em>server</em> process registers an interface and serves calls to it, and a <em>client</em> process makes calls to those interfaces. In many cases, a process acts as both a client and a server since it may be referencing multiple interfaces. For more details about the AIDL language, see <a href="aidl/aidl-language">AIDL language</a>. For more details about the various runtimes available to use these interfaces, see <a href="aidl/aidl-backends">AIDL backends</a>. These type declarations are exactly like a class declaration in a given language, but they work across processes.</p> <h2 id="how-it-works">How it works</h2> <p>AIDL uses the binder kernel driver to make calls. When you make a call, a method identifier and all of the objects are packed onto a buffer and copied to a remote process where a binder thread waits to read the data. Once a binder thread receives data for a transaction, the thread looks up a native stub object in the local process, and this class unpacks the data and makes a call on a local interface object. This local interface object is the one a server process creates and registers. When calls are made in the same process and the same backend, no proxy objects exist, and so calls are direct without any packing or unpacking. For further information, see the <a href="ipc/binder-overview">Binder overview</a>.</p> <h2 id="interacting">Interact with services on the device</h2> <p>Android comes with a few commands to allow interacting with services on the device. Try:</p> 
+<pre>    adb shell dumpsys --help # listing and dumping services
+    adb shell service --help # sending commands to services for testing
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/aidl" class="_attribution-link">https://source.android.com/docs/core/architecture/aidl</a>
+  </p>
+</div>

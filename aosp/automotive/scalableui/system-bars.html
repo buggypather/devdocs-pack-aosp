@@ -1,0 +1,129 @@
+<h1>Customize system bars</h1>  <p>To customize system bars, use a combination of XML configurations and Dagger modules to the UI components.</p> <h2 id="system-bar-behavior">Define system bar behavior</h2> <p>To define a system bar, use the <code translate="no" dir="ltr">&lt;SystemBar&gt;</code> tag in an XML file to define the appearance and animation. This XML file is part of a runtime resource overlay (RRO).</p> <h3 id="systembar-attributes">SystemBar tag attributes</h3> <p>The root element for a system bar configuration is <code translate="no" dir="ltr">&lt;SystemBar&gt;</code>, which supports these attributes:</p> <table> <thead> <th width="20%">Attribute</th> <th>Status</th> <th>Description</th> </thead> <tbody> <tr> <td><code translate="no" dir="ltr">id</code></td> <td>Required</td> <td>Unique resource ID for the system bar. For example, <code translate="no" dir="ltr">@id/my_custom_status_bar</code>
+</td> </tr> <tr> <td><code translate="no" dir="ltr">type</code></td> <td>Required</td> <td>Specifies the type of system bar, which is either <code translate="no" dir="ltr">status</code> or <code translate="no" dir="ltr">navigation</code>
+</td> </tr> <tr> <td><code translate="no" dir="ltr">barZOrder</code></td> <td>Required</td> <td>
+<p>Integer to represent the Z-order of the system bar. Higher values indicate the system draws the bar on top of others. Must be a positive integer. These rules apply:</p> <ul> <li>If you display a system bar above a heads up notification, then this value must be greater than <code translate="no" dir="ltr">10</code>
+</li> <li>Overlapping system bars can't have the same Z-order</li> </ul> </td> </tr> <tr> <td><code translate="no" dir="ltr">defaultVariant</code></td> <td>Required</td> <td>ID of the <code translate="no" dir="ltr">&lt;Variant&gt;</code> that applies by default when the system bar is initialized</td> </tr> <tr> <td><code translate="no" dir="ltr">displayId</code></td> <td>Optional</td> <td>ID of the <code translate="no" dir="ltr">&lt;Variant&gt;</code> that applies by default when the system bar is initialized</td> </tr> <tr> <td><code translate="no" dir="ltr">hideForKeyboard</code></td> <td>Optional</td> <td> <p>Boolean value of <code translate="no" dir="ltr">true</code> or <code translate="no" dir="ltr">false</code> to indicate if the system bar automatically hides when the software keyboard is active. This attribute defaults to <code translate="no" dir="ltr">false</code>.</p> <p>When this attribute is <code translate="no" dir="ltr">true</code>, you must provide <code translate="no" dir="ltr">_System_Show_Panel</code> and <code translate="no" dir="ltr">_System_Hide_Panel</code> transitions for the system bar. </p> </td> </tr> <tr> <td><code translate="no" dir="ltr">dragOpenNotification</code></td> <td>Optional</td> <td> <p>Boolean value of <code translate="no" dir="ltr">true</code> or <code translate="no" dir="ltr">false</code> to indicate if the system bar automatically triggers opening the notification panel. This attribute defaults to <code translate="no" dir="ltr">false</code>.</p> </td> </tr> <tr> <td><code translate="no" dir="ltr">dragCloseNotification</code></td> <td>Optional</td> <td> <p>Boolean value of <code translate="no" dir="ltr">true</code> or <code translate="no" dir="ltr">false</code> to indicate if the system bar automatically triggers closing the notification panel. This attribute defaults to <code translate="no" dir="ltr">false</code>.</p> </td> </tr> </tbody> </table> <h3 id="system-bar-ids-types">System bar IDs and types</h3> <p>Avoid using <code translate="no" dir="ltr">TopCarSystemBar</code>, <code translate="no" dir="ltr">BottomCarSystemBar</code>, <code translate="no" dir="ltr">LeftCarSystemBar</code>, and <code translate="no" dir="ltr">RightCarSystemBar</code> as <code translate="no" dir="ltr">id</code> values. The system reserves these IDs for backward compatibility, and their use might lead to unexpected behavior.</p> <p>For basic top status bar and bottom navigation bar configurations, use <code translate="no" dir="ltr">status</code> and <code translate="no" dir="ltr">nav</code>, respectively, as the <code translate="no" dir="ltr">type</code> attribute values.</p> <p>If you use these IDs, you can skip the section entitled <a href="#step-2-system-bar-dagger">Provide a system bar UI with Dagger</a>.</p> <dl> <dt><code translate="no" dir="ltr">&lt;Variant&gt;</code></dt> <dd>Defines visual states. To learn more, see <a href="variant-ref">Use a variant to design a visual state</a>. In the <code translate="no" dir="ltr">&lt;SystemBar&gt;</code> tag, define one or more <code translate="no" dir="ltr">&lt;Variant&gt;</code> tags. Each variant represents a distinct visual state and contains properties that control the appearance of the system bar in that state.</dd> <dt><code translate="no" dir="ltr">&lt;Visibility isVisible="true|false"&gt;</code></dt> <dd>Controls the visibility of the system bar. The <code translate="no" dir="ltr">isVisible</code> boolean signals whether the system bar is visible or not.</dd> <dt><code translate="no" dir="ltr">&lt;Alpha alpha="float_value"&gt;</code></dt> <dd>Controls the transparency of the system bar. The value for <code translate="no" dir="ltr">alpha</code> floats between <code translate="no" dir="ltr">0.0</code> (fully transparent) and <code translate="no" dir="ltr">1.0</code> (fully opaque).</dd> <dt><code translate="no" dir="ltr">&lt;Bounds .../&gt;</code></dt> <dd>
+<p>Defines the position and size of the system bar. For <code translate="no" dir="ltr">&lt;SystemBar&gt;</code> elements, the bounds <em>must</em> touch at least one edge of the display (left, top, right, or bottom). Attributes are:</p> <ul> <li>
+<code translate="no" dir="ltr">left</code>, <code translate="no" dir="ltr">top</code>, <code translate="no" dir="ltr">right</code>, <code translate="no" dir="ltr">bottom</code>: Absolute coordinates.</li> <li>
+<code translate="no" dir="ltr">width</code>, <code translate="no" dir="ltr">height</code>: Dimensions.</li> <li>
+<code translate="no" dir="ltr">leftOffset</code>, <code translate="no" dir="ltr">topOffset</code>, <code translate="no" dir="ltr">rightOffset</code>, <code translate="no" dir="ltr">bottomOffset</code>: Offsets towards center of the rectangle.</li> </ul>
+</dd> <dt><code translate="no" dir="ltr">&lt;Corner radius="dimen"/&gt;</code></dt> <dd><p>Defines the corner radius of the system bar. For <code translate="no" dir="ltr">radius</code>, enter the dimension of the corner radius.</p></dd> <dt><code translate="no" dir="ltr">&lt;Insets .../&gt;</code></dt> <dd><p>Defines insets for the system bar. Attributes are <code translate="no" dir="ltr">left</code>, <code translate="no" dir="ltr">top</code>, <code translate="no" dir="ltr">right</code>, and <code translate="no" dir="ltr">bottom</code>. For each attribute, enter a dimension value for the insets.</p></dd> <dt><code translate="no" dir="ltr">&lt;Gravity .../&gt;</code></dt> <dd>
+<p>Defines the gravity of the system bar's content. To learn more, see <code translate="no" dir="ltr">HunTagXmlParserKt.GRAVITY_TAG</code> in the source code.</p> <ul> <li>When you omit a value for gravity, the system calculates it internally.</li> <li>Supported values are combinations of <code translate="no" dir="ltr">TOP</code>, <code translate="no" dir="ltr">BOTTOM</code>, <code translate="no" dir="ltr">LEFT</code>, <code translate="no" dir="ltr">RIGHT</code>, <code translate="no" dir="ltr">CENTER</code>, <code translate="no" dir="ltr">CENTER_HORIZONTAL</code>, <code translate="no" dir="ltr">CENTER_VERTICAL</code>, and <code translate="no" dir="ltr">FILL_HORIZONTAL</code>, each separated by a <code translate="no" dir="ltr">|</code> character.</li> </ul>
+</dd> </dl> <h4 id="dim-units">Dimension units</h4> <p>Specify dimensions with <code translate="no" dir="ltr">px</code>, <code translate="no" dir="ltr">dp</code> (or <code translate="no" dir="ltr">dip</code>), <code translate="no" dir="ltr">%</code>, or references to <code translate="no" dir="ltr">dimension</code>, <code translate="no" dir="ltr">integer</code>, <code translate="no" dir="ltr">fraction</code>, <code translate="no" dir="ltr">string</code>, or <code translate="no" dir="ltr">attribute</code> resources.</p> <h4 id="transitions-animate">Transitions: Animate between variants</h4> <p>To learn more, see <a href="transitions-ref">Configure a transition</a>. Use the <code translate="no" dir="ltr">&lt;Transitions&gt;</code> block to define how the system bar animates between different variants:</p> <table> <thead> <tr> <th>Item</th> <th>Tag attribute</th> </tr> </thead> <tbody> <tr> <td><code translate="no" dir="ltr">&lt;Transition&gt;</code></td> <td>
+<code translate="no" dir="ltr">fromVariant</code>, <code translate="no" dir="ltr">toVariant</code>, <code translate="no" dir="ltr">onEvent</code>, <code translate="no" dir="ltr">onEventTokens</code>, <code translate="no" dir="ltr">animator</code>, <code translate="no" dir="ltr">duration</code>, <code translate="no" dir="ltr">delay</code>, <code translate="no" dir="ltr">interpolator</code>
+</td> </tr> <tr> <td><code translate="no" dir="ltr">&lt;Transitions&gt;</code></td> <td>
+<code translate="no" dir="ltr">defaultDuration</code>, <code translate="no" dir="ltr">defaultInterpolator</code>
+</td> </tr> </tbody> </table> <p>Scalable UI supports transitions in system bars only when you define them for non-immersive mode use cases. This means that immersive mode doesn't trigger Scalable UI windowing transitions for system bars when it hides (or shows) a system bar.</p> <p>Scalable UI continues to send events for hiding (or showing) a system bar so that other panels can respond as needed while transitions for hiding and showing system bars must be provided for proper functioning of the <code translate="no" dir="ltr">hideForKeyboard</code> attribute. Consider this sample XML structure:</p> 
+<pre>&lt;SystemBar id="@id/my_custom_status_bar" type="status" barZOrder="0" defaultVariant="@id/default_variant" hideForKeyboard="true"&gt;
+    &lt;Variant id="@+id/default_variant"&gt;
+        &lt;Bounds top="0px" left="0px" right="100%" height="100px"/&gt;
+        &lt;Visibility isVisible="true"/&gt;
+    &lt;/Variant&gt;
+    &lt;Variant id="@+id/hidden_variant" parent="@id/default_variant"&gt;
+        &lt;Visibility isVisible="false"/&gt;
+    &lt;/Variant&gt;
+    &lt;Transitions&gt;
+        &lt;Transition onEvent="_System_Show_Panel" onEventTokens="panelId= my_custom_status_bar" toVariant="@id/default_variant"/&gt;
+        &lt;Transition onEvent="_System_Hide_Panel" onEventTokens="panelId= my_custom_status_bar" toVariant="@id/hidden_variant"/&gt;
+    &lt;/Transitions&gt;
+&lt;/SystemBar&gt;
+</pre> <h2 id="step-2-system-bar-dagger">Provide a system bar UI with Dagger</h2> <aside class="note"><strong>Note:</strong><span> Skip this step if you're using a basic top status and lower navigation bar configuration with status and nav IDs, respectively.</span></aside> <p>After you define the system bar in XML, provide the actual <code translate="no" dir="ltr">View</code> and <code translate="no" dir="ltr">Window</code>. To do so, apply an application override to the default Dagger module, <code translate="no" dir="ltr">CarSystemBarModule.java</code>. For example:</p> 
+<pre>import com.android.systemui.car.systembar.CarSystemBarViewSupplier;
+import com.android.systemui.car.systembar.CarSystemBarWindowSupplier;
+import com.android.systemui.car.systembar.CarSystemBarWindowSupplierUsingLayout;
+import com.example.R;
+
+import dagger.Module;
+import dagger.Provides;
+import dagger.multibindings.IntoMap;
+import dagger.multibindings.StringKey;
+
+@Module
+public abstract class MySystemBarModule extends CarSystemBarModule {
+
+    @Provides
+    @IntoMap
+    @StringKey("my_custom_status_bar") // Matches the &lt;SystemBar&gt; id
+    static CarSystemBarViewSupplier bindMyCustomStatusBarViewSupplier() {
+        return new CarSystemBarViewSupplierUsingLayout(
+            R.layout.my_custom_status_bar, // provisioned layout
+            R.layout.my_custom_status_bar_unprovisioned // unprovisioned layout
+        );
+    }
+
+    @Provides
+    @IntoMap
+    @StringKey("my_custom_status_bar") // Matches the &lt;SystemBar&gt; id
+    static CarSystemBarWindowSupplier bindMyCustomStatusBarWindowSupplier() {
+        return new CarSystemBarWindowSupplierUsingLayout(
+            R.layout.my_navigation_bar_window, // Can reuse existing window layouts
+            R.id.my_custom_bar_window // The ID that will be assigned to the window
+        );
+    }
+}
+</pre> <h3 id="dagger-module-systemui">Create a Dagger module in a SystemUI override</h3> <p>To inflate your custom layout resources, use the <code translate="no" dir="ltr">CarSystemBarViewSupplierUsingLayout</code> and <code translate="no" dir="ltr">CarSystemBarWindowSupplierUsingLayout</code> classes.</p> <p>Create a Dagger module to provide your custom suppliers. The <code translate="no" dir="ltr">@StringKey</code> must match the <code translate="no" dir="ltr">id</code> in your <code translate="no" dir="ltr">&lt;SystemBar&gt;</code> XML tag.</p> <p>To override <code translate="no" dir="ltr">CarSystemBarModule</code>, see this code sample:</p> 
+<pre>import com.android.systemui.car.systembar.CarSystemBarViewSupplier;
+import com.android.systemui.car.systembar.CarSystemBarWindowSupplier;
+import com.android.systemui.car.systembar.CarSystemBarWindowSupplierUsingLayout;
+import com.example.R;
+
+import dagger.Module;
+import dagger.Provides;
+import dagger.multibindings.IntoMap;
+import dagger.multibindings.StringKey;
+
+@Module
+public abstract class MySystemBarModule extends CarSystemBarModule {
+
+    @Provides
+    @IntoMap
+    @StringKey("my_custom_status_bar") // Matches the &lt;SystemBar&gt; id
+    static CarSystemBarViewSupplier bindMyCustomStatusBarViewSupplier() {
+        return new CarSystemBarViewSupplierUsingLayout(
+            R.layout.my_custom_status_bar, // provisioned layout
+            R.layout.my_custom_status_bar_unprovisioned // unprovisioned layout
+        );
+    }
+
+    @Provides
+    @IntoMap
+    @StringKey("my_custom_status_bar") // Matches the &lt;SystemBar&gt; id
+    static CarSystemBarWindowSupplier bindMyCustomStatusBarWindowSupplier() {
+        return new CarSystemBarWindowSupplierUsingLayout(
+            R.layout.my_navigation_bar_window, // Can reuse existing window layouts
+            R.id.my_custom_bar_window // The ID that will be assigned to the window
+        );
+    }
+}
+</pre> <h2 id="step-3-rro-system-config">Use an RRO to create a system-level configuration</h2> <p>Set several system-level configurations that affect system bars in the <code translate="no" dir="ltr">res/values/config.xml</code> file in your RRO.</p> <h3 id="disable-legacy-system-bars">Disable legacy system bars</h3> <p>To prevent conflicts with Scalable UI, disable the legacy system bar configurations by setting the following flags to <code translate="no" dir="ltr">false</code>:</p> 
+<pre>&lt;resources&gt;
+    &lt;bool name="config_enableTopSystemBar"&gt;false&lt;/bool&gt;
+    &lt;bool name="config_enableBottomSystemBar"&gt;false&lt;/bool&gt;
+    &lt;bool name="config_enableLeftSystemBar"&gt;false&lt;/bool&gt;
+    &lt;bool name="config_enableRightSystemBar"&gt;false&lt;/bool&gt;
+&lt;/resources&gt;
+</pre> <h3 id="privacy-loc">Privacy indicator location</h3> <p>The <code translate="no" dir="ltr">config_privacyIndicatorLocation</code> string resource specifies which system bar hosts privacy indicators. The value must be the <code translate="no" dir="ltr">id</code> name of a <code translate="no" dir="ltr">&lt;SystemBar&gt;</code>.</p> 
+<pre>&lt;resources&gt;
+    &lt;!-- "my_custom_status_bar" corresponds to the android:id name of a SystemBar --&gt;
+    &lt;string name="config_privacyIndicatorLocation"&gt;my_custom_status_bar&lt;/string&gt;
+&lt;/resources&gt;
+</pre> <h3 id="drag-listeners">Drag event listeners</h3> <p>These configurations specify which system bars listen for drag events (for example, to swipe down to open the notification panel). Starting in Android Automotive OS with Scalable UI, use XML attributes as the default instead of instead of driven discovery resource arrays to define these capabilities.</p> <h4 id="xml-driven-discovery">Recommended: XML-driven discovery (Scalable UI)</h4> <p>Use the <code translate="no" dir="ltr">dragOpenNotification</code> and <code translate="no" dir="ltr">dragCloseNotification</code> attributes directly in your <code translate="no" dir="ltr">&lt;SystemBar&gt;</code> tag inside your overlay XML:</p> 
+<pre>&lt;SystemBar id="@id/my_custom_status_bar" type="status" barZOrder="0" defaultVariant="@id/default_variant" dragOpenNotification="true"&gt;
+    &lt;Variant id="@+id/default_variant"&gt;
+        &lt;Bounds top="0px" left="0px" right="100%" height="100px"/&gt;
+        &lt;Visibility isVisible="true"/&gt;
+    &lt;/Variant&gt;
+&lt;/SystemBar&gt;
+</pre> <h4 id="legacy-resource-array">Legacy: Resource array (fallback)</h4> <p>If you're maintaining a non-Scalable UI build or need to specify listeners for backward-compatible devices, use the legacy <code translate="no" dir="ltr">string-array</code> approach in <code translate="no" dir="ltr">res/values/config.xml</code> in your RRO. These <code translate="no" dir="ltr">string-array</code> resources specify which system bars listen for drag events. For example, to open the notification panel. Each <code translate="no" dir="ltr">&lt;item&gt;</code> is the <code translate="no" dir="ltr">id</code> name of a system bar.</p> <ul> <li><code translate="no" dir="ltr">config_registerHvacDragCloseListener</code></li> <li><code translate="no" dir="ltr">config_notificationDragOpenListener</code></li> <li><code translate="no" dir="ltr">config_notificationDragCloseListener</code></li> </ul> <p>For example:</p> 
+<pre>&lt;resources&gt;
+    &lt;string-array name="config_notificationDragOpenListener" translatable="false"&gt;
+        &lt;item&gt;my_custom_status_bar&lt;/item&gt;
+    &lt;/string-array&gt;
+&lt;/resources&gt;
+</pre>
+<aside class="note"><strong>Note:</strong><span> <code translate="no" dir="ltr">SystemBarConfigsImpl</code> automatically evaluates these legacy <code translate="no" dir="ltr">R.array</code> lists if the XML attributes don't resolve.</span></aside> <h2 id="step4-build-deploy">Build and deploy</h2> <p>To build and deploy a status bar:</p> <ol> <li><p>Flash the device with your modified SystemUI override application.</p></li> <li><p>Use the Android build system (<code translate="no" dir="ltr">m</code>) to compile your RRO project.</p></li> <li><p>Deploy the generated RRO APK to your Android Automotive device. Use <code translate="no" dir="ltr">adb install</code> or flash a full build that includes your RRO.</p></li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/scalableui/system-bars" class="_attribution-link">https://source.android.com/docs/automotive/scalableui/system-bars</a>
+  </p>
+</div>

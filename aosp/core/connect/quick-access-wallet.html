@@ -1,0 +1,229 @@
+<h1>Quick Access Wallet</h1>  <p>The Quick Access Wallet feature, available from Android 11, allows the user to access payment cards and relevant passes directly from the power menu. Major use cases include selecting the appropriate payment method before performing a transaction at an NFC terminal and quickly accessing flights and other passes for upcoming events.</p> <p>In Android 12 or higher, the Quick Access Wallet feature is available from the shade as shown in Figure 1 and Figure 2.</p> <table class="columns"> <tr> <td> <figure> <img src="https://source.android.com/static/docs/core/connect/images/quick-access-wallet-12-locked.png" class="screenshot android-image-dark-theme-background" alt="Quick Access Wallet feature in shade " width="230px"> <figcaption><strong>Figure 1.</strong> Quick Access Wallet feature (device locked).</figcaption> </figure> </td> <td> <figure> <img src="https://source.android.com/static/docs/core/connect/images/quick-access-wallet-12-unlocked.png" class="screenshot android-image-dark-theme-background" alt="Quick Access Wallet feature in shade " width="253px"> <figcaption><strong>Figure 2.</strong> Quick Access Wallet feature (device unlocked).</figcaption> </figure> </td> </tr> </table> <p>In Android 11, the feature is available from the power menu as shown in Figure 3.</p> <figure> <img src="https://source.android.com/static/docs/core/connect/images/quick-access-wallet.png" class="screenshot android-image-dark-theme-background" alt="Quick Access Wallet feature in power menu" width="250px"> <figcaption><strong>Figure 3.</strong> Quick Access Wallet feature in power menu.</figcaption> </figure> <h2 id="requirements">Requirements</h2> <p>Your device must have NFC to use the Quick Access Wallet feature. The feature binds to <code translate="no" dir="ltr">QuickAccessWalletService</code> of the default NFC payment app, which means that the device must also support NFC <a href="https://developer.android.com/guide/topics/connectivity/nfc/hce">host-based card emulation (HCE)</a>.</p> <h2 id="overview">Feature overview</h2> <p>There are two parts to the Quick Access Wallet: the Quick Access Wallet UI and the Quick Access Wallet card provider.</p> <p>In Android 12 or higher, the Wallet UI runs in System UI and is located in <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/packages/SystemUI/src/com/android/systemui/wallet/"><code translate="no" dir="ltr">frameworks/base/packages/SystemUI/src/com/android/systemui/wallet</code></a>. In Android 11, the Wallet UI, which is located in <a href="https://android.googlesource.com/platform/packages/apps/QuickAccessWallet/+/refs/heads/android17-release"><code translate="no" dir="ltr">platform/packages/apps/QuickAccessWallet</code></a>, must be installed and whitelisted.</p> <p>The Quick Access Wallet card provider is the default NFC payment app. Users can have multiple NFC payment apps installed simultaneously, but only the <em>default</em> NFC payment app can show cards on the power menu. You can specify which NFC payment app is set as the <em>default</em> initially, but users can select a different app in Settings. If only one NFC payment app is installed, it becomes the default automatically (see <a href="https://android.googlesource.com/platform/packages/apps/Nfc/+/refs/heads/android17-release/src/com/android/nfc/cardemulation/CardEmulationManager.java"><code translate="no" dir="ltr">CardEmulationManager</code></a>).</p> <h2 id="implement">Implementation</h2> <p>To provide cards to the Quick Access Wallet UI, NFC payment apps must implement <a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/core/java/android/service/quickaccesswallet/QuickAccessWalletService.java"><code translate="no" dir="ltr">QuickAccessWalletService</code></a>. Payment apps must include a manifest entry advertising the service.</p> <p>To ensure that only the System UI can bind to <code translate="no" dir="ltr">QuickAccessWalletService</code>, the NFC payment app must require the <code translate="no" dir="ltr">android.permission.BIND_QUICK_ACCESS_WALLET_SERVICE</code> permission. Requiring this permission ensures that only the System UI can bind to <code translate="no" dir="ltr">QuickAccessWalletService</code>.</p> 
+<pre>&lt;service
+     android:name=".MyQuickAccessWalletService"
+     android:label="@string/my_default_tile_label"
+     android:icon="@drawable/my_default_icon_label"
+     android:logo="@drawable/my_wallet_logo"
+     android:permission="android.permission.BIND_QUICK_ACCESS_WALLET_SERVICE"&gt;
+     &lt;intent-filter&gt;
+         &lt;action android:name="android.service.quickaccesswallet.QuickAccessWalletService" /&gt;
+         &lt;category android:name="android.intent.category.DEFAULT"/&gt;
+     &lt;/intent-filter&gt;
+     &lt;meta-data android:name="android.quickaccesswallet"
+          android:resource="@xml/quickaccesswallet_configuration" /&gt;
+     &lt;meta-data
+          android:name="android.quickaccesswallet.tile"
+          android:resource="@drawable/my_default_tile_icon"/&gt;
+&lt;/service&gt;
+</pre> <p>Additional information about the wallet is included in the linked XML file:</p> 
+<pre>&lt;quickaccesswallet-service
+   xmlns:android="http://schemas.android.com/apk/res/android"
+   android:settingsActivity="com.example.android.SettingsActivity"
+   android:shortcutLongLabel="@string/my_wallet_empty_state_text"
+   android:shortcutShortLabel="@string/my_wallet_button_text"
+   android:targetActivity="com.example.android.WalletActivity"/&gt;
+</pre> <p>Next, the payment app must implement <code translate="no" dir="ltr">QuickAccessWalletService</code>:</p> 
+<pre>public class MyQuickAccessWalletService extends QuickAccessWalletService {
+
+    @Override
+    public void onWalletCardsRequested(
+            GetWalletCardsRequest request,
+            GetWalletCardsCallback callback) {
+        GetWalletCardsResponse response = // generate response
+        callback.onSuccess(response);
+    }
+
+    @Override
+    public void onWalletCardSelected(SelectWalletCardRequest request) {
+        // selecting a card should ensure that it is used when making an NFC payment
+    }
+
+    @Override
+    public void onWalletDismissed() {
+        // May un-select card if the wallet app has the concept of a 'default'
+        // payment method
+    }
+}
+</pre> <p>If <code translate="no" dir="ltr">HostApduService</code> starts to handle an NFC transaction and, as a consequence, starts an activity to display the progress and outcome of the payment, it should also try to get a reference to the bound <code translate="no" dir="ltr">QuickAccessWalletService</code> and call <code translate="no" dir="ltr">QuickAccessWalletService#sendEvent</code> with an event type of <code translate="no" dir="ltr">TYPE_NFC_PAYMENT_STARTED</code>. This causes the Quick Access Wallet UI to be dismissed, thus allowing the user an unobstructed view of the payment activity.</p> <p>For additional documentation on implementing <code translate="no" dir="ltr">QuickAccessWalletService</code>, see <a href="https://developer.android.com/reference/android/service/quickaccesswallet/QuickAccessWalletService"><code translate="no" dir="ltr">QuickAccessWalletService</code></a> and the <a href="https://android.googlesource.com/platform/cts/+/refs/heads/android17-release/tests/quickaccesswallet/src/android/quickaccesswallet/TestQuickAccessWalletService.java"><code translate="no" dir="ltr">TestQuickAccessWalletService</code></a> CTS test.</p> <h3 id="wallet-ui">Enable Quick Access Wallet UI in Android 11</h3> <aside class="note"><strong>Note:</strong><span> Enabling Quick Access Wallet UI isn't required for Android 12 or higher.</span></aside> <p>To configure the Quick Access Wallet to be available from the power menu in Android 11, include the <a href="https://android.googlesource.com/platform/packages/apps/QuickAccessWallet/+/refs/heads/android17-release/Android.bp"><code translate="no" dir="ltr">QuickAccessWallet</code></a> target in the build and enable the <code translate="no" dir="ltr">globalactions.wallet</code> plugin by adding the line in bold in the code sample below to the <code translate="no" dir="ltr">overlay/frameworks/base/packages/SystemUI/res/values/config.xml</code> file.</p> 
+<pre>&lt;resources&gt;
+    ...
+    &lt;!-- SystemUI Plugins that can be loaded on user builds. --&gt;
+    &lt;string-array name="config_pluginWhitelist" translatable="false"&gt;
+        &lt;item&gt;com.android.systemui&lt;/item&gt;
+        &lt;item&gt;com.android.systemui.plugin.globalactions.wallet&lt;/item&gt;
+    &lt;/string-array&gt;
+&lt;/resources&gt;</pre> <p>Specify the default NFC payment app in the <a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/packages/SettingsProvider/res/values/defaults.xml#184">settings configuration file</a> using <code translate="no" dir="ltr">def_nfc_payment_component</code>.</p> <p>The default NFC payment app must expose <a href="https://developer.android.com/reference/android/service/quickaccesswallet/QuickAccessWalletService"><code translate="no" dir="ltr">QuickAccessWalletService</code></a> to provide cards to the Quick Access Wallet. If the default NFC payment app doesn't export this service, the wallet UI is hidden.</p> <h3 id="quickaccesswalletservice">QuickAccessWalletService implementation details</h3> <p><code translate="no" dir="ltr">QuickAccessWalletService</code> has three abstract methods that must be implemented: <code translate="no" dir="ltr">onWalletCardsRequested</code>, <code translate="no" dir="ltr">onWalletCardSelected</code>, and <code translate="no" dir="ltr">onWalletDismissed</code>. The sequence diagram below illustrates a call sequence when the Quick Access Wallet is viewed immediately preceding an NFC payment.</p> <p> <img src="https://source.android.com/static/docs/core/connect/images/wallet-sequence-diagram.png" class="android-image-dark-theme-background" alt="Quick Access Wallet sequence diagram" style="max-height: 800px"> </p> <figure> <img style="cursor: pointer;" data-modal-dialog-id="sequence-diagram-lightbox" src="https://source.android.com/static/docs/core/connect/images/wallet-sequence-diagram.png" class="android-image-dark-theme-background" alt="Example call sequence when Quick Access Wallet is viewed"> <figcaption> <strong>Figure 4.</strong> Example call sequence when Quick Access Wallet is viewed.</figcaption> </figure> <p>Not all views of the Quick Access Wallet are followed by an NFC payment, but Figure 4 above illustrates all of the capabilities of <code translate="no" dir="ltr">QuickAccessWalletService</code>. In this example, the Quick Access Wallet card provider implements the elements outlined in blue. It's assumed that payment cards are stored on the device in a database and are accessed through an interface named <code translate="no" dir="ltr">PaymentCardManager</code>. It's further assumed that an activity called <code translate="no" dir="ltr">PaymentActivity</code> displays the result of an NFC payment. The flow proceeds as follows:</p> <ol> <li>The user performs a gesture to bring up the Quick Access Wallet.</li> <li>
+<p>The Quick Access Wallet UI (part of System UI) checks the package manager to see if the default NFC payment app exports <code translate="no" dir="ltr">QuickAccessWalletService</code>.</p> <ul> <li>If the service isn't exported, the Quick Access Wallet isn't displayed.</li> </ul>
+</li> <li><p>The Quick Access Wallet UI binds to the <code translate="no" dir="ltr">QuickAccessWalletService</code> and calls <code translate="no" dir="ltr">onWalletCardsRequested</code>. This method takes a request object containing data about the number and size of the cards that can be provided and a callback. The callback can be called from a background thread.</p></li> <li><p><code translate="no" dir="ltr">QuickAccessWalletService</code> computes the cards that it wants to show, then calls the <code translate="no" dir="ltr">onSuccess</code> method on the provided callback. It's recommended that the service perform these actions on a background thread.</p></li> <li>
+<p>As soon as the cards are displayed, the System UI notifies <code translate="no" dir="ltr">QuickAccessWalletService</code> that the first card has been selected by calling <code translate="no" dir="ltr">onWalletCardSelected</code>.</p> <ul> <li>
+<code translate="no" dir="ltr">onWalletCardSelected</code> is called every time the user selects a new card.</li> <li>
+<code translate="no" dir="ltr">onWalletCardSelected</code> might be called even if the currently selected card hasn't changed.</li> </ul>
+</li> <li><p>When the user dismisses the Quick Access Wallet, the System UI notifies <code translate="no" dir="ltr">QuickAccessWalletService</code> by calling <code translate="no" dir="ltr">onWalletDismissed</code>.</p></li> </ol> <p>In the above example, the user brings the phone into range of an NFC payment terminal while the wallet is being displayed. A key component of handling NFC payments is <code translate="no" dir="ltr">HostApduService</code>, which must be implemented to process APDUs provided by the NFC reader (for more information, see <a href="https://developer.android.com/guide/topics/connectivity/nfc/hce">Host-based card emulation</a>). It's assumed that the payment app starts an activity to display the progress and result of the interaction with the NFC terminal. However, the Quick Access Wallet UI is displayed on top of the app window, meaning that the payment activity is obscured by the Quick Access Wallet UI. To rectify this, the app must notify the System UI that the Quick Access Wallet UI should be dismissed. It can do so by getting a reference to the bound <code translate="no" dir="ltr">QuickAccessWalletService</code> and calling <code translate="no" dir="ltr">sendWalletServiceEvent</code> with the event type <code translate="no" dir="ltr">TYPE_NFC_PAYMENT_STARTED</code>.</p> <h3 id="sample-implementation">QuickAccessWalletService sample implementation</h3> 
+<pre>/** Sample implementation of {@link QuickAccessWalletService} */
+@RequiresApi(VERSION_CODES.R)
+public class MyQuickAccessWalletService extends QuickAccessWalletService {
+
+  private static final String TAG = "QAWalletSvc";
+  private ExecutorService executor;
+  private PaymentCardManager paymentCardManager;
+
+  @Override
+  public void onCreate() {
+    super.onCreate();
+    if (Build.VERSION.SDK_INT &lt; Build.VERSION_CODES.R) {
+      Log.w(TAG, "Should not run on pre-R devices");
+      stopSelf();
+      return;
+    }
+    executor = Executors.newSingleThreadExecutor();
+    paymentCardManager = new PaymentCardManager();
+  }
+
+  @Override
+  public void onDestroy() {
+    if (Build.VERSION.SDK_INT &lt; Build.VERSION_CODES.R) {
+      return;
+    }
+    executor.shutdownNow();
+  }
+
+  @Override
+  public void onWalletCardsRequested(
+      @NonNull GetWalletCardsRequest request, @NonNull GetWalletCardsCallback callback) {
+    if (Build.VERSION.SDK_INT &lt; Build.VERSION_CODES.R) {
+      return;
+    }
+    executor.submit(
+        () -&gt; {
+          List&lt;PaymentCard&gt; paymentCards = paymentCardManager.getCards();
+          int maxCards = Math.min(paymentCards.size(), request.getMaxCards());
+          List&lt;WalletCard&gt; walletCards = new ArrayList&lt;&gt;(maxCards);
+          int selectedIndex = 0;
+          int cardWidthPx = request.getCardWidthPx();
+          int cardHeightPx = request.getCardHeightPx();
+          for (int index = 0; index &lt; maxCards; index++) {
+            PaymentCard paymentCard = paymentCards.get(index);
+            WalletCard walletCard =
+                new WalletCard.Builder(
+                        paymentCard.getCardId(),
+                        paymentCard.getCardImage(cardWidthPx, cardHeightPx),
+                        paymentCard.getContentDescription(),
+                        paymentCard.getPendingIntent())
+                    .build();
+            walletCards.add(walletCard);
+            if (paymentCard.isSelected()) {
+              selectedIndex = index;
+            }
+          }
+          GetWalletCardsResponse response =
+              new GetWalletCardsResponse(walletCards, selectedIndex);
+          callback.onSuccess(response);
+        });
+  }
+
+  @Override
+  public void onWalletCardSelected(@NonNull SelectWalletCardRequest request) {
+    if (Build.VERSION.SDK_INT &lt; Build.VERSION_CODES.R) {
+      return;
+    }
+    executor.submit(
+        () -&gt; paymentCardManager.selectCardById(request.getCardId()));
+  }
+
+  @Override
+  public void onWalletDismissed() {
+    if (Build.VERSION.SDK_INT &lt; Build.VERSION_CODES.R) {
+      return;
+    }
+    executor.submit(() -&gt; {
+      paymentCardManager.removeCardOverrides();
+    });
+  }
+}
+</pre> <p>For further details about <code translate="no" dir="ltr">QuickAccessWalletService</code>, see <a href="https://developer.android.com/reference/android/service/quickaccesswallet/QuickAccessWalletService"><code translate="no" dir="ltr">QuickAccessWalletService</code> API reference</a>.</p> <h3 id="permissions">Permissions</h3> <p>The manifest entry for <code translate="no" dir="ltr">QuickAccessWalletService</code> must require the <code translate="no" dir="ltr">android.permission.BIND_QUICK_ACCESS_WALLET_SERVICE</code> permission introduced in Android 11. This is a signature-level permission held by the System UI, which means that only the System UI process can bind to implementations of <code translate="no" dir="ltr">QuickAccessWalletService</code>. Be aware that side-loaded apps can claim this permission and get full access to <code translate="no" dir="ltr">QuickAccessWalletService</code> data on devices running Android 10 or lower. To prevent this, it's recommended that the service check the build version in <code translate="no" dir="ltr">onCreate</code> and enable the service only on devices running Android 11 and higher. No other app permissions are required beyond those necessary to provide host card emulation payment services.</p> <p>If the default NFC payment app doesn't implement or export <code translate="no" dir="ltr">QuickAccessWalletService</code>, the Quick Access Wallet UI isn't displayed.</p> <h3 id="settings-s">Settings in Android 12</h3> <p>To enable or disable the Quick Access Wallet from the lock screen, users can use the <strong>Show wallet</strong> toggle in <strong>Settings</strong> &gt; <strong>Display</strong> &gt; <strong>Lock screen</strong>. To disable the wallet in the shade, users must manually edit it in the quick settings shade.</p> <p><img src="https://source.android.com/static/docs/core/connect/images/qaw-show-wallet-toggle-12.png" alt="Toggle to enable or disable wallet from lock screen" width="250" class="screenshot android-image-dark-theme-background"> </p> <p><strong>Figure 5.</strong> Show wallet toggle in the Lock screen page in Settings.</p> <h3 id="settings">Settings in Android 11</h3> <p>Users can turn off the Quick Access Wallet feature from the Settings app. The settings page is found in <strong>Settings</strong> &gt; <strong>System</strong> &gt; <strong>Gestures</strong> &gt; <strong>Cards &amp; passes</strong>.</p> <figure> <img src="https://source.android.com/static/docs/core/connect/images/cards-passes.png" alt="Settings page to enable or disable the Quick Access Wallet feature" width="250px" class="screenshot android-image-dark-theme-background"> <figcaption><strong>Figure 6.</strong> Settings page to enable or disable the Quick Access Wallet feature.</figcaption> </figure> <h2 id="customize">Customization</h2> <h3 id="add-wallet-to-other-location">Add Quick Access Wallet view to another location in System UI</h3> <p>The <a href="https://android.googlesource.com/platform/packages/apps/QuickAccessWallet/+/refs/heads/android17-release/">Quick Access Wallet UI</a> is built as a <a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/packages/SystemUI/plugin/src/com/android/systemui/plugins/GlobalActionsPanelPlugin.java">system plugin</a>. Although the AOSP implementation makes use of it in <a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/packages/SystemUI/src/com/android/systemui/globalactions/GlobalActionsImpl.java"><code translate="no" dir="ltr">GlobalActionsDialog</code></a> (shown on long power press), you can move the feature behind a different gesture as long as you maintain the contract specified by the plugin interface.</p> 
+<pre>public interface GlobalActionsPanelPlugin extends Plugin {
+
+  /** Invoked when the view is shown */
+  PanelViewController onPanelShown(Callbacks callbacks, boolean deviceLocked);
+
+  /** Callbacks for interacting with the view container */
+  interface Callbacks {
+    /** Dismisses the view */
+    void dismissGlobalActionsMenu();
+
+    /** Starts a PendingIntent, dismissing the keyguard if necessary. */
+    void startPendingIntentDismissingKeyguard(PendingIntent pendingIntent);
+  }
+
+  /** Provides the Quick Access Wallet view */
+  interface PanelViewController {
+
+    /** Returns the QuickAccessWallet view, which may take any size */
+    View getPanelContent();
+
+    /** Invoked when the view is dismissed */
+    void onDismissed();
+
+    /** Invoked when the device is either locked or unlocked. */
+    void onDeviceLockStateChanged(boolean locked);
+  }
+}
+</pre> <p>The <a href="https://android.googlesource.com/platform/packages/apps/QuickAccessWallet/+/refs/heads/android17-release/">Quick Access Wallet UI</a> implements <code translate="no" dir="ltr">GlobalActionsPanelPlugin</code> and <code translate="no" dir="ltr">PanelViewController</code>. <a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/packages/SystemUI/src/com/android/systemui/globalactions/GlobalActionsImpl.java"><code translate="no" dir="ltr">GlobalActionsDialog</code></a> gets an instance of the wallet plugin by using <code translate="no" dir="ltr">com.android.systemui.Dependency</code>:</p> 
+<pre>GlobalActionsPanelPlugin mPanelPlugin =
+    Dependency.get(ExtensionController.class)
+        .newExtension(GlobalActionsPanelPlugin.class)
+        .withPlugin(GlobalActionsPanelPlugin.class)
+        .build()
+        .get();
+</pre> <p>After checking that the plugin is non-null and that the <code translate="no" dir="ltr">PanelViewController</code> returned by <code translate="no" dir="ltr">onPanelShown</code> is non-null, the dialog attaches the <code translate="no" dir="ltr">View</code> provided by <code translate="no" dir="ltr">getPanelContent</code> to its own <code translate="no" dir="ltr">View</code> and provides appropriate callbacks for system events.</p> 
+<pre>// Construct a Wallet PanelViewController.
+// `this` implements GlobalActionsPanelPlugin.Callbacks
+GlobalActionsPanelPlugin.PanelViewController mPanelController =
+    mPanelPlugin.onPanelShown(this, !mKeyguardStateController.isUnlocked());
+
+// Attach the view
+FrameLayout panelContainer = findViewById(R.id.my_panel_container);
+FrameLayout.LayoutParams panelParams =
+    new FrameLayout.LayoutParams(
+        FrameLayout.LayoutParams.MATCH_PARENT,
+        FrameLayout.LayoutParams.MATCH_PARENT);
+panelContainer.addView(mPanelController.getPanelContent(), panelParams);
+
+// Respond to unlock events (if the view can be accessed while the phone is locked)
+keyguardStateController.addCallback(new KeyguardStateController.Callback() {
+  @Override
+  public void onUnlockedChanged() {
+    boolean unlocked = keyguardStateController.isUnlocked()
+        || keyguardStateController.canDismissLockScreen();
+    mPanelController.onDeviceLockStateChanged(unlocked);
+  }
+});
+
+// Implement GlobalActionsPanelPlugin.Callbacks
+@Override
+public void dismissGlobalActionsMenu() {
+  dismissDialog();
+}
+@Override
+public void startPendingIntentDismissingKeyguard(PendingIntent pendingIntent) {
+  mActivityStarter.startPendingIntentDismissingKeyguard(pendingIntent);
+}
+
+// Notify the wallet when the container view is dismissed
+mPanelController.onDismissed();
+</pre> <p>To remove the Quick Access Wallet from the power menu, omit the <code translate="no" dir="ltr">QuickAccessWallet</code> target from the system build. To remove the Quick Access Wallet from the power menu but add it to a different System UI provided view, include the build target and remove references to the <code translate="no" dir="ltr">GlobalActionsPanelPlugin</code> from <a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/packages/SystemUI/src/com/android/systemui/globalactions/GlobalActionsImpl.java"><code translate="no" dir="ltr">GlobalActionsImpl</code></a>.</p> <h3 id="default-config">Set default configurations</h3> <h4 id="android_12">Android 12</h4> <p>In Android 12 or higher, the Quick Access Wallet is always visible in the quick settings shade. Visibility of the Quick Access Wallet in the lock screen is gated by the following secure setting: <code translate="no" dir="ltr">LOCKSCREEN_SHOW_WALLET</code>. This setting controls whether the Quick Access Wallet icon is shown on the bottom right of the lock screen. This setting is set to <code translate="no" dir="ltr">true</code> by default, but can be turned off by the user in <strong>Settings</strong> &gt; <strong>Display</strong> &gt; <strong>Lock screen</strong> &gt; <strong>Show wallet</strong>.</p> <h4 id="android_11">Android 11</h4> <p>In Android 11, Quick Access Wallet visibility is gated by two secure settings: <code translate="no" dir="ltr">GLOBAL_ACTIONS_PANEL_ENABLED</code> and <code translate="no" dir="ltr">GLOBAL_ACTIONS_PANEL_AVAILABLE</code>. The <code translate="no" dir="ltr">AVAILABLE</code> setting controls whether the feature can be turned on and off in Settings. This setting is set to <code translate="no" dir="ltr">true</code> by <a href="https://android.googlesource.com/platform/packages/apps/QuickAccessWallet/+/refs/heads/android17-release/src/com/android/systemui/plugin/globalactions/wallet/WalletPluginService.java"><code translate="no" dir="ltr">WalletPluginService</code></a>. If <code translate="no" dir="ltr">QuickAccessWallet</code> isn't included in the build, then the setting remains <code translate="no" dir="ltr">false</code>. The <code translate="no" dir="ltr">ENABLED</code> setting is set to <code translate="no" dir="ltr">true</code> by default in the same place, but can be turned off by the user in Settings. To change the default behavior, modify <code translate="no" dir="ltr">WalletPluginService#enableFeatureInSettings</code>.</p> <h2 id="validate">Validation</h2> <p>To validate your implementation of the Quick Access Wallet, run CTS and manual tests. Changes to the plugin should also exercise the included <a href="https://android.googlesource.com/platform/packages/apps/QuickAccessWallet/+/refs/heads/android17-release/tests/robolectric/Android.bp">robolectric tests</a>.</p> <h3 id="cts-tests">CTS tests</h3> <p>Run the CTS tests located at <a href="https://android.googlesource.com/platform/cts/+/refs/heads/android17-release/tests/quickaccesswallet/src/android/quickaccesswallet"><code translate="no" dir="ltr">cts/tests/quickaccesswallet</code></a>.</p> <h3 id="manual-tests-s">Manual tests for Android 12</h3> <p>Testing the core features of the Quick Access Wallet requires an NFC payment terminal (real or fake) and an NFC payment app that implements <code translate="no" dir="ltr">QuickAccessWalletService</code> (wallet app). Core features that must be tested include: availability, zero state, card selection, and lock screen behavior.</p> <h4 id="availability-s">Availability</h4> <ul> <li>If the default NFC payment app doesn't support the feature, the Quick Access Wallet isn't accessible in neither the quick settings nor the lock screen.</li> <li>If the default NFC payment app supports the feature, the Quick Access Wallet is accessible in the quick settings shade.</li> <li>If the default NFC payment app supports the feature and if the <code translate="no" dir="ltr">LOCKSCREEN_SHOW_WALLET</code> setting is <code translate="no" dir="ltr">true</code>, the Quick Access Wallet is accessible on the lock screen.</li> <li>If the default NFC payment app supports the feature and if the <code translate="no" dir="ltr">LOCKSCREEN_SHOW_WALLET</code> setting is <code translate="no" dir="ltr">false</code>, the Quick Access Wallet isn't accessible on the lock screen.</li> </ul> <h4 id="zero-state-s">Zero state</h4> <ul> <li>
+<p>If <code translate="no" dir="ltr">QuickAccessWalletService</code> is enabled and exported but doesn't provide any cards, the tile in the Shade appears as shown in the example in Figure 7. Clicking on the tile opens the default NFC payment app.</p> <p><img src="https://source.android.com/static/docs/core/connect/images/shade-tile-zero-state-12.png" alt="Example tile in the shade showing default NFC payment app" width="250" class="screenshot android-image-dark-theme-background"> </p> <p><strong>Figure 7.</strong> Example tile in the shade showing default NFC payment app.</p>
+</li> <li><p>Clicking on the empty state view as shown in Figure 8 opens the default NFC payment app. This empty state view is displayed only when the user has one card left in the wallet, removes the card from the card detail page, and then goes back to the wallet view.</p></li> <li><p>The lock screen shows the wallet icon.</p></li> </ul> <p><img src="https://source.android.com/static/docs/core/connect/images/wallet-zero-state-12.png" alt="Empty state view in the Quick Access Wallet" width="250" class="screenshot android-image-dark-theme-background"> </p> <p><strong>Figure 8.</strong> Empty state view in the Quick Access Wallet UI.</p> <h4 id="non-zero-state-s">Non-zero state</h4> <ul> <li>
+<p>If the wallet app provides one or more cards, the tile in the shade appears as shown in Figure 9.</p> <p><img src="https://source.android.com/static/docs/core/connect/images/shade-tile-non-zero-state-12.png" alt="Example tile in the shade when wallet app has one or more cards" width="250" class="screenshot android-image-dark-theme-background"> </p> <p><strong>Figure 9.</strong> Example tile in the shade when wallet app has one or more cards.</p>
+</li> <li><p>Clicking on the tile shows a card carousel.</p></li> <li>
+<p>The lock screen shows a button that opens the Quick Access Wallet.</p> <p><img src="https://source.android.com/static/docs/core/connect/images/quick-access-wallet-12-unlocked.png" alt="Quick Access Wallet UI with a card displayed" width="250" class="screenshot android-image-dark-theme-background"> </p> <p><strong>Figure 10.</strong> Quick Access Wallet UI with a card displayed.</p>
+</li> <li><p>If the displayed card represents an NFC payment method, holding the phone to an NFC payment terminal results in that payment method being used and the wallet view is dismissed.</p></li> <li><p>Clicking on a displayed card opens the detailed activity for that card.</p></li> <li><p>If multiple cards are provided by <code translate="no" dir="ltr">QuickAccessWalletService</code>, the user is able to swipe between cards.</p></li> <li><p>The overflow menu contains one entry: open the lock screen settings so that the user can change the <strong>Show wallet</strong> option.</p></li> </ul> <h4 id="lock-state-tests-s">Lock state tests</h4> <ul> <li>If the phone is locked, the wallet is visible on the quick settings shade, with a description of <strong>Add a card</strong> if no card exists in the default payment app, or <strong>unlock to use</strong> if cards exist in the default payment app.</li> <li>If the phone is locked, wallet visibility on the lock screen is controlled by the <code translate="no" dir="ltr">Secure.LOCKSCREEN_SHOW_WALLET</code> setting, which is controlled in Settings.</li> <li>If the phone is locked, <code translate="no" dir="ltr">LOCKSCREEN_SHOW_WALLET</code> is <code translate="no" dir="ltr">false</code>, and no card exists in the default NFC payment app, the wallet isn't displayed on the lock screen.</li> <li>If the phone is locked, <code translate="no" dir="ltr">LOCKSCREEN_SHOW_WALLET</code> is <code translate="no" dir="ltr">true</code>, and no card exists in the default NFC payment app, the wallet isn't displayed on the lock screen.</li> <li>If the phone is locked, <code translate="no" dir="ltr">LOCKSCREEN_SHOW_WALLET</code> is <code translate="no" dir="ltr">true</code>, and cards exist in the default NFC payment app, the wallet is displayed on the lock screen.</li> <li>Unlocking the phone while the wallet is being displayed on the lock screen results in the cards being requeried, which might result in different card content.</li> </ul> <h4 id="accessibility-tests-s">Accessibility tests</h4> <ul> <li>Talkback users can navigate the wallet view by swiping left and right and by listening to the content descriptions of the cards.</li> <li>Swiping left and right with Talkback enabled selects each card in turn. Talkback users can select and use an NFC payment method at an NFC payment terminal.</li> </ul> <h3 id="manual-tests">Manual tests for Android 11</h3> <p>Testing the core features of the Quick Access Wallet requires an NFC payment terminal (real or fake) and an NFC payment app that implements <code translate="no" dir="ltr">QuickAccessWalletService</code> (wallet app). Core features that must be tested include availability, zero state, card selection, and lock screen behavior.</p> <h4 id="availability">Availability</h4> <ul> <li>If the <code translate="no" dir="ltr">GLOBAL_ACTIONS_PANEL_ENABLED</code> setting is <code translate="no" dir="ltr">true</code> and the default NFC payment app supports the feature, the Quick Access Wallet is accessible.</li> <li>If the <code translate="no" dir="ltr">GLOBAL_ACTIONS_PANEL_ENABLED</code> setting is <code translate="no" dir="ltr">false</code> and the default NFC payment app supports the feature, the Quick Access Wallet <em>isn't</em> accessible.</li> <li>If the <code translate="no" dir="ltr">GLOBAL_ACTIONS_PANEL_ENABLED</code> setting is <code translate="no" dir="ltr">true</code> and the default NFC payment app <em>doesn't</em> support the feature, the Quick Access Wallet <em>isn't</em> accessible.</li> <li>If the <code translate="no" dir="ltr">GLOBAL_ACTIONS_PANEL_ENABLED</code> setting is <code translate="no" dir="ltr">false</code> and the default NFC payment app <em>doesn't</em> support the feature, the Quick Access Wallet <em>isn't</em> accessible.</li> </ul> <h4 id="zero-state">Zero state</h4> <ul> <li>If <code translate="no" dir="ltr">QuickAccessWalletService</code> is enabled and exported but doesn't provide any cards, the Quick Access Wallet UI displays the empty state view.</li> <li>
+<p>Clicking the empty state view opens the wallet app.</p> <figure> <img src="https://source.android.com/static/docs/core/connect/images/wallet-zero-state.png" class="android-image-dark-theme-background screenshot" alt="Empty state view in the Quick Access Wallet UI" width="250px"> <figcaption><strong>Figure 11.</strong> Empty state view in the Quick Access Wallet UI.</figcaption> </figure>
+</li> </ul> <h4 id="non-zero-state">Non-zero state</h4> <ul> <li>
+<p>If the wallet app provides one or more cards, the cards are displayed in the Quick Access Wallet UI.</p> <figure> <img src="https://source.android.com/static/docs/core/connect/images/wallet-non-zero-state.png" class="android-image-dark-theme-background screenshot" alt="Quick Access Wallet UI with a card displayed" width="250px"> <figcaption><strong>Figure 12.</strong> Quick Access Wallet UI with a card displayed.</figcaption> </figure>
+</li> <li><p>If the displayed card represents an NFC payment method, holding the phone to an NFC payment terminal results in that payment method being used and the wallet view is dismissed.</p></li> <li><p>Clicking a displayed card dismisses the wallet view and opens the detailed activity for that card.</p></li> <li><p>If multiple cards are provided by <code translate="no" dir="ltr">QuickAccessWalletService</code>, the user is able to swipe between cards.</p></li> <li><p>The overflow menu contains two entries: one that opens the wallet app and one that opens the <strong>Show cards &amp; passes</strong> screen in Settings.</p></li> </ul> <h4 id="lock-state-tests">Lock state tests</h4> <ul> <li>If the phone is locked, wallet visibility is controlled by the <code translate="no" dir="ltr">Settings.Secure.POWER_MENU_LOCK_SHOW_CONTENT</code> setting, which can be controlled in Settings.</li> <li>If the phone is locked and <code translate="no" dir="ltr">POWER_MENU_LOCK_SHOW_CONTENT</code> is <code translate="no" dir="ltr">false</code>, the wallet isn't displayed.</li> <li>If the phone is locked and <code translate="no" dir="ltr">POWER_MENU_LOCK_SHOW_CONTENT</code> is <code translate="no" dir="ltr">true</code>, the wallet is displayed.</li> <li>Unlocking the phone while the wallet is being displayed on the lock screen results in the cards being re-queried, which might result in different card content.</li> </ul> <h4 id="accessibility-tests">Accessibility tests</h4> <ul> <li>TalkBack users can navigate the wallet view by swiping left and right and by listening to the content descriptions of the cards.</li> <li>Swiping left and right with TalkBack enabled selects each card in turn. TalkBack users can select and use an NFC payment method at an NFC payment terminal.</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/connect/quick-access-wallet" class="_attribution-link">https://source.android.com/docs/core/connect/quick-access-wallet</a>
+  </p>
+</div>

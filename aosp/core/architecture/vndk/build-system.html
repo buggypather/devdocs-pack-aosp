@@ -1,0 +1,254 @@
+<h1>VNDK build system support</h1>  <p> In Android 8.1 and higher, the build system has built-in VNDK support. When VNDK support is enabled, the build system checks the dependencies between modules, builds a vendor-specific variant for vendor modules, and automatically installs those modules into designated directories. </p> <h2 id="vndk-build-support-example">VNDK build support example</h2> <p> In this example, the <code translate="no" dir="ltr">Android.bp</code> module definition defines a library named <code translate="no" dir="ltr">libexample</code>. The <code translate="no" dir="ltr">vendor_available</code> property indicates framework modules and vendor modules may depend on <code translate="no" dir="ltr">libexample</code>: </p> <p> <img src="https://source.android.com/docs/core/architecture/images/treble_vndk_androidbp.png" class="android-image-dark-theme-background" alt="libexample vendor_available:true and vndk.enabled:true"> </p> <p><strong>Figure 1.</strong> support enabled.</p> <p> Both the framework executable <code translate="no" dir="ltr">/system/bin/foo</code> and the vendor executable <code translate="no" dir="ltr">/vendor/bin/bar</code> depend on <code translate="no" dir="ltr">libexample</code> and have <code translate="no" dir="ltr">libexample</code> in their <code translate="no" dir="ltr">shared_libs</code> properties. </p> <p> If <code translate="no" dir="ltr">libexample</code> is used by both framework modules and vendor modules, two variants of <code translate="no" dir="ltr">libexample</code> are built. The core variant (named after <code translate="no" dir="ltr">libexample</code>) is used by framework modules and the vendor variant (named after <code translate="no" dir="ltr">libexample.vendor</code>) is used by vendor modules. The two variants are installed into different directories: </p> <ul> <li>The core variant is installed into <code translate="no" dir="ltr">/system/lib[64]/libexample.so</code>.</li> <li>The vendor variant is installed into VNDK APEX because <code translate="no" dir="ltr">vndk.enabled</code> is <code translate="no" dir="ltr">true</code>.</li> </ul> <p> For more details, see <a href="#module-definition">Module definition</a>. </p> <h2 id="configuring-build-support">Configure build support</h2> <p> To enable full build system support for a product device, add <code translate="no" dir="ltr">BOARD_VNDK_VERSION</code> to <code translate="no" dir="ltr">BoardConfig.mk</code>: </p> 
+<pre>BOARD_VNDK_VERSION := current</pre> <p> This setting has a <strong>global</strong> effect: When defined in <code translate="no" dir="ltr">BoardConfig.mk</code>, all modules are checked. As there is no mechanism to blacklist or whitelist an offending module, you should clean all unnecessary dependencies before adding <code translate="no" dir="ltr">BOARD_VNDK_VERSION</code>. You can test and compile a module by setting <code translate="no" dir="ltr">BOARD_VNDK_VERSION</code> in your environment variables: </p> 
+<pre>$ BOARD_VNDK_VERSION=current m module_name.vendor</pre> <p>When <code translate="no" dir="ltr">BOARD_VNDK_VERSION</code> is enabled, several default global header search paths are <em>removed</em>. These include: </p> <ul> <li><code translate="no" dir="ltr">frameworks/av/include</code></li> <li><code translate="no" dir="ltr">frameworks/native/include</code></li> <li><code translate="no" dir="ltr">frameworks/native/opengl/include</code></li> <li><code translate="no" dir="ltr">hardware/libhardware/include</code></li> <li><code translate="no" dir="ltr">hardware/libhardware_legacy/include</code></li> <li><code translate="no" dir="ltr">hardware/ril/include</code></li> <li><code translate="no" dir="ltr">libnativehelper/include</code></li> <li><code translate="no" dir="ltr">libnativehelper/include_deprecated</code></li> <li><code translate="no" dir="ltr">system/core/include</code></li> <li><code translate="no" dir="ltr">system/media/audio/include</code></li> </ul> <p> If a module depends on the headers from these directories, you must specify (explicitly) the dependencies with <code translate="no" dir="ltr">header_libs</code>, <code translate="no" dir="ltr">static_libs</code>, and/or <code translate="no" dir="ltr">shared_libs</code>. </p> <h2 id="vndk-apex">VNDK APEX</h2> <p> In Android 10 and lower, modules with <code translate="no" dir="ltr">vndk.enabled</code> were installed in <code translate="no" dir="ltr">/system/lib[64]/vndk[-sp]-${VER}</code>. In Android 11 and higher, VNDK libraries are packaged in an APEX format and the name of VNDK APEX is <code translate="no" dir="ltr">com.android.vndk.v${VER}</code>. Depending on the device configuration, VNDK APEX is <em>flattened</em> or <em>unflattened</em> and is available from the canonical path <code translate="no" dir="ltr">/apex/com.android.vndk.v${VER}</code>. </p> <p><img src="https://source.android.com/docs/core/architecture/images/vndk_apex.png" class="android-image-dark-theme-background" alt="VNDK APEX"></p> <p><strong>Figure 2.</strong> VNDK APEX.</p> <h2 id="module-definition">Module definition</h2> <p> To build Android with <code translate="no" dir="ltr">BOARD_VNDK_VERSION</code>, you must revise the module definition in either <code translate="no" dir="ltr">Android.mk</code> or <code translate="no" dir="ltr">Android.bp</code>. This section describes different kinds of module definitions, several VNDK-related module properties, and dependency checks implemented in the build system. </p> <h3 id="vendor-modules">Vendor modules</h3> <p> Vendor modules are vendor-specific executables or shared libraries that must be installed into a vendor partition. In <code translate="no" dir="ltr">Android.bp</code> files, vendor modules must set vendor or proprietary property to <code translate="no" dir="ltr">true</code>. In <code translate="no" dir="ltr">Android.mk</code> files, vendor modules must set <code translate="no" dir="ltr">LOCAL_VENDOR_MODULE</code> or <code translate="no" dir="ltr">LOCAL_PROPRIETARY_MODULE</code> to <code translate="no" dir="ltr">true</code>. </p> <p> If <code translate="no" dir="ltr">BOARD_VNDK_VERSION</code> is defined, the build system disallows dependencies between vendor modules and framework modules and emits errors if: </p> <ul> <li>a module without <code translate="no" dir="ltr">vendor:true</code> depends on a module with <code translate="no" dir="ltr">vendor:true</code>, or</li> <li>a module with <code translate="no" dir="ltr">vendor:true</code> depends on a non-<code translate="no" dir="ltr">llndk_library</code> module that has neither <code translate="no" dir="ltr">vendor:true</code> nor <code translate="no" dir="ltr">vendor_available:true</code>.</li> </ul> <p> The dependency check applies to <code translate="no" dir="ltr">header_libs</code>, <code translate="no" dir="ltr">static_libs</code>, and <code translate="no" dir="ltr">shared_libs</code> in <code translate="no" dir="ltr">Android.bp</code>, and to <code translate="no" dir="ltr">LOCAL_HEADER_LIBRARIES</code>, <code translate="no" dir="ltr">LOCAL_STATIC_LIBRARIES</code> and <code translate="no" dir="ltr">LOCAL_SHARED_LIBRARIES</code> in <code translate="no" dir="ltr">Android.mk</code>. </p> <h3 id="ll-ndk">LL-NDK</h3> <p> LL-NDK shared libraries are shared libraries with stable ABIs. Both framework and vendor modules share the same and the latest implementation. For each LL-NDK shared library, the <code translate="no" dir="ltr">cc_library</code> contains a <code translate="no" dir="ltr">llndk</code> property with a symbol file: </p> 
+<pre>cc_library {
+    name: "libvndksupport",
+    llndk: {
+        symbol_file: "libvndksupport.map.txt",
+    },
+}</pre> <p> The symbol file describes the symbols visible to vendor modules. For example: </p> 
+<pre>LIBVNDKSUPPORT {
+  global:
+    android_load_sphal_library; # llndk
+    android_unload_sphal_library; # llndk
+  local:
+    *;
+};</pre> <p> Based on the symbol file, the build system generates a stub shared library for vendor modules, which link with these libraries when <code translate="no" dir="ltr">BOARD_VNDK_VERSION</code> is enabled. A symbol is included in the stub shared library only if it: </p> <ul> <li>Is not defined in the section end with <code translate="no" dir="ltr">_PRIVATE</code> or <code translate="no" dir="ltr">_PLATFORM</code>,</li> <li>Does not have <code translate="no" dir="ltr">#platform-only</code> tag, and</li> <li>Does not have <code translate="no" dir="ltr">#introduce*</code> tags or the tag matches with the target.</li> </ul> <aside class="note"> <strong>Note</strong>: Vendors must not define their own LL-NDK shared libraries because vendor modules won't be able to find them in <a href="../../../setup/create/gsi">Generic System Image (GSI)</a>. </aside> <h3 id="vndk">VNDK</h3> <p> In <code translate="no" dir="ltr">Android.bp</code> files, <code translate="no" dir="ltr">cc_library</code>, <code translate="no" dir="ltr">cc_library_static</code>, <code translate="no" dir="ltr">cc_library_shared</code>, and <code translate="no" dir="ltr">cc_library_headers</code> module definitions support three VNDK-related properties: <code translate="no" dir="ltr">vendor_available</code>, <code translate="no" dir="ltr">vndk.enabled</code>, and <code translate="no" dir="ltr">vndk.support_system_process</code>. </p> <p> If <code translate="no" dir="ltr">vendor_available</code> or <code translate="no" dir="ltr">vndk.enabled</code> is <code translate="no" dir="ltr">true</code>, two variants (<em>core</em> and <em>vendor</em>) may be built. The core variant should be treated as a framework module and the vendor variant should be treated as a vendor module. If some framework modules depend on this module, the core variant is built. If some vendor modules depend on this module, the vendor variant is built. The build system enforces the following dependency checks: </p> <ul> <li>The core variant is always framework-only and inaccessible to vendor modules.</li> <li>The vendor variant is always inaccessible to framework modules.</li> <li>All dependencies of the vendor variant, which are specified in <code translate="no" dir="ltr">header_libs</code>, <code translate="no" dir="ltr">static_libs</code>, and/or <code translate="no" dir="ltr">shared_libs</code>, must be either an <code translate="no" dir="ltr">llndk_library</code> or a module with <code translate="no" dir="ltr">vendor_available</code> or <code translate="no" dir="ltr">vndk.enabled</code>.</li> <li>If <code translate="no" dir="ltr">vendor_available</code> is <code translate="no" dir="ltr">true</code>, the vendor variant is accessible to all vendor modules.</li> <li>If <code translate="no" dir="ltr">vendor_available</code> is <code translate="no" dir="ltr">false</code>, the vendor variant is accessible only to other VNDK or VNDK-SP modules (i.e., modules with <code translate="no" dir="ltr">vendor:true</code> cannot link <code translate="no" dir="ltr">vendor_available:false</code> modules).</li> </ul> <p> The default installation path for <code translate="no" dir="ltr">cc_library</code> or <code translate="no" dir="ltr">cc_library_shared</code> is determined by the following rules: </p> <ul> <li>The core variant is installed to <code translate="no" dir="ltr">/system/lib[64]</code>.</li> <li>The vendor variant installation path may vary: <ul> <li>If <code translate="no" dir="ltr">vndk.enabled</code> is <code translate="no" dir="ltr">false</code>, the vendor variant is installed into <code translate="no" dir="ltr">/vendor/lib[64]</code>.</li> <li>If <code translate="no" dir="ltr">vndk.enabled</code> is <code translate="no" dir="ltr">true</code>, the vendor variant is installed into VNDK APEX(<code translate="no" dir="ltr">com.android.vndk.v${VER}</code>).</li> </ul> </li> </ul> <p> The table below summarizes how the build system handles the vendor variants: </p> <table> <tr> <th>vendor_available</th> <th style="text-align: center">vndk<br>enabled</th> <th style="text-align: center">vndk<br>support_system_process</th> <th>Vendor variant descriptions</th> </tr> <tr> <td rowspan="4"><code translate="no" dir="ltr">true</code></td> <td rowspan="2"><code translate="no" dir="ltr">false</code></td> <td><code translate="no" dir="ltr">false</code></td> <td>The vendor variants are <em>VND-ONLY</em>. Shared libraries are installed into <code translate="no" dir="ltr">/vendor/lib[64]</code>.</td> </tr> <tr> <td><code translate="no" dir="ltr">true</code></td> <td>
+<em>Invalid</em> (Build error)</td> </tr> <tr> <td rowspan="2"><code translate="no" dir="ltr">true</code></td> <td><code translate="no" dir="ltr">false</code></td> <td>The vendor variants are <em>VNDK</em>. Shared libraries are installed to VNDK APEX.</td> </tr> <tr> <td><code translate="no" dir="ltr">true</code></td> <td>The vendor variants are <em>VNDK-SP</em>. Shared libraries are installed to VNDK APEX.</td> </tr> <tr> <td rowspan="4"><p><code translate="no" dir="ltr">false</code></p></td> <td rowspan="2"><p><code translate="no" dir="ltr">false</code></p></td> <td><p><code translate="no" dir="ltr">false</code></p></td> <td><p>No vendor variants. This module is <em>FWK-ONLY</em>.</p></td> </tr> <tr> <td><code translate="no" dir="ltr">true</code></td> <td>
+<em>Invalid</em> (Build error)</td> </tr> <tr> <td rowspan="2"><code translate="no" dir="ltr">true</code></td> <td><code translate="no" dir="ltr">false</code></td> <td>The vendor variants are <em>VNDK-Private</em>. Shared libraries are installed to VNDK APEX. These must not be directly used by vendor modules.</td> </tr> <tr> <td><code translate="no" dir="ltr">true</code></td> <td>The vendor variants are <em>VNDK-SP-Private</em>. Shared libraries are installed to VNDK APEX. These must not be directly used by vendor modules.</td> </tr> </table> <aside class="note"> <strong>Note</strong>: Vendors may set <code translate="no" dir="ltr">vendor_available</code> to their modules but must not set <code translate="no" dir="ltr">vndk.enabled</code> or <code translate="no" dir="ltr">vndk.support_system_process</code> because the modules won't be able to find them in the <a href="../../../setup/create/gsi">Generic System Image (GSI)</a>. </aside> <h3 id="vndk-extensions">VNDK extensions</h3> <p> VNDK extensions are VNDK shared libraries with additional APIs. Extensions are installed to <code translate="no" dir="ltr">/vendor/lib[64]/vndk[-sp]</code> (without version suffix) and override the original VNDK shared libraries at runtime. </p> <h4 id="defining-vndk-extensions">Define VNDK extensions</h4> <p> In Android 9 and higher, <code translate="no" dir="ltr">Android.bp</code> natively supports VNDK extensions. To build a VNDK extension, define another module with a <code translate="no" dir="ltr">vendor:true</code> and an <code translate="no" dir="ltr">extends</code> property: </p> 
+<pre>cc_library {
+    name: "libvndk",
+    vendor_available: true,
+    vndk: {
+        enabled: true,
+    },
+}
+
+cc_library {
+    name: "libvndk_ext",
+    vendor: true,
+    vndk: {
+        enabled: true,
+        extends: "libvndk",
+    },
+}</pre> <p> A module with <code translate="no" dir="ltr">vendor:true</code>, <code translate="no" dir="ltr">vndk.enabled:true</code>, and <code translate="no" dir="ltr">extends</code> properties defines the VNDK extension:</p> <ul> <li>The <code translate="no" dir="ltr">extends</code> property must specify a base VNDK shared library name (or VNDK-SP shared library name).</li> <li>VNDK extensions (or VNDK-SP extensions) are named after the base module names from which they extend. For example, the output binary of <code translate="no" dir="ltr">libvndk_ext</code> is <code translate="no" dir="ltr">libvndk.so</code> instead of <code translate="no" dir="ltr">libvndk_ext.so</code>.</li> <li>VNDK extensions are installed into <code translate="no" dir="ltr">/vendor/lib[64]/vndk</code>.</li> <li>VNDK-SP extensions are installed into <code translate="no" dir="ltr">/vendor/lib[64]/vndk-sp</code>.</li> <li>The base shared libraries must have both <code translate="no" dir="ltr">vndk.enabled:true</code> and <code translate="no" dir="ltr">vendor_available:true</code>.</li> </ul> <p> A VNDK-SP extension must extend from a VNDK-SP shared library (<code translate="no" dir="ltr">vndk.support_system_process</code> must be equal): </p> 
+<pre>cc_library {
+    name: "libvndk_sp",
+    vendor_available: true,
+    vndk: {
+        enabled: true,
+        support_system_process: true,
+    },
+}
+
+cc_library {
+    name: "libvndk_sp_ext",
+    vendor: true,
+    vndk: {
+        enabled: true,
+        extends: "libvndk_sp",
+        support_system_process: true,
+    },
+}</pre> <p> VNDK extensions (or VNDK-SP extensions) may depend on other vendor shared libraries: </p> 
+<pre>cc_library {
+    name: "libvndk",
+    vendor_available: true,
+    vndk: {
+        enabled: true,
+    },
+}
+
+cc_library {
+    name: "libvndk_ext",
+    vendor: true,
+    vndk: {
+        enabled: true,
+        extends: "libvndk",
+    },
+    shared_libs: [
+        "libvendor",
+    ],
+}
+
+cc_library {
+    name: "libvendor",
+    vendor: true,
+}</pre> <aside class="note"> <strong>Note:</strong> Similar to SP-HAL-Dep, VNDK-SP extensions and their dependencies (including vendor libraries) must be labeled as <code translate="no" dir="ltr">same_process_hal_file</code> in sepolicy. </aside> <h4 id="using-vndk-extensions">Use VNDK extensions</h4> <p> If a vendor module depends on additional APIs defined by VNDK extensions, the module must specify the name of the VNDK extension in its <code translate="no" dir="ltr">shared_libs</code> property: </p> 
+<pre>// A vendor shared library example
+cc_library {
+    name: "libvendor",
+    vendor: true,
+    shared_libs: [
+        "libvndk_ext",
+    ],
+}
+
+// A vendor executable example
+cc_binary {
+    name: "vendor-example",
+    vendor: true,
+    shared_libs: [
+        "libvndk_ext",
+    ],
+}</pre> <p> If a vendor module depends on VNDK extensions, those VNDK extensions are installed to <code translate="no" dir="ltr">/vendor/lib[64]/vndk[-sp]</code> automatically. If a module no longer depends on a VNDK extension, add a clean step to <code translate="no" dir="ltr">CleanSpec.mk</code> to remove the shared library. For example: </p> 
+<pre>$(call add-clean-step, rm -rf $(TARGET_OUT_VENDOR)/lib/libvndk.so)</pre> <h3 id="conditional-compilation">Conditional compilation</h3> <p> This section describes how to deal with the <em>subtle differences</em> (e.g. adding or removing a feature from one of the variants) between the following three VNDK shared libraries: </p> <ul> <li>Core variant (e.g. <code translate="no" dir="ltr">/system/lib[64]/libexample.so</code>)</li> <li>Vendor variant (e.g. <code translate="no" dir="ltr">/apex/com.android.vndk.v${VER}/lib[64]/libexample.so</code>)</li> <li>VNDK extension (e.g. <code translate="no" dir="ltr">/vendor/lib[64]/vndk[-sp]/libexample.so</code>) </li> </ul> <h4 id="conditional-cflags">Conditional compiler flags</h4> <p> The Android build system defines <code translate="no" dir="ltr">__ANDROID_VNDK__</code> for vendor variants and VNDK extensions by default. You may guard the code with the C preprocessor guards: </p> 
+<pre>void all() { }
+
+#if !defined(__ANDROID_VNDK__)
+void framework_only() { }
+#endif
+
+#if defined(__ANDROID_VNDK__)
+void vndk_only() { }
+#endif</pre> <p> In addition to <code translate="no" dir="ltr">__ANDROID_VNDK__</code>, different <code translate="no" dir="ltr">cflags</code> or <code translate="no" dir="ltr">cppflags</code> may be specified in <code translate="no" dir="ltr">Android.bp</code>. The <code translate="no" dir="ltr">cflags</code> or <code translate="no" dir="ltr">cppflags</code> specified in <code translate="no" dir="ltr">target.vendor</code> is specific to the vendor variant. </p> <p> For example, the following <code translate="no" dir="ltr">Android.bp</code> defines <code translate="no" dir="ltr">libexample</code> and <code translate="no" dir="ltr">libexample_ext</code>: </p> 
+<pre>cc_library {
+    name: "libexample",
+    srcs: ["src/example.c"],
+    vendor_available: true,
+    vndk: {
+        enabled: true,
+    },
+    target: {
+        vendor: {
+            cflags: ["-DLIBEXAMPLE_ENABLE_VNDK=1"],
+        },
+    },
+}
+
+cc_library {
+    name: "libexample_ext",
+    srcs: ["src/example.c"],
+    vendor: true,
+    vndk: {
+        enabled: true,
+        extends: "libexample",
+    },
+    cflags: [
+        "-DLIBEXAMPLE_ENABLE_VNDK=1",
+        "-DLIBEXAMPLE_ENABLE_VNDK_EXT=1",
+    ],
+}</pre> <p> And this is the code listing of <code translate="no" dir="ltr">src/example.c</code>: </p> 
+<pre>void all() { }
+
+#if !defined(LIBEXAMPLE_ENABLE_VNDK)
+void framework_only() { }
+#endif
+
+#if defined(LIBEXAMPLE_ENABLE_VNDK)
+void vndk() { }
+#endif
+
+#if defined(LIBEXAMPLE_ENABLE_VNDK_EXT)
+void vndk_ext() { }
+#endif</pre> <p> According to these two files, the build system generates shared libraries with following exported symbols: </p> <table> <tr> <th>Installation path</th> <th>Exported symbols</th> </tr> <tr> <td><code translate="no" dir="ltr">/system/lib[64]/libexample.so</code></td> <td>
+<code translate="no" dir="ltr">all</code>, <code translate="no" dir="ltr">framework_only</code>
+</td> </tr> <tr> <td><code translate="no" dir="ltr">/apex/com.android.vndk.v${VER}/lib[64]/libexample.so</code></td> <td>
+<code translate="no" dir="ltr">all</code>, <code translate="no" dir="ltr">vndk</code>
+</td> </tr> <tr> <td><code translate="no" dir="ltr">/vendor/lib[64]/vndk/libexample.so</code></td> <td>
+<code translate="no" dir="ltr">all</code>, <code translate="no" dir="ltr">vndk</code>, <code translate="no" dir="ltr">vndk_ext</code>
+</td> </tr> </table> <h4 id="exported-symbols">Requirements on the exported symbols</h4> <p> The <a href="abi-stability">VNDK ABI checker</a> compares the ABI of <em>VNDK vendor variants</em> and <em>VNDK extensions</em> to the reference ABI dumps under <code translate="no" dir="ltr">prebuilts/abi-dumps/vndk</code>. </p> <ul> <li>Symbols exported by <em>VNDK vendor variants</em> (e.g. <code translate="no" dir="ltr">/apex/com.android.vndk.v${VER}/lib[64]/libexample.so</code>) must be identical to (not the supersets of) the symbols defined in ABI dumps.</li> <li>Symbols exported by <em>VNDK extensions</em> (e.g. <code translate="no" dir="ltr">/vendor/lib[64]/vndk/libexample.so</code>) must be supersets of the symbols defined in ABI dumps.</li> </ul> <p> If <em>VNDK vendor variants</em> or <em>VNDK extensions</em> fail to follow the requirements above, VNDK ABI checker emits build errors and stops the build. </p> <h4 id="excluding">Exclude source files or shared libraries from vendor variants</h4> <p> To exclude source files from the vendor variant, add them to the <code translate="no" dir="ltr">exclude_srcs</code> property. Similarly, to ensure shared libraries are not linked with the vendor variant, add those libraries to the <code translate="no" dir="ltr">exclude_shared_libs</code> property. For example: </p> 
+<pre>cc_library {
+    name: "libexample_cond_exclude",
+    srcs: ["fwk.c", "both.c"],
+    shared_libs: ["libfwk_only", "libboth"],
+    vendor_available: true,
+    target: {
+        vendor: {
+            exclude_srcs: ["fwk.c"],
+            exclude_shared_libs: ["libfwk_only"],
+        },
+    },
+}</pre> <p> In this example, the core variant of <code translate="no" dir="ltr">libexample_cond_exclude</code> includes the code from <code translate="no" dir="ltr">fwk.c</code> and <code translate="no" dir="ltr">both.c</code> and depends on the shared libraries <code translate="no" dir="ltr">libfwk_only</code> and <code translate="no" dir="ltr">libboth</code>. The vendor variant of <code translate="no" dir="ltr">libexample_cond_exclude</code> includes only the code from <code translate="no" dir="ltr">both.c</code> because <code translate="no" dir="ltr">fwk.c</code> is excluded by the <code translate="no" dir="ltr">exclude_srcs</code> property. Similarly, it depends on only the shared library <code translate="no" dir="ltr">libboth</code> because <code translate="no" dir="ltr">libfwk_only</code> is excluded by the <code translate="no" dir="ltr">exclude_shared_libs</code> property. </p> <h4 id="export-headers-from-vndk-extension">Export headers from VNDK extensions</h4> <p> A VNDK extension may add new classes or new functions to a VNDK shared library. It is suggested to keep those declarations in independent headers and avoid changing the existing headers. </p> <p> For example, a new header file <code translate="no" dir="ltr">include-ext/example/ext/feature_name.h</code> is created for the VNDK extension <code translate="no" dir="ltr">libexample_ext</code>: </p> <ul> <li>Android.bp</li> <li><strong>include-ext/example/ext/feature_name.h</strong></li> <li>include/example/example.h</li> <li>src/example.c</li> <li><strong>src/ext/feature_name.c</strong></li> </ul> <p> In the following <code translate="no" dir="ltr">Android.bp</code>, <code translate="no" dir="ltr">libexample</code> exports only <code translate="no" dir="ltr">include</code>, whereas <code translate="no" dir="ltr">libexample_ext</code> exports both <code translate="no" dir="ltr">include</code> and <code translate="no" dir="ltr">include-ext</code>. This ensures <code translate="no" dir="ltr">feature_name.h</code> won't be incorrectly included by the users of <code translate="no" dir="ltr">libexample</code>: </p> 
+<pre>cc_library {
+    name: "libexample",
+    srcs: ["src/example.c"],
+    export_include_dirs: ["include"],
+    vendor_available: true,
+    vndk: {
+        enabled: true,
+    },
+}
+
+cc_library {
+    name: "libexample_ext",
+    srcs: [
+        "src/example.c",
+        "src/ext/feature_name.c",
+    ],
+    export_include_dirs: [
+        "include",
+        "include-ext",
+    ],
+    vendor: true,
+    vndk: {
+        enabled: true,
+        extends: "libexample",
+    },
+}</pre> <p> If separating extensions to independent header files is not feasible, an alternative is to add <code translate="no" dir="ltr">#ifdef</code> guards. However, make sure that all VNDK extension users add the define flags. You may define <code translate="no" dir="ltr">cc_defaults</code> to add define flags to <code translate="no" dir="ltr">cflags</code> and link shared libraries with <code translate="no" dir="ltr">shared_libs</code>. </p> <p> For example, to add a new member function <code translate="no" dir="ltr">Example2::get_b()</code> to the VNDK extension <code translate="no" dir="ltr">libexample2_ext</code>, you must modify the existing header file and add a <code translate="no" dir="ltr">#ifdef</code> guard: </p> 
+<pre>#ifndef LIBEXAMPLE2_EXAMPLE_H_
+#define LIBEXAMPLE2_EXAMPLE_H_
+
+class Example2 {
+ public:
+  Example2();
+
+  void get_a();
+
+#ifdef LIBEXAMPLE2_ENABLE_VNDK_EXT
+  void get_b();
+#endif
+
+ private:
+  void *impl_;
+};
+
+#endif  // LIBEXAMPLE2_EXAMPLE_H_</pre> <p> A <code translate="no" dir="ltr">cc_defaults</code> named <code translate="no" dir="ltr">libexample2_ext_defaults</code> is defined for the users of <code translate="no" dir="ltr">libexample2_ext</code>: </p> 
+<pre>cc_library {
+    name: "libexample2",
+    srcs: ["src/example2.cpp"],
+    export_include_dirs: ["include"],
+    vendor_available: true,
+    vndk: {
+        enabled: true,
+    },
+}
+
+cc_library {
+    name: "libexample2_ext",
+    srcs: ["src/example2.cpp"],
+    export_include_dirs: ["include"],
+    vendor: true,
+    vndk: {
+        enabled: true,
+        extends: "libexample2",
+    },
+    cflags: [
+        "-DLIBEXAMPLE2_ENABLE_VNDK_EXT=1",
+    ],
+}
+
+cc_defaults {
+    name: "libexample2_ext_defaults",
+    shared_libs: [
+        "libexample2_ext",
+    ],
+    cflags: [
+        "-DLIBEXAMPLE2_ENABLE_VNDK_EXT=1",
+    ],
+}</pre> <p> The users of <code translate="no" dir="ltr">libexample2_ext</code> may simply include <code translate="no" dir="ltr">libexample2_ext_defaults</code> in their <code translate="no" dir="ltr">defaults</code> property: </p> 
+<pre>cc_binary {
+    name: "example2_user_executable",
+    defaults: ["libexample2_ext_defaults"],
+    vendor: true,
+}</pre> <h3 id="product-packages">Product packages</h3> <p> In the Android build system, the variable <code translate="no" dir="ltr">PRODUCT_PACKAGES</code> specifies the executables, shared libraries, or packages that should be installed into the device. The transitive dependencies of the specified modules are implicitly installed into the device as well. </p> <p> If <code translate="no" dir="ltr">BOARD_VNDK_VERSION</code> is enabled, modules with <code translate="no" dir="ltr">vendor_available</code> or <code translate="no" dir="ltr">vndk.enabled</code> get special treatment. If a framework module depends on a module with <code translate="no" dir="ltr">vendor_available</code> or <code translate="no" dir="ltr">vndk.enabled</code>, the core variant is included in the transitive installation set. If a vendor module depends on a module with <code translate="no" dir="ltr">vendor_available</code>, the vendor variant is included in the transitive installation set. However, vendor variants of modules with <code translate="no" dir="ltr">vndk.enabled</code> are installed whether or not they are used by vendor modules. </p> <p> When the dependencies are invisible to the build system (e.g. shared libraries that may be opened with <code translate="no" dir="ltr">dlopen()</code> in runtime), you should specify the module names in <code translate="no" dir="ltr">PRODUCT_PACKAGES</code> to install those modules explicitly. </p> <p> If a module has <code translate="no" dir="ltr">vendor_available</code> or <code translate="no" dir="ltr">vndk.enabled</code>, the module name stands for its core variant. To explicitly specify the vendor variant in <code translate="no" dir="ltr">PRODUCT_PACKAGES</code>, append a <code translate="no" dir="ltr">.vendor</code> suffix to the module name. For example: </p> 
+<pre>cc_library {
+    name: "libexample",
+    srcs: ["example.c"],
+    vendor_available: true,
+}</pre> <p> In this example, <code translate="no" dir="ltr">libexample</code> stands for <code translate="no" dir="ltr">/system/lib[64]/libexample.so</code> and <code translate="no" dir="ltr">libexample.vendor</code> stands for <code translate="no" dir="ltr">/vendor/lib[64]/libexample.so</code>. To install <code translate="no" dir="ltr">/vendor/lib[64]/libexample.so</code>, add <code translate="no" dir="ltr">libexample.vendor</code> to <code translate="no" dir="ltr">PRODUCT_PACKAGES</code>: </p> 
+<pre>PRODUCT_PACKAGES += libexample.vendor</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/vndk/build-system" class="_attribution-link">https://source.android.com/docs/core/architecture/vndk/build-system</a>
+  </p>
+</div>

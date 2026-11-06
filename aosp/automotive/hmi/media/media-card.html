@@ -1,0 +1,246 @@
+<h1>Implement a media card in AAOS</h1>  <p>A <em>media card</em> is a self-contained ViewGroup that displays media metadata such as the title, album art, and more, and surfaces playback controls such as <strong>Play</strong> and <strong>Pause</strong>, <strong>Skip,</strong> and even custom actions provided by the third party media app. A media card can also show a queue of media items, such as a playlist.</p> <p><img src="https://source.android.com/static/docs/automotive/images/media-card/media-card-01.png" alt="Media card" width="450" class="screenshot android-image-dark-theme-background"> </p> <p><img src="https://source.android.com/static/docs/automotive/images/media-card/media-card-02.png" alt="Media card" width="450" class="screenshot android-image-dark-theme-background"> </p> <p><img src="https://source.android.com/static/docs/automotive/images/media-card/media-card-03.png" alt="Media card" width="450" class="screenshot android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> Media Card sample implementations.</p> <h2 id="how_are_media_cards_implemented_in_aaos">How are media cards implemented in AAOS?</h2> <p>ViewGroups that show media information observe LiveData updates from the <code translate="no" dir="ltr">car-media-common</code> library <em>data</em> model, the <code translate="no" dir="ltr">PlaybackViewModel</code>, to populate the ViewGroup. Each LiveData update corresponds to a subset of media information that has changed, such as <code translate="no" dir="ltr">MediaItemMetadata</code>, <code translate="no" dir="ltr">PlaybackStateWrapper</code>, and <code translate="no" dir="ltr">MediaSource</code>.</p> <p>Because this approach leads to repeated code (each client app adds Observers on each piece of LiveData and many similar Views are assigned the updated data), we created the <strong><code translate="no" dir="ltr">PlaybackCardController</code></strong>.</p> <h2 id="playbackcardcontroller">PlaybackCardController</h2> <p>The <code translate="no" dir="ltr">PlaybackCardController</code> has been added to the <code translate="no" dir="ltr">car-media-common</code> library to assist in creating a media card. This is a public class that is constructed with a ViewGroup (<code translate="no" dir="ltr">mView</code>), PlaybackViewModel (<code translate="no" dir="ltr">mDataModel</code>), PlaybackCardViewModel (<code translate="no" dir="ltr">mViewModel</code>), and <code translate="no" dir="ltr">MediaItemsRepository</code> instance (<code translate="no" dir="ltr">mItemsRepository</code>).</p> <p>In the <code translate="no" dir="ltr">setupController</code> function, the ViewGroup is parsed for certain views by ID, with <code translate="no" dir="ltr">mView.findViewById(R.id.xxx)</code> and assigned to protected View objects.</p> 
+<pre>private void getViewsFromWidget() {
+        mTitle = mView.findViewById(R.id.title);
+        mAlbumCover = mView.findViewById(R.id.album_art);
+        mDescription = mView.findViewById(R.id.album_title);
+        mLogo = mView.findViewById(R.id.content_format);
+
+        mAppIcon = mView.findViewById(R.id.media_widget_app_icon);
+        mAppName = mView.findViewById(R.id.media_widget_app_name);
+
+         // ...
+}
+</pre> <p>Each LiveData update from the <code translate="no" dir="ltr">PlaybackViewModel</code> is observed in a protected method and performs interactions with the Views relevant to the data received. For example, an observer on <code translate="no" dir="ltr">MediaItemMetadata</code> sets the title on the <code translate="no" dir="ltr">mTitle</code> <code translate="no" dir="ltr">TextView</code> and passes the <code translate="no" dir="ltr">MediaItemMetadata.ArtworkRef</code> to the album art <code translate="no" dir="ltr">ImageBinder</code> <code translate="no" dir="ltr">mAlbumArtBinder</code>. If the metadata is null, the Views are hidden. Subclasses of the Controller can override this logic if need be.</p> 
+<pre>mDataModel.getMetadata().observe(mViewLifecycle, this::updateMetadata);
+// ...
+
+/** Update views with {@link MediaItemMetadata} */
+protected void updateMetadata(MediaItemMetadata metadata) {
+        if (metadata != null) {
+            String defaultTitle = mView.getContext().getString(
+                    R.string.metadata_default_title);
+            updateTextViewAndVisibility(mTitle, metadata.getTitle(),    defaultTitle);
+            updateTextViewAndVisibility(mSubtitle, metadata.getSubtitle());
+            updateMediaLink(mSubtitleLinker,metadata.getSubtitleLinkMediaId());
+            updateTextViewAndVisibility(mDescription, metadata.getDescription());
+            updateMediaLink(mDescriptionLinker, metadata.getDescriptionLinkMediaId());
+            updateMetadataAlbumCoverArtworkRef(metadata.getArtworkKey());
+            updateMetadataLogoWithUri(metadata);
+        } else {
+            ViewUtils.setVisible(mTitle, false);
+            ViewUtils.setVisible(mSubtitle, false);
+            ViewUtils.setVisible(mAlbumCover, false);
+            ViewUtils.setVisible(mDescription, false);
+            ViewUtils.setVisible(mLogo, false);
+        }
+    }
+</pre> <h3 id="extend_the_playbackcardcontroller">Extend the PlaybackCardController</h3> <p>Client apps that would like to create a media card should extend the <code translate="no" dir="ltr">PlaybackCardController</code> if they have additional capability they would like to handle in each LiveData update. Existing clients in AAOS follow this pattern. First, a <code translate="no" dir="ltr">PlaybackCardController</code> subclass should be created, such as the <code translate="no" dir="ltr">MediaCardController</code>. Next, the <code translate="no" dir="ltr">MediaCardController</code> should add a static inner Builder class which extends that of the <code translate="no" dir="ltr">PlaybackCardController</code>.</p> 
+<pre>public class MediaCardController extends PlaybackCardController {
+
+    // extra fields specific to MediaCardController
+
+    /** Builder for {@link MediaCardController}. Overrides build() method to
+     * return NowPlayingController rather than base {@link PlaybackCardController}
+     */
+    public static class Builder extends PlaybackCardController.Builder {
+
+        @Override
+        public MediaCardController build() {
+            MediaCardController controller = new MediaCardController(this);
+            controller.setupController();
+            return controller;
+        }
+    }
+
+    public MediaCardController(Builder builder) {
+        super(builder);
+    // any other function calls needed in constructor
+    // ...
+
+  }
+}
+</pre> <h3 id="instantiate_the_playbackcardcontroller_or_a_subclass">Instantiate the PlaybackCardController or a subclass</h3> <p>The Controller class should be instantiated from a Fragment or Activity in order to have a LifecycleOwner for the LiveData observers.</p> 
+<pre>mMediaCardController = (MediaCardController) new MediaCardController.Builder()
+                    .setModels(mViewModel.getPlaybackViewModel(),
+                            mViewModel,
+                            mViewModel.getMediaItemsRepository())
+                    .setViewGroup((ViewGroup) view)
+                    .build();
+</pre> <p><code translate="no" dir="ltr">mViewModel</code> is an instance of the <code translate="no" dir="ltr">PlaybackCardViewModel</code> (or subclass).</p> <h3 id="playbackcardviewmodel_to_save_state">PlaybackCardViewModel to Save State</h3> <p>The <code translate="no" dir="ltr">PlaybackCardViewModel</code> is a state-saving ViewModel tied to a Fragment or Activity that should be used to reconstruct the media card's contents if a configuration change occurs (such as a switch from light to dark theme when a user drives through a tunnel). The default <code translate="no" dir="ltr">PlaybackCardViewModel</code> handles the storing of instances of the <code translate="no" dir="ltr">MediaModel</code>s for playback, from which the <code translate="no" dir="ltr">PlaybackViewModel</code> and <code translate="no" dir="ltr">MediaItemsRepository</code> can be retrieved. Use the <code translate="no" dir="ltr">PlaybackCardViewModel</code> to track the state of the queue, history, and overflow menu through the provided getters and setters.</p> 
+<pre>public class PlaybackCardViewModel extends AndroidViewModel {
+
+    private MediaModels mModels;
+    private boolean mNeedsInitialization = true;
+    private boolean mQueueVisible = false;
+    private boolean mHistoryVisible = false;
+    private boolean mOverflowExpanded = false;
+
+    public PlaybackCardViewModel(@NonNull Application application) {
+        super(application);
+    }
+
+    /** Initialize the PlaybackCardViewModel */
+    public void init(MediaModels models) {
+        mModels = models;
+        mNeedsInitialization = false;
+    }
+
+    /**
+     * Returns whether the ViewModel needs to be initialized. The ViewModel may
+     * need re-initialization if a config change occurs or if the system kills
+     * the Fragment.
+     */
+    public boolean needsInitialization() {
+        return mNeedsInitialization;
+    }
+
+    public MediaItemsRepository getMediaItemsRepository() {
+        return mModels.getMediaItemsRepository();
+    }
+
+    public PlaybackViewModel getPlaybackViewModel() {
+        return mModels.getPlaybackViewModel();
+    }
+
+    public MediaSourceViewModel getMediaSourceViewModel() {
+        return mModels.getMediaSourceViewModel();
+    }
+
+    public void setQueueVisible(boolean visible) {
+        mQueueVisible = visible;
+    }
+
+    public boolean getQueueVisible() {
+        return mQueueVisible;
+    }
+
+    public void setHistoryVisible(boolean visible) {
+        mHistoryVisible = visible;
+    }
+
+    public boolean getHistoryVisible() {
+        return mHistoryVisible;
+    }
+
+    public void setOverflowExpanded(boolean expanded) {
+        mOverflowExpanded = expanded;
+    }
+
+    public boolean getOverflowExpanded() {
+        return mOverflowExpanded;
+    }
+}
+</pre> <p>This class can be extended if additional states need to be tracked.</p> <h2 id="show_a_queue_in_a_media_card">Show a queue in a media card</h2> <p>The <code translate="no" dir="ltr">PlaybackViewModel</code> provides LiveData APIs to detect if the MediaSource supports a queue and to retrieve the list of <code translate="no" dir="ltr">MediaItemMetadata</code> objects in the queue. Though these APIs can be used directly to populate a <code translate="no" dir="ltr">RecyclerView</code> object with the queue information, a <code translate="no" dir="ltr">PlaybackQueueController</code> class has been added to the <code translate="no" dir="ltr">car-media-common</code> library to streamline this process. The layout for each item in the <code translate="no" dir="ltr">CarUiRecyclerView</code> is specified by the client app as well as an optional Header layout. The client app can also opt to limit the number of items shown in the queue during drive state with custom UXR restrictions.</p> <p>The <code translate="no" dir="ltr">PlaybackQueueController</code> constructor and setters are shown in the following sample. The <code translate="no" dir="ltr">queueResource</code> and <code translate="no" dir="ltr">headerResource</code> layout resources can be passed as <code translate="no" dir="ltr">Resources.ID_NULL</code> if, in the former case, the container already contains a <code translate="no" dir="ltr">CarUiRecyclerView</code> with <code translate="no" dir="ltr">id queue_list</code> and, in the latter case, the queue does not have a Header.</p> 
+<pre>   /**
+    * Construct a PlaybackQueueController. If clients don't have a separate
+    * layout for the queue, where the queue is already inflated within the
+    * container, they should pass {@link Resources.ID_NULL} as the LayoutRes
+    * resource. If clients don't require a UxrContentLimiter, they should pass
+    * null for uxrContentLimiter and the int passed for uxrConfigurationId will
+    * be ignored.
+    */
+    public PlaybackQueueController(
+            ViewGroup container,
+            @LayoutRes int queueResource,
+            @LayoutRes int queueItemResource,
+            @LayoutRes int headerResource,
+            LifecycleOwner lifecycleOwner,
+            PlaybackViewModel playbackViewModel,
+            MediaItemsRepository itemsRepository,
+            @Nullable LifeCycleObserverUxrContentLimiter uxrContentLimiter,
+            int uxrConfigurationId) {
+      // ...
+    }
+
+    public void setShowTimeForActiveQueueItem(boolean show) {
+        mShowTimeForActiveQueueItem = show;
+    }
+
+    public void setShowIconForActiveQueueItem(boolean show) {
+        mShowIconForActiveQueueItem = show;
+    }
+
+    public void setShowThumbnailForQueueItem(boolean show) {
+        mShowThumbnailForQueueItem = show;
+    }
+
+    public void setShowSubtitleForQueueItem(boolean show) {
+        mShowSubtitleForQueueItem = show;
+    }
+
+    /** Calls {@link RecyclerView#setVerticalFadingEdgeEnabled(boolean)} */
+    public void setVerticalFadingEdgeLengthEnabled(boolean enabled) {
+        mQueue.setVerticalFadingEdgeEnabled(enabled);
+    }
+
+    public void setCallback(PlaybackQueueCallback callback) {
+        mPlaybackQueueCallback = callback;
+    }
+</pre> <p>The layout for each queue item should contain the ids for the Views it would like to show that correspond to those used in the <code translate="no" dir="ltr">QueueViewHolder</code> inner class.</p> 
+<pre>QueueViewHolder(View itemView) {
+            super(itemView);
+            mView = itemView;
+            mThumbnailContainer = itemView.findViewById(R.id.thumbnail_container);
+            mThumbnail = itemView.findViewById(R.id.thumbnail);
+            mSpacer = itemView.findViewById(R.id.spacer);
+            mTitle = itemView.findViewById(R.id.queue_list_item_title);
+            mSubtitle = itemView.findViewById(R.id.queue_list_item_subtitle);
+            mCurrentTime = itemView.findViewById(R.id.current_time);
+            mMaxTime = itemView.findViewById(R.id.max_time);
+            mTimeSeparator = itemView.findViewById(R.id.separator);
+            mActiveIcon = itemView.findViewById(R.id.now_playing_icon);
+
+            // ...
+}
+</pre> <p>To show a queue in a media card created with the <code translate="no" dir="ltr">PlaybackCardController</code> (or a subclass), the <code translate="no" dir="ltr">PlaybackQueueController</code> can be constructed in the <code translate="no" dir="ltr">PlaybackCardController</code> constructor using <code translate="no" dir="ltr">mDataModel</code> and <code translate="no" dir="ltr">mItemsRepository</code> for the <code translate="no" dir="ltr">PlaybackViewModel</code> and <code translate="no" dir="ltr">MediaItemsRepository</code> instances, respectively.</p> <h2 id="show_history_of_previously_played_mediasources">Show history of previously played MediaSources</h2> <p>In this section, you learn how to show and surface history of previously played media sources.</p> <h3 id="get_history_list_with_the_playbackcardviewmodel_api">Get history list with the PlaybackCardViewModel API</h3> <p><code translate="no" dir="ltr">PlaybackCardViewModel</code> provides a LiveData API called <code translate="no" dir="ltr">getHistoryList()</code> to retrieve the media history list. It returns a LiveData containing a list of MediaSources that have been played before. This data can be used to populate a <code translate="no" dir="ltr">CarUiRecyclerView</code> object. Similar to <code translate="no" dir="ltr">PlaybackQueueController</code>, a class named <code translate="no" dir="ltr">PlaybackHistoryController</code> has been added to the <code translate="no" dir="ltr">car-media-common</code> library to streamline the process.</p> 
+<pre>public class PlaybackCardViewModel extends AndroidViewModel {
+
+    public PlaybackCardViewModel(@NonNull Application application) {
+    }
+
+    /** Initialize the PlaybackCardViewModel */
+    public void init(MediaModels models) {
+    }
+
+    public LiveData&lt;List&lt;MediaSource&gt;&gt; getHistoryList() {
+        return mHistoryListData;
+    }
+}
+</pre> <h3 id="surface_history_ui_with_playbackhistorycontroller">Surface history UI with PlaybackHistoryController</h3> <p>Use the new <code translate="no" dir="ltr">PlaybackHistoryController</code> to help populate the history data to a <code translate="no" dir="ltr">CarUiRecyclerView</code>. The constructors and main functions of this class are as follows. The container passed from the client app should contain a <code translate="no" dir="ltr">CarUiRecyclerView</code> with the ID <code translate="no" dir="ltr">history_list</code>. The <code translate="no" dir="ltr">CarUiRecyclerView</code> displays the list items and an optional header. Both layouts for the list item and the header can be passed from the client app. If <code translate="no" dir="ltr">Resources.ID_NULL</code> is set as the headerResource, the header is not shown. After the <code translate="no" dir="ltr">PlaybackCardViewModel</code> is passed into the controller, it monitors the <code translate="no" dir="ltr">LiveData&lt;List&lt;MediaSource&gt;&gt;</code> retrieved from <code translate="no" dir="ltr">playbackCardViewModel.getHistoryList()</code>.</p> 
+<pre>public class PlaybackHistoryController {
+
+    public PlaybackHistoryController(
+            LifecycleOwner lifecycleOwner,
+            PlaybackCardViewModel playbackCardViewModel,
+            ViewGroup container,
+            @LayoutRes int itemResource,
+            @LayoutRes int headerResource,
+            int uxrConfigurationId) {
+    }
+
+    /**
+     * Renders the view.
+     */
+    public void setupView() {
+    }
+}
+</pre> <p>The layout for each item should contain the IDs for the Views it wants to show that correspond to those used in the <code translate="no" dir="ltr">ViewHolder</code> inner class.</p> 
+<pre>HistoryItemViewHolder(View itemView) {
+            super(itemView);
+            mContext = itemView.getContext();
+            mActiveView = itemView.findViewById(R.id.history_card_container_active);
+            mInactiveView = itemView.findViewById(R.id.history_card_container_inactive);
+            mMetadataTitleView = itemView.findViewById(R.id.history_card_title_active);
+            mAdditionalInfo = itemView.findViewById(R.id.history_card_subtitle_active);
+            mAppIcon = itemView.findViewById(R.id.history_card_app_thumbnail);
+            mAlbumArt = itemView.findViewById(R.id.history_card_album_art);
+            mAppTitleInactive = itemView.findViewById(R.id.history_card_app_title_inactive);
+            mAppIconInactive = itemView.findViewById(R.id.history_item_app_icon_inactive);
+// ...
+}
+</pre> <p>To show a history list in a media card created with the <code translate="no" dir="ltr">PlaybackCardController</code> (or a subclass), the <code translate="no" dir="ltr">PlaybackHistoryController</code> can be constructed in the constructor of the <code translate="no" dir="ltr">PlaybackCardController</code>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/hmi/media/media-card" class="_attribution-link">https://source.android.com/docs/automotive/hmi/media/media-card</a>
+  </p>
+</div>

@@ -1,0 +1,40 @@
+<h1>Frame metadata</h1>  <p>Frame metadata is introduced in Android 11 as a member of the BufferDesc data structure. This new field is declared as <code translate="no" dir="ltr">vec&lt;uint8_t&gt;</code> to accommodate a customer-defined data format and is opaque to EVS manager.</p> 
+<pre>struct BufferDesc {
+    /**
+     * HIDL counterpart of AHardwareBuffer_Desc. Please see
+     * hardware/interfaces/graphics/common/1.2/types.hal for more details.
+     */
+    HardwareBuffer buffer;
+    ...
+
+    /**
+     * Time that this buffer is being filled.
+     */
+    int64_t timestamp;
+
+    /**
+     * Frame metadata field. This is opaque to EVS manager.
+     */
+    vec&lt;uint8_t&gt; metadata;
+};</pre> <p>HIDL <code translate="no" dir="ltr">vec&lt;T&gt;</code> represents dynamically sized arrays with the data stored in a separate buffer. Such instances are represented with an instance of the <code translate="no" dir="ltr">vec&lt;T&gt;</code> in the <a href="https://source.android.com/devices/architecture/hidl/types#struct">struct</a>, which means the EVS Camera HAL driver implementation owns this metadata and should clean it up properly. There are two ways to fill metadata:</p> <ul> <li>Resize the container and fill data by using <code translate="no" dir="ltr"><a href="https://android.googlesource.com/platform/system/libhwbinder/+/8539c12501d835979c853a249f8925ef64ecd042/include/hwbinder/HidlSupport.h#115">operator[]</a></code> 
+<pre>    struct BufferDesc desc = {};
+    ...
+    desc.metadata.resize(10);
+    for (auto i = 0; i &lt; 10; ++i) {
+        desc.metadata[i] = frameInfo[i];
+    }
+    ...
+    </pre> </li> <li>Use <code translate="no" dir="ltr"><a href="https://android.googlesource.com/platform/system/libhwbinder/+/8539c12501d835979c853a249f8925ef64ecd042/include/hwbinder/HidlSupport.h#83">setToExternal()</a>
+</code> to make <code translate="no" dir="ltr">vec&lt;T&gt;</code> point to your custom data structure. 
+<pre>struct BufferDesc desc = {};
+struct FrameMetadata metadata = {
+   ...
+}; // this is in vendor-defined format.
+
+desc.metadata.setToExternal(&amp;metadata, sizeof(metadata));
+...</pre> </li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/camera/evs/frame_metadata" class="_attribution-link">https://source.android.com/docs/automotive/camera/evs/frame_metadata</a>
+  </p>
+</div>

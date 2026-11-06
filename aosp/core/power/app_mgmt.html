@@ -1,0 +1,122 @@
+<h1>App power management</h1>  <p>In Android 9 and higher, the platform can monitor apps for behavior that negatively affects the battery life of devices. The platform uses and evaluates setup rules to provide a UX flow that gives users the option to restrict apps that violate the rules.</p> <p>In Android 8.0 and lower, there were restrictions through features such as Doze, app standby, background limits, and background location limits. However, some apps continued to exhibit bad behaviors, some of which are described in <a href="https://developer.android.com/topic/performance/vitals/">Android vitals</a>. Android 9 introduced an OS infrastructure that can detect and restrict apps based on setup rules that can be updated over time.</p> <h2 id="app-restrictions">Background restrictions</h2> <p>Users can restrict apps, or the system may suggest apps that it detects are negatively impacting the health of the device. </p> <p>Restricted apps:</p> <ul> <li>Can still be launched by the user.</li> <li>Can't run jobs/alarms or use the network in the background.</li> <li>Can't run foreground services.</li> <li>Can be changed to an unrestricted app by the user.</li> </ul> <p>Device implementers can add additional restrictions to apps to:</p> <ul> <li>Restrict the app from self restarts.</li> <li>Restrict services from being bound (highly risky).</li> </ul> <p>Restricted apps in the background aren't expected to consume any device resources, such as memory, CPU, and battery. Background-restricted apps shouldn't impact the device health when the user isn't actively using those apps. However, the same apps are expected to be fully functional when the user launches the apps. </p> <h3 id="using-custom-restrictions">Use custom implementations</h3> <p>Device implementers can continue to use their custom methods to apply restrictions on the apps. </p> <aside class="caution"><strong>Caution:</strong> Future releases may break device implementers' customizations. We recommend adopting the Android 9 app restrictions architecture in AOSP. </aside> <h3 id="integrating-app-restrictions">Integrate app restrictions</h3> <p>The following sections outline how to define and integrate app restrictions on your device. If you're using app restriction methods from Android 8.x or lower, review the following sections closely for changes in Android 9 and higher. </p> <h4 id="set-appopsmanager-flag">Set the AppOpsManager flag</h4> <p>When an app is restricted, set the appropriate flag in <code translate="no" dir="ltr">AppOpsManager</code>. An example code snippet from <code translate="no" dir="ltr">packages/apps/Settings/src/com/android/settings/fuelgauge/BatteryUtils.java</code>: </p> 
+<pre>   public void setForceAppStandby(int uid, String packageName,
+            int mode) {
+        final boolean isPreOApp = isPreOApp(packageName);
+        if (isPreOApp) {
+       // Control whether app could run in the background if it is pre O app
+            mAppOpsManager.setMode(AppOpsManager.OP_RUN_IN_BACKGROUND, uid, packageName, mode);
+        }
+       // Control whether app could run jobs in the background
+        mAppOpsManager.setMode(AppOpsManager.OP_RUN_ANY_IN_BACKGROUND, uid, packageName, mode);
+    }</pre> <h4 id="ensure-isbackgroundrestricted-returns-true">Ensure isBackgroundRestricted returns true</h4> <p>When an app is restricted, ensure that <code translate="no" dir="ltr">ActivityManager.isBackgroundRestricted()</code> returns <code translate="no" dir="ltr">true</code>.</p> <h4 id="logging-the-reason-for-restriction">Log the reason for restriction</h4> <p>When an app is restricted, log the reasons for the restriction. An example code snippet of logging from <code translate="no" dir="ltr">packages/apps/Settings/src/com/android/settings/fuelgauge/batterytip/actions/RestrictAppAction.java</code>: </p> 
+<pre>mBatteryUtils.setForceAppStandby(mBatteryUtils.getPackageUid(packageName), packageName,AppOpsManager.MODE_IGNORED);
+if (CollectionUtils.isEmpty(appInfo.anomalyTypes)) {
+  // Only log context if there is no anomaly type
+  mMetricsFeatureProvider.action(mContext,
+    MetricsProto.MetricsEvent.ACTION_TIP_RESTRICT_APP, packageName,
+    Pair.create(MetricsProto.MetricsEvent.FIELD_CONTEXT,metricsKey));
+            } else {
+  // Log ALL the anomaly types
+  for (int type : appInfo.anomalyTypes) {
+    mMetricsFeatureProvider.action(mContext,
+      MetricsProto.MetricsEvent.ACTION_TIP_RESTRICT_APP, packageName,
+      Pair.create(MetricsProto.MetricsEvent.FIELD_CONTEXT, metricsKey),
+      Pair.create(MetricsProto.MetricsEvent.FIELD_ANOMALY_TYPE, type));
+  }</pre> <p>Replace <code translate="no" dir="ltr">type</code> with the value from <code translate="no" dir="ltr">AnomalyType</code>.</p> <p>Device implementers can use the constants defined in <code translate="no" dir="ltr">src/com/android/settings/fuelgauge/batterytip/StatsManagerConfig.java</code>:</p> 
+<pre>public @interface AnomalyType {
+        // This represents an error condition in the anomaly detection.
+        int NULL = -1;
+         // The anomaly type does not match any other defined type.
+        int UNKNOWN_REASON = 0;
+         // The application held a partial (screen off) wake lock for a period of time that
+         // exceeded the threshold with the screen off when not charging.
+        int EXCESSIVE_WAKELOCK_ALL_SCREEN_OFF = 1;
+         // The application exceeded the maximum number of wakeups while in the background
+         // when not charging.
+        int EXCESSIVE_WAKEUPS_IN_BACKGROUND = 2;
+         // The application did unoptimized Bluetooth scans too frequently when not charging.
+        int EXCESSIVE_UNOPTIMIZED_BLE_SCAN = 3;
+         // The application ran in the background for a period of time that exceeded the
+         // threshold.
+        int EXCESSIVE_BACKGROUND_SERVICE = 4;
+         // The application exceeded the maximum number of wifi scans when not charging.
+        int EXCESSIVE_WIFI_SCAN = 5;
+         // The application exceed the maximum number of flash writes
+        int EXCESSIVE_FLASH_WRITES = 6;
+         // The application used more than the maximum memory, while not spending any time
+         // in the foreground.
+        int EXCESSIVE_MEMORY_IN_BACKGROUND = 7;
+         // The application exceeded the maximum percentage of frames with a render rate of
+         // greater than 700ms.
+        int EXCESSIVE_DAVEY_RATE = 8;
+         // The application exceeded the maximum percentage of frames with a render rate
+         // greater than 16ms.
+        int EXCESSIVE_JANKY_FRAMES = 9;
+         // The application exceeded the maximum cold start time - the app has not been
+         // launched since last system start, died or was killed.
+        int SLOW_COLD_START_TIME = 10;
+         // The application exceeded the maximum hot start time - the app and activity are
+         // already in memory.
+        int SLOW_HOT_START_TIME = 11;
+         // The application exceeded the maximum warm start time - the app was already in
+         // memory but the activity wasn't created yet or was removed from memory.
+        int SLOW_WARM_START_TIME = 12;
+         // The application exceeded the maximum number of syncs while in the background.
+        int EXCESSIVE_BACKGROUND_SYNCS = 13;
+         // The application exceeded the maximum number of gps scans while in the background.
+        int EXCESSIVE_GPS_SCANS_IN_BACKGROUND = 14;
+         // The application scheduled more than the maximum number of jobs while not charging.
+        int EXCESSIVE_JOB_SCHEDULING = 15;
+         // The application exceeded the maximum amount of mobile network traffic while in
+         // the background.
+        int EXCESSIVE_MOBILE_NETWORK_IN_BACKGROUND = 16;
+         // The application held the WiFi lock for more than the maximum amount of time while
+         // not charging.
+        int EXCESSIVE_WIFI_LOCK_TIME = 17;
+         // The application scheduled a job that ran longer than the maximum amount of time.
+        int JOB_TIMED_OUT = 18;
+         // The application did an unoptimized Bluetooth scan that exceeded the maximum
+         // time while in the background.
+        int LONG_UNOPTIMIZED_BLE_SCAN = 19;
+         // The application exceeded the maximum ANR rate while in the background.
+        int BACKGROUND_ANR = 20;
+         // The application exceeded the maximum crash rate while in the background.
+        int BACKGROUND_CRASH_RATE = 21;
+         // The application exceeded the maximum ANR-looping rate.
+        int EXCESSIVE_ANR_LOOPING = 22;
+         // The application exceeded the maximum ANR rate.
+        int EXCESSIVE_ANRS = 23;
+         // The application exceeded the maximum crash rate.
+        int EXCESSIVE_CRASH_RATE = 24;
+         // The application exceeded the maximum crash-looping rate.
+        int EXCESSIVE_CRASH_LOOPING = 25;
+         // The application crashed because no more file descriptors were available.
+        int NUMBER_OF_OPEN_FILES = 26;
+    }</pre> <p>When the user or the system removes an app's restrictions, you must log the reasons for removing the restrictions. An example code snippet of logging from <code translate="no" dir="ltr">packages/apps/Settings/src/com/android/settings/fuelgauge/batterytip/actions/UnrestrictAppAction.java</code>: </p> 
+<pre>public void handlePositiveAction(int metricsKey) {
+        final AppInfo appInfo = mUnRestrictAppTip.getUnrestrictAppInfo();
+        // Clear force app standby, then app can run in the background
+        mBatteryUtils.setForceAppStandby(appInfo.uid, appInfo.packageName,
+                AppOpsManager.MODE_ALLOWED);
+        mMetricsFeatureProvider.action(mContext,
+                MetricsProto.MetricsEvent.ACTION_TIP_UNRESTRICT_APP, appInfo.packageName,
+                Pair.create(MetricsProto.MetricsEvent.FIELD_CONTEXT, metricsKey));
+    }</pre> <h3 id="testing-app-restrictions">Test app restrictions</h3> <p>To test the behavior of app restrictions in Android 9 and higher, use one of the following commands:</p> <ul> <li>Put an app into restriction: 
+<pre>appops set package-name RUN_ANY_IN_BACKGROUND ignore</pre> </li> <li>Take an app out of restriction and restore the default behavior: 
+<pre>appops set package-name RUN_ANY_IN_BACKGROUND allow</pre> </li> <li>Make an app in the background go idle immediately: 
+<pre>am make-uid-idle [--user user-id | all | current] package-name</pre> </li> <li>Add a package to <code translate="no" dir="ltr">tempwhitelist</code> for a short duration: 
+<pre>cmd deviceidle tempwhitelist [-u user] [-d duration] [package package-name]</pre> </li> <li>Add/remove a package from the user whitelist: 
+<pre>cmd deviceidle whitelist [+/-]package-name</pre> </li> <li>Check internal state of <code translate="no" dir="ltr">jobscheduler</code> and alarm manager: 
+<pre>dumpsys jobscheduler
+dumpsys alarm</pre> </li> </ul> <h2 id="app-standby">App standby</h2> <p>App standby extends battery life by deferring background network activity and jobs for apps the user isn't actively using. </p> <h3 id="app-standby-life">App standby lifecycle</h3> <p>The platform detects inactive apps and places them in app standby until the user begins actively engaging with the app.</p> <p>During the <strong>detection phase</strong>, the platform detects that an app is inactive when the device isn't charging <strong>and</strong> the user hasn't launched the app directly or indirectly for a specific amount of clock time as well as a specific amount of screen-on time. (Indirect launches occur when a foreground app accesses a service in a second app.)</p> <p>During <strong>app standby</strong>, the platform prevents apps from accessing the network more than once a day, deferring app syncs and other jobs.</p> <p>The platform <strong>exits the app from standby</strong> when:</p> <ul> <li>The app becomes active.</li> <li>The device is plugged in and charging.</li> </ul> <p>Active apps are unaffected by app standby. An app is <strong>active</strong> when it has:</p> <ul> <li>A process currently in the foreground (either as an activity or foreground service, or in use by another activity or foreground service), such as notification listener, accessibility services, live wallpaper, etc. </li> <li>A notification viewed by the user, such as in the lock screen or notification tray </li> <li>Been explicitly launched by the user</li> </ul> <p>An app is <strong>inactive</strong> if none of the above activities has occurred for a period of time.</p> <h3 id="testing_app_standby">Test app standby</h3> <p>You can manually test app standby using the following <code translate="no" dir="ltr">adb</code> commands:</p> 
+<pre>
+adb shell dumpsys battery unplug
+adb shell am set-idle package-name true
+adb shell am set-idle package-name false
+adb shell am get-idle package-name
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/power/app_mgmt" class="_attribution-link">https://source.android.com/docs/core/power/app_mgmt</a>
+  </p>
+</div>

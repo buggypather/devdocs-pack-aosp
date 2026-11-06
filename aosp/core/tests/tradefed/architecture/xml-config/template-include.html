@@ -1,0 +1,28 @@
+<h1>Templates and includes in Tradefed XML configuration</h1>  <p>Creating one monolithic XML configuration to define a test is not always practical. If you want to re-use part of the setup to run similar tests, you would be forced to copy and maintain two giant XML files.</p> <p>This is where <code translate="no" dir="ltr">template</code> and <code translate="no" dir="ltr">include</code> tags in Tradefed XML Configuration definition come in handy. They allow you to set placeholders in some XML configuration to add part of another XML configuration.</p> <h2 id="example_definition_for_templates">Example definition for templates</h2> 
+<pre>&lt;configuration description="Common base configuration for local runs with minimum overhead"&gt;
+    &lt;build_provider class="com.android.tradefed.build.BootstrapBuildProvider" /&gt;
+
+    &lt;template-include name="preparers" default="empty" /&gt;
+
+    &lt;template-include name="test" default="empty" /&gt;
+
+    &lt;template-include name="reporters" default="empty" /&gt;
+&lt;/configuration&gt;
+</pre> <p>Templates are placeholders with a <code translate="no" dir="ltr">name</code> to reference them, and an optional <code translate="no" dir="ltr">default</code> field. The default field defines the default replacement XML that should be used.</p> <p>In order to replace a template for a given configuration, the following command parameter needs to be added to the command line:</p> 
+<pre>--template:map &lt;name of template&gt;=&lt;replacement XML config path&gt;
+
+--template:map preparers=empty
+</pre> <p>For example:</p> 
+<pre>&lt;template-include name="preparers" default="empty" /&gt;
+</pre> <p>The <code translate="no" dir="ltr">empty</code> reference in this case refers to the <code translate="no" dir="ltr">empty.xml</code> configuration that contains nothing; we use it as our reference to <em>replace with nothing</em>.</p> <p>The path of XML configs can be absolute or relative to the <code translate="no" dir="ltr">res/config</code> folder inside Tradefed's JAR resources. Here are a few of their locations:</p> <ul> <li>tools/tradefederation/core/res/config</li> <li>tools/tradefederation/core/tests/res/config</li> <li>tools/tradedeferation/contrib/res/config</li> </ul> <h2 id="example_definition_of_includes">Example definition of includes</h2> 
+<pre>&lt;configuration description="Common base configuration for local runs with minimum overhead"&gt;
+    &lt;build_provider class="com.android.tradefed.build.BootstrapBuildProvider" /&gt;
+
+    &lt;include name="empty"/&gt;
+&lt;/configuration&gt;
+</pre> <p>Includes are simpler than Templates as they require no command line arguments; they directly expand the referenced XML in the <code translate="no" dir="ltr">name</code> tag. Similar to templates, the path to the config can be absolute or relative. Still, for <code translate="no" dir="ltr">includes</code> we recommend using only relative paths as they are more portable in Tradefed. Absolute paths would not be valid if Tradefed is moved to another machine.</p> <h2 id="misconfiguration">Misconfiguration</h2> <p>In case of misconfiguration, such as when the replacement XML cannot be found, Tradefed will throw a <code translate="no" dir="ltr">ConfigurationException</code> with description of what seems to be missing or misconfigured.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/tradefed/architecture/xml-config/template-include" class="_attribution-link">https://source.android.com/docs/core/tests/tradefed/architecture/xml-config/template-include</a>
+  </p>
+</div>

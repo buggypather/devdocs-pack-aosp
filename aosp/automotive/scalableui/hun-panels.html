@@ -1,0 +1,17 @@
+<h1>Implement heads up notification panels</h1>  <p>In Android 17 and higher, Scalable UI for heads-up notifications (HUNs) lets you customize the window management (positioning, background scrim, animations) of HUN panels using the Scalable UI framework with runtime resource overlays (RROs). This feature allows control over the container of the notification without affecting the internal content rendering.</p> <h2 id="implementation">Implementation</h2> <p>The implementation of Scalable UI for HUNs involves the following:</p> <ul> <li>
+<strong>Public and system APIs:</strong> Introduces the <code translate="no" dir="ltr">HunWindow</code> class and <code translate="no" dir="ltr">&lt;HunPanel&gt;</code> XML tag parsing logic within the Scalable UI parsers.</li> <li>
+<strong>Partner implementation:</strong> <ul> <li>Define a custom RRO overlay.</li> <li>To create an XML file (for example, <code translate="no" dir="ltr">res/xml/hun_panel.xml</code>), use the <code translate="no" dir="ltr">&lt;HunPanel&gt;</code> root tag.</li> <li>Define <code translate="no" dir="ltr">&lt;Variant&gt;</code> elements to control bounds, gravity (<code translate="no" dir="ltr">TOP</code> or <code translate="no" dir="ltr">BOTTOM</code>), visibility, and background (scrim drawable).</li> <li>Map variants to system events (for example, <code translate="no" dir="ltr">_System_Show_Panel</code>) using <code translate="no" dir="ltr">&lt;Transitions&gt;</code>.</li> </ul>
+</li> <li>
+<strong>New versus upgrading devices:</strong> This is a configuration change made by RROs. To upgrade devices to receive the new system image, create an appropriate RRO to define HUN behavior. This lets users deviate from the default.</li> <li>
+<strong>Enable or disable:</strong> To enable or disable this feature, add or remove <code translate="no" dir="ltr">@xml/hun_panel</code> from the <code translate="no" dir="ltr">window_states</code> configuration.</li> <li>
+<strong>Default settings:</strong> Alter default settings by applying your own RRO that overrides the system default configuration.</li> </ul> <h2 id="requirements-validation">Requirements and validation</h2> <p>Use the following sequence to test enabling and disabling overlays:</p> 
+<pre>adb shell cmd overlay disable --user current com.example.overlay.scalableUI.hun.bottom
+</pre> <p>If you enable or disable the RRO, the HUN is shown at the bottom or top, respectively.</p> <h3 id="manual-validation">Manual validation</h3> <ul> <li>
+<strong>Positioning:</strong> Verify HUNs appear at the specified gravity (<code translate="no" dir="ltr">TOP</code> or <code translate="no" dir="ltr">BOTTOM</code>) and bounds.</li> <li>
+<strong>Interactions:</strong> Verify that swiping to dismiss works (if not dismissible, verify that the button works).</li> <li>
+<strong>Animations:</strong> Verify transition animations between open and closed states.</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/scalableui/hun-panels" class="_attribution-link">https://source.android.com/docs/automotive/scalableui/hun-panels</a>
+  </p>
+</div>

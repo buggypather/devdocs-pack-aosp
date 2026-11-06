@@ -1,0 +1,68 @@
+<h1>AIDL language</h1>  <p>The AIDL language is loosely based on the Java language. Files specify an interface contract and various data types and constants used in this contract.</p> <h2 id="package">Package</h2> <p>Every AIDL files starts with an optional package that corresponds to the package names in various backends. A package declaration looks like this:</p> 
+<pre>    package my.package;
+</pre> <p>Similar to Java, AIDL files must be in a folder structure matching their package. Files with package <code translate="no" dir="ltr">my.package</code> must be in the folder <code translate="no" dir="ltr">my/package/</code>.</p> <h2 id="types">Types</h2> <p>In AIDL files, there are many places where types can be specified. For an exact list of types that are supported in the AIDL language, see <a href="aidl-backends#types">AIDL backends types</a>.</p> <h2 id="annotations">Annotations</h2> <p>Several parts of the AIDL language support annotations. For a list of annotations and where they can be applied, see <a href="aidl-annotations">AIDL annotations</a>.</p> <h2 id="imports">Imports</h2> <p>To use types defined in other interfaces, you must first add dependencies in the build system. In <code translate="no" dir="ltr">cc_*</code> and <code translate="no" dir="ltr">java_*</code> Soong modules, where <code translate="no" dir="ltr">.aidl</code> files are used directly under <code translate="no" dir="ltr">srcs</code> in Android platform builds, you can add directories using the field <code translate="no" dir="ltr">aidl: { include_dirs: ... }</code>. For imports using <code translate="no" dir="ltr">aidl_interface</code>, see <a href="stable-aidl#defining-an-aidl-interface">here</a>.</p> <p>An import looks like this:</p> 
+<pre>    import some.package.Foo;  // explicit import
+</pre> <p>When importing a type in the same package, the package can be omitted. Though, omitting the package can lead to ambiguous import errors when types are specified without a package and put in the global namespace (generally all types should be namespaced):</p> 
+<pre>    import Foo;  // same as my.package.Foo
+</pre> <h2 id="define-types">Define types</h2> <p>AIDL files generally define types which are used as an interface.</p> <h3 id="interfaces">Interfaces</h3> <p>Here is an example AIDL interface:</p> 
+<pre>    interface ITeleport {
+        // Location defined elsewhere
+        void teleport(Location baz, float speed);
+        String getName();
+
+        // ITeleportCallback defined elsewhere
+        void methodWithCallback(ITeleportCallback callback);
+
+        // ITeleportSession defined elsewhere
+        ITeleportSession getASubInterface();
+    }
+</pre> <p>An interface defines an object with a series of methods. Methods can either be <code translate="no" dir="ltr">oneway</code> (<code translate="no" dir="ltr">oneway void doFoo()</code>) or synchronous. If an interface is defined as <code translate="no" dir="ltr">oneway</code> (<code translate="no" dir="ltr">oneway interface ITeleport {...}</code>), then all methods in it are implicitly <code translate="no" dir="ltr">oneway</code>. Oneway methods are dispatched asynchronously and cannot return a result. One-way methods from the same thread to the same binder also execute serially (though potentially on different threads). For a discussion of how to setup threads, see <a href="aidl-backends#thread-management">AIDL backends thread management</a>.</p> <p>Binder allows many interfaces and binder objects to be shared through binder interfaces. AIDL interfaces frequently employ callbacks as part of method calls, such as with <code translate="no" dir="ltr">ITeleportCallback</code> in the previous example. You can reuse callback objects between calls to the same method or calls to different methods. Another common use of interface types is for sub-interfaces or session objects to be returned from methods such as with <code translate="no" dir="ltr">ITeleportSession</code> in the previous example. This nesting allows different APIs to be encapsulated at either the API or based on runtime state. For example, a session may represent ownership of a particular resource. When interfaces are passed around multiple times or returned to the client or server they came from, they always preserve pointer equality of the underlying binder object.</p> <p>Methods can have zero or more arguments. Arguments to methods can be <code translate="no" dir="ltr">in</code>, <code translate="no" dir="ltr">out</code>, or <code translate="no" dir="ltr">inout</code>. For a discussion of how this affects arguments types, see <a href="aidl-backends#directionality">AIDL backends directionality</a>.</p> <h3 id="parcelables">Parcelables</h3> <p>For a description of how to create backend-specific parcelables, <a href="aidl-backends#custom-parcelables">AIDL backends custom parcelables</a>.</p> <p>Android 10 and higher support parcelable definitions directly in AIDL. This type of parcelable is called a structured parcelable. For further information on how structured and stable AIDL are related in the AIDL compiler and our build system, see <a href="stable-aidl#structured-vs-stable">Structured versus stable AIDL</a>.</p> <p>For example:</p> 
+<pre>    package my.package;
+
+    import my.package.Boo;
+
+    parcelable Baz {
+        @utf8InCpp String name = "baz";
+        Boo boo;
+    }
+</pre> <h3 id="unions">Unions</h3> <p>Android 12 and higher support tagged union declarations. For example:</p> 
+<pre>    package my.package;
+
+    import my.package.FooSettings;
+    import my.package.BarSettings;
+
+    union Settings {
+        FooSettings fooSettings;
+        BarSettings barSettings;
+        @utf8InCpp String str;
+        int number;
+    }
+</pre> <p>See <a href="aidl-backends#unions">AIDL Backends Unions</a> for backend-specific details.</p> <h3 id="enums">Enums</h3> <p>Android 11 and higher support enum declarations. For example:</p> 
+<pre>    package my.package;
+
+    enum Boo {
+        A = 1 * 4,
+        B = 3,
+    }
+</pre> <h3 id="nested-types">Nested Type Declarations</h3> <p>Android 13 and higher support nested type declarations. For example:</p> 
+<pre>    package my.package;
+
+    import my.package.Baz;
+
+    interface IFoo {
+        void doFoo(Baz.Nested nested);  // defined in my/package/Baz.aidl
+        void doBar(Bar bar);            // defined below
+
+        parcelable Bar { ... }          // nested type definition
+    }
+</pre> <h3 id="constants">Constants</h3> <p>Custom AIDL interfaces, parcelables, and unions can also contain integer and string constants, such as:</p> 
+<pre>    const @utf8InCpp String HAPPY = ":)";
+    const String SAD = ":(";
+    const byte BYTE_ME = 1;
+    const int ANSWER = 6 * 7;
+</pre> <h2 id="constant-expressions">Constant expressions</h2> <p>AIDL constants, array sizes, and enumerators can be specified using constant expressions. Expressions can use parentheses to nest operations. Constant expression values can be used with integral or float values.</p> <p><code translate="no" dir="ltr">true</code> and <code translate="no" dir="ltr">false</code> literals represent boolean values. Values with a <code translate="no" dir="ltr">.</code> but without a suffix, such as <code translate="no" dir="ltr">3.8</code>, are considered to be double values. Float values have the <code translate="no" dir="ltr">f</code> suffix, such as <code translate="no" dir="ltr">2.4f</code>. An integral value with the <code translate="no" dir="ltr">l</code> or <code translate="no" dir="ltr">L</code> suffix indicates a 64-bit long value. Otherwise, integrals values get the smallest value-preserving signed type between 8-bit (byte), 32-bit (int), and 64-bit (long). So <code translate="no" dir="ltr">256</code> is considered to be an <code translate="no" dir="ltr">int</code>, but <code translate="no" dir="ltr">255 + 1</code> overflows to be the <code translate="no" dir="ltr">byte</code> <code translate="no" dir="ltr">0</code>. Hex values, such as <code translate="no" dir="ltr">0x3</code>, are first interpreted as the smallest value-preserving unsigned type between 32-bit and 64-bit and then reinterpreted as unsigned values. So, <code translate="no" dir="ltr">0xffffffff</code> has the <code translate="no" dir="ltr">int</code> value <code translate="no" dir="ltr">-1</code>. Starting in Android 13, the suffix <code translate="no" dir="ltr">u8</code> can be added to constants, such as <code translate="no" dir="ltr">3u8</code>, to represent a <code translate="no" dir="ltr">byte</code> value. This suffix is important so that a calculation, such as <code translate="no" dir="ltr">0xffu8 * 3</code>, is interpreted as <code translate="no" dir="ltr">-3</code> with type <code translate="no" dir="ltr">byte</code> whereas <code translate="no" dir="ltr">0xff * 3</code> is <code translate="no" dir="ltr">765</code> with type <code translate="no" dir="ltr">int</code>.</p> <p>Supported operators have C++ and Java semantics. In order from lowest to highest precedence, binary operators are <code translate="no" dir="ltr">|| &amp;&amp; | ^ &amp; == != &lt; &gt; &lt;= &gt;= &lt;&lt; &gt;&gt; + - * / %</code>. Unary operators are <code translate="no" dir="ltr">+ - ! ~</code>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/aidl/aidl-language" class="_attribution-link">https://source.android.com/docs/core/architecture/aidl/aidl-language</a>
+  </p>
+</div>

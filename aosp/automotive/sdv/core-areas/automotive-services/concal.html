@@ -1,0 +1,279 @@
+<h1>Configuration and calibration (ConCal)</h1>  <p>The Configuration and Calibration Service (ConCal) on the software-defined vehicle (SDV) platform provides capabilities to configure SDV services according to vehicle specifications, country regulations, and customer-ordered features. This service is a fundamental building block of the SDV platform, letting the OEMs to reuse the same service code among multiple vehicles by configuring them and enabling reconfiguration from multiple sources (for example, at a factory, in a service center, from the cloud).</p> <p>The SDV platform provides service-facing APIs for configuration and calibration of service bundles on a specific vehicle. Using this interface, OEMs can implement OEM-specific configuration and calibration logic.</p> <p>The Configuration and Calibration service includes the following processes:</p> <ul> <li><p><em>Configuration</em>, which involves defining the fundamental properties and behavior of a vehicle and might depend on multiple factors like the vehicle location, user-ordered options, or country regulations. It establishes how components interact and dictates software settings that influence the vehicle's overall functionality, such as software variants, network connections, and initial operational parameters.</p></li> <li><p><em>Calibration</em>, which fine-tunes system parameters within their preconfigured ranges. For example, calibration adjusts sensor and actuator accuracy, optimizes engine performance for emissions control, and refines drivability and safety system responses. Configuration sets the basic framework for how a vehicle functions, while calibration optimizes its behavior within that framework. Both are critical for ensuring vehicles meet emissions regulations, maximize performance, enhance safety, and can compensate for wear and tear over time.</p></li> </ul> <p>By providing a standard SDV-wide ConCal API, we simplify the implementation of SDV service bundles, avoiding the need to reimplement configuration and calibration capabilities to run on different vehicles from different OEMs.</p> <h2 id="architecture">Architecture</h2> <p>Each service bundle can own one or more configuration artifacts.</p> <h3 id="config-artifacts">Configuration artifacts</h3> <p>A configuration artifact (config) consists of one or more configuration parameters and their values. Configuration is a service-specific protobuf message whose fields can include nested protobuf messages (struct), maps, arrays, int, float, bool, bytes, or string parameters.</p> 
+<pre>// Example of a configuration message.
+message SampleServiceBundleConfig
+{
+ bool bool_parameter = 1;
+ int64 int_parameter = 2;
+ float float_parameter = 3;
+ string str_parameter = 4;
+ repeated string list_parameter = 5;
+ map&lt;string, int32&gt; map_parameter = 6;
+ SomeNestedMessage nested_parameter = 7;
+ SomeComplexMessage complex_parameter = 8;
+ some.nested.package.SomeNestedMessage nested_package = 9;
+ bytes bytes_parameter = 10;
+}
+</pre> <h3 id="config-identifier">Configuration identifier</h3> <p>Each configuration has a unique identifier. This identifier consists of the fully qualified instance name of the service bundle owner and a configuration name. A configuration name must be human-readable, unique per service bundle, and follow the naming standards defined in <a href="../naming-conventions">Service bundle naming conventions</a>, such as <code translate="no" dir="ltr">shared</code>, <code translate="no" dir="ltr">private</code>, <code translate="no" dir="ltr">diagnostics</code>, and <code translate="no" dir="ltr">calibration</code>.</p> <p>Restrictions:</p> <ul> <li>The instance name must start with a letter.</li> <li>All characters must be lower alphanumeric or a hyphen.</li> <li>Hyphens in the name must not appear consecutively more than once.</li> <li>The configuration name must not end with a hyphen.</li> <li>The configuration name must not be longer than 48 characters.</li> <li>Configuration names must be unique on the same VM for the same service bundle.</li> </ul> <p>Before 26Q2, the configuration ID is defined as follows:</p> 
+<pre>// Unique identifier for the config.
+message ConfigId {
+  // The FQIN of the service bundle that owns the configuration.
+  com.sdv.google.sd_common.ServiceFqin service_fqin = 1;
+
+  // The name of the config.
+  string config_name = 2;
+}
+</pre> <p>The configuration owner at boot knows only the schema of its configuration and its default values. In order to customize service-bundle behavior to a current vehicle, the owning service bundle has to register its default configuration along with its schema.</p> <p><img src="https://source.android.com/static/docs/automotive/sdv/images/sdv_concal_boot.svg" alt="Registration of default configuration and retrieval of customized
+config" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> Registration of default configuration and retrieval of customized configuration.</p> <p>This lets OEMs implement service bundles once and execute them on multiple vehicles.</p> <h2 id="deployment">Deployment</h2> <p>ConCal can maintain one or more server instances on the SDV platform. Service bundles should discover and use the closest ConCal server. For example, if ConCal is deployed one per ECU, a service bundle should get access to the ConCal instance running on the same ECU. This lets the service bundle retrieve configuration in a timely manner. If the ConCal instance doesn't have a requested configuration (as it belongs to the area of responsibility of another ConCal), the contacted ConCal server requests it from the owning ConCal instance and redirects it to the service bundle.</p> <h2 id="config-customization">Configuration customization</h2> <p>The ability to reuse the same software with different vehicles is one of the main SDV advantages. The software is developed once and then reused on multiple vehicles, and we can adjust the behavior of the software based on the vehicle specifics. This is the main purpose of ConCal, which calculates the service configuration based on the vehicle properties with the help of configuration overrides.</p> <p><code translate="no" dir="ltr">ConfigOverride</code> is a protobuf message describing how to adjust the configuration to the specific vehicle. It consists of an override ID, which is uniquely defined by the entity providing it, a configuration identifier, and a list of <code translate="no" dir="ltr">ConfigOverrideKeyValuePair</code>. <code translate="no" dir="ltr">ConfigOverride</code> can be provided only during the update process and only by the allowed services, which is modeled by the OEM. The protobuf definitions for both structures are provided below.</p> 
+<pre>// Key-value pair to update configuration.
+message ConfigOverrideKeyValue {
+  string key = 1;
+
+  oneof value {
+    string value_txtproto = 2;
+    .google.protobuf.Any value_any = 3;
+  }
+}
+
+// A collection of changes for a specific configuration which should be atomically applied.
+message ConfigOverride {
+  string override_id = 1;
+
+  ConfigId config_id = 2;
+
+  repeated ConfigOverrideKeyValue pairs = 3;
+}
+</pre> <p><code translate="no" dir="ltr">ConfigOverride</code> supports these operations:</p> <ul> <li><p>Assign a new value: The last value is deprecated and the parameter gets assigned a new value, such as assigning a new value to a simple field (int, string, float, bool, bytes) or rewriting complex fields, such as maps, lists, structs, or a complete configuration.</p></li> <li><p>Remove or clean a value: This operation is provided for all types including messages, repeated fields, maps, singular fields, and the configuration itself. This operation can be performed on a complete field or message, which means that the removal of specific keys in a map and individual elements from a repeated field isn't supported.</p></li> <li><p>Add a new value to a map.</p></li> <li><p>Rewrite the value of an existing key in a map (this operation can also be performed as adding a new value to a map, if the key doesn't exist).</p></li> </ul> <h2 id="concal-bundle-dev-guide">Configure a service bundle using ConCal</h2> <p>This chapter describes how to develop a service bundle that retrieves its configuration at runtime. From a configurable bundle perspective, it's completely opaque whether the configuration retrieved is a default factory setting, or a subsequent modification using ConCal overriding and calibration processes.</p> <p>You can find the sample that the documentation is based on at <code translate="no" dir="ltr">system/software_defined_vehicle/samples/concal/src/concal_client</code>.</p> <p>See <a href="../../workstreams/core/service-bundle-development">Service bundle development</a> for more details.</p> <h3 id="declare-config-type">Declare the type of the configuration owned by the service bundle</h3> <p>The service bundle owns the type of the configuration that it retrieves. This allows a configurable bundle to be independently updated from the persisted configuration data.</p> <ol> <li>
+<p>Write a protobuf file (with a <code translate="no" dir="ltr">.proto</code> extension) declaring the configuration type:</p> 
+<pre>syntax = "proto3";
+
+package android.sdv.demo.config;
+
+message RearViewCamera {
+string model = 1;
+uint64 horizontal_resolution = 2;
+uint64 vertical_resolution = 3;
+float x_axis_field_of_view = 4;
+float y_axis_field_of_view = 5;
+bool is_rgb = 6;
+}
+</pre>
+</li> <li>
+<p>Create a build target that generates runtime library allowing configuration type retrieval. In an <code translate="no" dir="ltr">Android.bp</code> file:</p> 
+<pre>rust_protobuf {
+    name: "libsdvtestconcal_proto_rust",
+    crate_name: "sdvtestconcal_proto_rust",
+    protos: [
+        "rear_view_camera.proto",
+    ],
+    proto_flags: [
+        "-I external/protobuf/src",
+        "-I .",
+    ],
+    source_stem: "sdvtestconcal_proto_rust",
+    vendor_available: true,
+    product_available: true,
+    min_sdk_version: "35",
+}
+</pre>
+</li> </ol> <h3 id="generate-middleware">Generate ConCal RPC middleware code for your bundle</h3> <p>Add a VSIDL declaration to the service bundle:</p> 
+<pre>package: "com.sdv.oem.sample.concal"
+
+service_bundle {
+  name: "SampleOemConCalClientServiceBundle"
+  client {
+    service: "com.sdv.google.concal.ConCalRegistrationService"
+  }
+}
+
+</pre> <p>This declares that the bundle is a client of the ConCal configuration registration and retrieval service. See <a href="../vsidl">VSIDL and middleware overview</a> for an overview of using VSIDLC for generating RPC client bindings for the bundle.</p> <h3 id="initialize-middleware">Initialize middleware for RPC configuration retrieval</h3> <p>At run time, initialize the middleware components required for ConCal RPC calls. In this example, we asynchronously initialize when the bundle is started.</p> 
+<pre>pub struct ExampleConcalBundle {
+    context: ContextRef,
+    runtime: Option&lt;Runtime&gt;,
+}
+
+sdv::lifecycle::register_service_bundle!(ExampleConcalBundle);
+
+impl ServiceBundle for ExampleConcalBundle {
+    fn new(context: ContextRef) -&gt; ExampleConcalBundle {
+        info!("Creating {}.", context.get_self_fqin());
+
+        ExampleConcalBundle { context, runtime: None }
+    }
+
+    fn on_start(&amp;mut self) {
+        let fqin = self.context.get_self_fqin();
+        info!("Starting {}.", fqin);
+
+        let runtime = Builder::new_multi_thread()
+            .worker_threads(4)
+            .thread_name("tokio-pool")
+            .enable_all()
+            .build()
+            .unwrap();
+        let context = self.context;
+        runtime.spawn(async move {
+            let registration_client = setup_register_config_rpc(context).await;
+            /* main SB logic here */
+        });
+        self.runtime = Some(runtime);
+    }
+
+async fn setup_register_config_rpc(context: ContextRef) -&gt; RegistrationClient {
+    let sdv_comms = SdvComms { context };
+    let sd = ServiceDiscoveryManager::new(context);
+    let unit_name_args = UnitNameDiscoveryArgs::new_builder()
+        .set_sdv_package_name("com.sdv.oem.sample.concal")
+        .set_service_bundle_name("SampleOemConCalServiceBundle")
+        .set_service_unit_name(RegistrationClient::DEFAULT_UNIT_NAME)
+        .build()
+        .unwrap();
+
+    let mut unit_name_stream =
+        sd.subscribe_service_unit_change_by_name(&amp;unit_name_args).await.unwrap();
+
+    // wait until RPC servers are registered, if server is not a custom agent
+    while let Some(event) = unit_name_stream.next().await {
+        if let ServiceUnitChangeEvent::Registered(sud) = event {
+            let service_identity = sud.get_service_bundle_identity();
+            let fqin = service_identity.get_fqin();
+            if fqin.get_sdv_package_name() == "com.sdv.oem.sample.concal"
+                &amp;&amp; fqin.get_service_bundle_name() == "SampleOemConCalServiceBundle"
+                &amp;&amp; fqin.get_service_instance_name() == "default"
+            {
+                break;
+            }
+        }
+    }
+
+    let service_bundle =
+        SampleOemConCalClientServiceBundle::new(Arc::new(sdv_comms)).await.unwrap();
+    service_bundle
+        .create_rpc_client::&lt;RegistrationClient&gt;(
+            UnitName::builder()
+                .package_name("com.sdv.oem.sample.concal")
+                .bundle_name("SampleOemConCalServiceBundle")
+                .service_unit_name(RegistrationClient::DEFAULT_UNIT_NAME)
+                .build()
+                .unwrap(),
+            ClientOptions::default(),
+        )
+        .await
+        .expect("Failed to create an RPC client")
+}
+</pre> <p>Where:</p> <ul> <li>In <code translate="no" dir="ltr">on_start</code>, we create a tokio runtime and spawn a tokio task. The task calls <code translate="no" dir="ltr">setup_register_rpc</code>, before proceeding with the bundle main logic.</li> <li>
+<code translate="no" dir="ltr">setup_register_rpc</code> sets up the middleware RPC binding. Note that the example doesn't assume that ConCal functionality is implemented by an agent: the server might become available only after the bundle was started. Hence, the example code waits for the RPC server to be registered using Service Discovery API.</li> </ul> <h3 id="initialize-config">Initialize configuration</h3> <p>Register the configuration artifact by providing the ConCal server with an ID, the configuration schema, and default, factory configuration values.</p> <p>If registration is called for the first time, the default value is persisted. If registration is called on subsequent bundle starts, the persisted default value with applied ConCal overrides (if any), will be retrieved.</p> <p>The ConCal register configuration call never fails, regardless of whether the artifact is already registered.</p> 
+<pre>impl ServiceBundle for ExampleConcalBundle{
+
+    /* ... */
+    fn on_start(&amp;mut self) {
+        /* ... */
+        runtime.spawn(async move {
+            let registration_client = setup_register_config_rpc(context).await;
+            sample_concal_main(fqin, registration_client).await
+        });
+        self.runtime = Some(runtime);
+    }
+}
+
+async fn sample_concal_main(
+    fqin: ServiceFqin,
+    registration_client: RegistrationClient,
+) -&gt; sdv::status::SdvResult&lt;()&gt; {
+    let config = get_rear_view_camera_factory_config();
+    let config_id = get_config_id(&amp;fqin);
+
+    register_config(&amp;registration_client, &amp;config_id, &amp;config).await;
+    /* ... */
+}
+
+fn get_rear_view_camera_factory_config() -&gt; RearViewCamera {
+    RearViewCamera {
+        model: String::from("model 1"),
+        horizontal_resolution: 720,
+        vertical_resolution: 720,
+        x_axis_field_of_view: 70.0,
+        y_axis_field_of_view: 70.0,
+        is_rgb: false,
+        ..Default::default()
+    }
+}
+
+fn get_config_id(fqin: &amp;ServiceFqin) -&gt; ConfigId {
+    ConfigId {
+        config_name: "config".to_string(),
+        service_fqin: MessageField::some(ProtoFqin {
+            vm_name: fqin.get_sdv_vm_name().to_string(),
+            package_name: fqin.get_sdv_package_name().to_string(),
+            service_name: fqin.get_service_bundle_name().to_string(),
+            instance_name: fqin.get_service_instance_name().to_string(),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }
+}
+
+async fn register_config(
+    client: &amp;RegistrationClient,
+    config_id: &amp;ConfigId,
+    config: &amp;RearViewCamera,
+) {
+    let config_fd = FileDescriptorSet {
+        file: vec![RearViewCamera::descriptor().file_descriptor_proto().clone()],
+        ..Default::default()
+    };
+    let config = Any::pack(config).expect("Failed to pack config");
+    let config_metadata = ConfigMetadata {
+        descriptor_set: MessageField::some(config_fd),
+        default_config: MessageField::some(config.clone()),
+        ..Default::default()
+    };
+
+    client
+        .RegisterConfigMetadata(&amp;RegisterConfigMetadataRequest {
+            config_id: MessageField::some(config_id.clone()),
+            metadata: MessageField::some(config_metadata),
+            config_version: String::from("1.0"),
+            ..Default::default()
+        })
+        .await
+        .expect(
+            "RegisterConfigMetadata should not fail, even if configuration was registered before",
+        );
+}
+
+</pre> <p>Where:</p> <ul> <li>The task spawned in <code translate="no" dir="ltr">on_start</code>, after retrieving the RPC binding, proceeds with the business logic, calling <code translate="no" dir="ltr">sample_concal_main</code>.</li> <li>
+<code translate="no" dir="ltr">sample_concal_main</code> begins by registering a configuration artifact. Logic is contained in <code translate="no" dir="ltr">register_config</code>.</li> <li>to register a configuration, a bundle must specify its protobuf type, an ID, and a default value.</li> <li>
+<code translate="no" dir="ltr">config_fd</code> is the configuration type. The bundle owning the configuration type ensures that schema expected by bundle is always retrieved, including post APEX updates.</li> <li>the ID is used as an identifier in ConCal server's internal persistence logic.</li> <li>the default value is constructed in <code translate="no" dir="ltr">get_rear_view_camera_factory_config</code>. The default value is the value persisted by the ConCal server, if nothing was persisted before. This represents one of the ways that the system can specify factory configurations. Other setups are possible.</li> </ul> <h3 id="retrieve-config">Retrieve configuration</h3> <p>After registration, retrieve the configuration. As the configuration was registered before, this call is guaranteed to succeed.</p> 
+<pre>async fn sample_concal_main(
+    fqin: ServiceFqin,
+    registration_client: RegistrationClient,
+    update_client: UpdateClient,
+) -&gt; sdv::status::SdvResult&lt;()&gt; {
+    let config = get_rear_view_camera_factory_config();
+    let config_id = get_config_id(&amp;fqin);
+
+    register_config(&amp;registration_client, &amp;config_id, &amp;config).await;
+    let config = get_config(&amp;registration_client, &amp;config_id).await;
+    info!("Retrieved configuration:\n{config:#?}");
+
+    // Onwards, use configuration in bundle's main business logic
+    /* ... */
+}
+
+async fn get_config(client: &amp;RegistrationClient, config_id: &amp;ConfigId) -&gt; RearViewCamera {
+    let bytes = client
+        .GetConfig(&amp;GetConfigRequest {
+            config_id: MessageField::some(config_id.clone()),
+            ..Default::default()
+        })
+        .await
+        .expect("Get config does not fail, as config was registered before")
+        .config;
+    RearViewCamera::parse_from_bytes(&amp;bytes).expect("parse_from_bytes failed")
+}
+</pre> <p>Where:</p> <ul> <li><p>The call to <code translate="no" dir="ltr">GetConfigRequest</code> is guaranteed to succeed, as configuration was registered before, by the same bundle. Setup allows the service bundle to opaquely handle both cases of factory configurations and overridden configurations: The service bundle business logic remains unchanged.</p></li> <li><p>The call <code translate="no" dir="ltr">GetConfigRequest</code> returns raw bytes. The function <code translate="no" dir="ltr">get_config</code> proceeds with parsing them to the expected configuration type.</p></li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/core-areas/automotive-services/concal" class="_attribution-link">https://source.android.com/docs/automotive/sdv/core-areas/automotive-services/concal</a>
+  </p>
+</div>

@@ -1,0 +1,209 @@
+<h1>Car UI plugins</h1> <aside class="special"><strong>Important:</strong><span> To ensure OEM customizations are compatible with GAS apps, confirm you're using version 1.2.0 (or higher) of <code translate="no" dir="ltr">car-ui-lib-plugin-apis</code>. To learn more, see <a href="plugin-update-api">Appendix C, minimum compatible version for Car UI Plugin API</a>.</span></aside> <p>Use Car UI library <em>plugins</em> to create complete implementations of component customizations in Car UI library instead of using runtime resource overlays (RROs). RROs enable you to change only the XML resources of Car UI library components, which limits the extent to what you can customize.</p> <h2 id="create_a_plugin">Create a plugin</h2> <p>A Car UI library plugin is an APK that contains classes that implement a set of <em>Plugin APIs</em>. The <a href="https://cs.android.com/android/platform/superproject/+/ub-automotive-master-20240125:packages/apps/Car/libs/car-ui-lib/oem-apis/">Plugin APIs</a> can be compiled into a plugin as a static library.</p> <p>See examples in Soong and Gradle:</p> <h3 id="soong">Soong</h3> <p>Consider this Soong example:</p> 
+<pre>android_app {
+    name: "my-plugin",
+
+    min_sdk_version: "28",
+    target_sdk_version: "30",
+    aaptflags: ["--shared-lib"],
+    sdk_version: "current",
+
+    manifest: "src/main/AndroidManifest.xml",
+    srcs: ["src/main/java/**/*.java"],
+    resource_dirs: ["src/main/res"],
+    static_libs: [
+        "car-ui-lib-oem-apis",
+    ],
+    // Disable optimization is mandatory to prevent R.java class from being
+    // stripped out
+    optimize: {
+        enabled: false,
+    },
+
+    certificate: ":my-plugin-certificate",
+}
+</pre> <h3 id="gradle">Gradle</h3> <p>See this <code translate="no" dir="ltr">build.gradle</code> file:</p> 
+<pre>apply plugin: 'com.android.application'
+
+android {
+  compileSdkVersion 30
+
+  defaultConfig {
+    minSdkVersion 28
+    targetSdkVersion 30
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_1_8
+    targetCompatibility JavaVersion.VERSION_1_8
+  }
+
+  signingConfigs {
+    debug {
+      storeFile file('chassis_upload_key.jks')
+      storePassword 'chassis'
+      keyAlias 'chassis'
+      keyPassword 'chassis'
+    }
+  }
+}
+
+dependencies {
+  implementation project(':oem-apis')
+  // Or use the following if you'd like to use the maven artifact
+  // implementation 'com.android.car.ui:car-ui-lib-plugin-apis:1.0.0'
+}
+</pre> <p><code translate="no" dir="ltr">Settings.gradle</code>:</p> 
+<pre>// You can remove the ':oem-apis' if you're using the maven artifact.
+include ':oem-apis'
+project(':oem-apis').projectDir = new File('./path/to/oem-apis')
+include ':my-plugin'
+project(':my-plugin').projectDir = new File('./my-plugin')
+</pre> <p>The plugin must have a content provider declared in its manifest that has the following attributes:</p> 
+<pre>  android:authorities="com.android.car.ui.plugin"
+  android:enabled="true"
+  android:exported="true"
+</pre> <p><code translate="no" dir="ltr">android:authorities="com.android.car.ui.plugin"</code> makes the plugin discoverable to the Car UI library. The provider has to be exported so it can be queried at runtime. Also, if the <code translate="no" dir="ltr">enabled</code> attribute is set to <code translate="no" dir="ltr">false</code> the default implementation will be used instead of the plugin implementation. The content provider class doesn't have to exist. In which case, be sure to add <code translate="no" dir="ltr">tools:ignore="MissingClass"</code> to the provider definition. See the sample manifest entry below:</p> 
+<pre>    &lt;application&gt;
+        &lt;provider
+            android:name="com.android.car.ui.plugin.PluginNameProvider"
+            android:authorities="com.android.car.ui.plugin"
+            android:enabled="false"
+            android:exported="true"
+            tools:ignore="MissingClass"/&gt;
+    &lt;/application&gt;
+</pre> <p>Finally, as a security measure, <a href="https://developer.android.com/studio/publish/app-signing">Sign your app</a>.</p> <h2 id="plugins_as_a_shared_library">Plugins as a shared library</h2> <p>Unlike Android static libraries which are compiled directly into apps, Android shared libraries are compiled into a standalone APK that is referenced by other apps at runtime.</p> <p>Plugins that are implemented as an Android shared library have their classes automatically added to the shared classloader between apps. When an app which uses the Car UI library specifies a <a href="plugins#dependencies_on_shared_libraries">runtime dependency</a> on the plugin shared library, its classloader can access the plugin shared library's classes. Plugins implemented as normal Android apps (not a shared library) can negatively impact app cold start times.</p> <h3 id="implement_and_build_shared_libraries">Implement and build shared libraries</h3> <p>Developing with Android shared libraries is much like that of normal Android apps, with a few key differences.</p> <ul> <li>Use the <code translate="no" dir="ltr">library</code> tag under the <code translate="no" dir="ltr">application</code> tag with the plugin package name in your plugin's app manifest:</li> </ul> 
+<pre>    &lt;application&gt;
+        &lt;library android:name="com.chassis.car.ui.plugin" /&gt;
+        ...
+    &lt;/application&gt;
+</pre> <ul> <li>Configure your Soong <code translate="no" dir="ltr">android_app</code> build rule (<code translate="no" dir="ltr">Android.bp</code>) with the AAPT flag <code translate="no" dir="ltr">shared-lib</code>, which is used to build a shared library:</li> </ul> 
+<pre>android_app {
+  ...
+  aaptflags: ["--shared-lib"],
+  ...
+}
+</pre> <h3 id="dependencies_on_shared_libraries">Dependencies on shared libraries</h3> <p>For each app on the system which uses the Car UI library, include the <a href="https://developer.android.com/guide/topics/manifest/uses-library-element"><code translate="no" dir="ltr">uses-library</code></a> tag in the app manifest under the <code translate="no" dir="ltr">application</code> tag with the plugin package name:</p> 
+<pre>&lt;manifest&gt;
+  &lt;application
+      android:name=".MyApp"
+      ...&gt;
+    &lt;uses-library android:name="com.chassis.car.ui.plugin" android:required="false"/&gt;
+    ...
+  &lt;/application&gt;
+&lt;/manifest&gt;
+</pre> <h2 id="install_a_plugin">Install a plugin</h2> <p><strong>Plugins MUST be preinstalled on the system partition by including the module in <code translate="no" dir="ltr">PRODUCT_PACKAGES</code>.</strong> The pre-installed package can be updated similarly to any other installed app.</p> <p>If you're updating an existing plugin on the system, any apps using that plugin close automatically. Once reopened by the user, they have the updated changes. If the app was not running, the next time it's started it has the updated plugin.</p> <aside class="special"><strong>Important:</strong><span> Updates to shared libraries require a reboot to take effect.</span></aside> <p>When installing a plugin with Android Studio, there are some additional considerations to take into account. At the time of writing, there is a bug in the Android Studio app installation process that causes updates to a plugin to not take effect. This can be fixed by selecting the option <strong>Always install with package manager (disables deploy optimizations on Android 11 and later)</strong> in the plugin's build configuration.</p> <p>In addition, when installing the plugin, Android Studio reports an error that it can't find a main activity to launch. This is expected, as the plugin doesn't have any activities (except the empty intent used to resolve an intent). To eliminate the error, change the <strong>Launch</strong> option to <strong>Nothing</strong> in the build configuration.</p> <p><img src="https://source.android.com/static/docs/automotive/hmi/car_ui/plugin_android_studio.png" alt="Plugin Android Studio configuration" class="android-image-dark-theme-background" srcset="https://source.android.com/static/docs/automotive/hmi/car_ui/plugin_android_studio_36.png 36w,https://source.android.com/static/docs/automotive/hmi/car_ui/plugin_android_studio_48.png 48w,https://source.android.com/static/docs/automotive/hmi/car_ui/plugin_android_studio_72.png 72w,https://source.android.com/static/docs/automotive/hmi/car_ui/plugin_android_studio_96.png 96w,https://source.android.com/static/docs/automotive/hmi/car_ui/plugin_android_studio_480.png 480w,https://source.android.com/static/docs/automotive/hmi/car_ui/plugin_android_studio_720.png 720w,https://source.android.com/static/docs/automotive/hmi/car_ui/plugin_android_studio_856.png 856w,https://source.android.com/static/docs/automotive/hmi/car_ui/plugin_android_studio_960.png 960w,https://source.android.com/static/docs/automotive/hmi/car_ui/plugin_android_studio_1440.png 1440w,https://source.android.com/static/docs/automotive/hmi/car_ui/plugin_android_studio_1920.png 1920w,https://source.android.com/static/docs/automotive/hmi/car_ui/plugin_android_studio_2880.png 2880w" sizes="(max-width: 840px) 100vw, 856px"> <strong>Figure 1.</strong> Plugin Android Studio configuration</p> <h2 id="proxy_plugin">Proxy plugin</h2> <p>Customization of <a href="applist">apps using the Car UI library</a> requires a RRO that targets each specific app that is to be modified, including when customizations are identical across apps. This means a RRO per app is required. See which apps use the Car UI library.</p> <p>The <a href="https://cs.android.com/android/platform/superproject/+/ub-automotive-master-20240125:packages/apps/Car/libs/car-ui-lib/proxy-plugin/">Car UI library proxy plugin</a> is an example plugin shared library that delegates its component implementations to the static version of Car UI library. This plugin can be targeted with a RRO, which can be used as a single point of customization for apps which use Car UI library without the need to implement a functional plugin. For more information about RROs, see <a href="../../../core/runtime/rros">Change the value of an app's resources at runtime</a>.</p> <p>The proxy plugin is only an example and starting point to do customization using a plugin. For customization beyond RROs, one can implement a subset of plugin components and use the proxy plugin for the rest, or implement all plugin components entirely from scratch.</p> <p>Although the proxy plugin provides a single point of RRO customization for apps, apps that opt-out of using the plugin will still require a RRO that directly targets the app itself.</p> <h2 id="implement_the_plugin_apis">Implement the plugin APIs</h2> <p>The main entrypoint to the plugin is the <code translate="no" dir="ltr">com.android.car.ui.plugin.PluginVersionProviderImpl</code> class. All plugins must include a class with this exact name and package name. This class must have a default constructor and implement the <code translate="no" dir="ltr">PluginVersionProviderOEMV1</code> interface.</p> <p>CarUi plugins must work with apps that are older or newer than the plugin. To facilitate this, all plugin APIs are versioned with a <code translate="no" dir="ltr">V#</code> at the end of their classname. If a new version of the Car UI library is released with new features, they are part of the <code translate="no" dir="ltr">V2</code> version of the component. The Car UI library does its best to make new features work within the scope of an older plugin component. For example, by converting a new type of button in the toolbar into <code translate="no" dir="ltr">MenuItems</code>.</p> <p>However, an app with an older version of Car UI library can't adapt to a new plugin written against newer APIs. To solve this problem, we allow plugins to return different implementations of themselves based on the version of OEM API supported by the apps.</p> <p><code translate="no" dir="ltr">PluginVersionProviderOEMV1</code> has one method in it:</p> 
+<pre>Object getPluginFactory(int maxVersion, Context context, String packageName);
+</pre> <p>This method returns an object that implements the highest version of <code translate="no" dir="ltr">PluginFactoryOEMV#</code> supported by the plugin, while still being less than or equal to <code translate="no" dir="ltr">maxVersion</code>. If a plugin doesn't have an implementation of a <code translate="no" dir="ltr">PluginFactory</code> that old, it may return <code translate="no" dir="ltr">null</code>, in which case the statically- linked implementation of CarUi components are used.</p> <p>To maintain backwards compatibility with apps which are compiled against older versions of the static Car Ui library, it is recommended to support <code translate="no" dir="ltr">maxVersion</code>s of 2, 5, and higher from within your plugin's implementation of the <code translate="no" dir="ltr">PluginVersionProvider</code> class. Versions 1, 3, and 4 are not supported. For more information, see <a href="https://cs.android.com/android/platform/superproject/+/ub-automotive-master-20240125:packages/apps/Car/libs/car-ui-lib/proxy-plugin/plugin/src/main/java/com/android/car/ui/plugin/PluginVersionProviderImpl.java;l=81-87"><code translate="no" dir="ltr">PluginVersionProviderImpl</code></a>.</p> <p>The <code translate="no" dir="ltr">PluginFactory</code> is the interface that creates all the other CarUi components. It also defines which version of their interfaces should be used. If the plugin does not seek to implement any of these components, it may return <code translate="no" dir="ltr">null</code> in their creation function (with the exception of the toolbar, which has a separate <code translate="no" dir="ltr">customizesBaseLayout()</code> function).</p> <p>The <code translate="no" dir="ltr">pluginFactory</code> limits which versions of CarUi components can be used together. For example, there will never be a <code translate="no" dir="ltr">pluginFactory</code> that can create version 100 of a <code translate="no" dir="ltr">Toolbar</code> and also version 1 of a <code translate="no" dir="ltr">RecyclerView</code>, as there would be little guarantee that a wide variety of versions of components would work together. To use toolbar version 100, developers are expected to provide an implementation of a version of <code translate="no" dir="ltr">pluginFactory</code> that creates a toolbar version 100, which then limits the options on the versions of other components that can be created. The versions of other components may not be equal, for example a <code translate="no" dir="ltr">pluginFactoryOEMV100</code> could create a <code translate="no" dir="ltr">ToolbarControllerOEMV100</code> and a <code translate="no" dir="ltr">RecyclerViewOEMV70</code>.</p> <h2 id="toolbar">Toolbar</h2> <h3 id="base_layout">Base layout</h3> <p>The toolbar and the "base layout" are very closely related, hence the function that creates the toolbar is called <code translate="no" dir="ltr">installBaseLayoutAround</code>. The <a href="toolbar_rro">base layout</a> is a concept that allows the toolbar to be positioned anywhere around the app's content, to allow for a toolbar across the top/bottom of the app, vertically along the sides, or even a circular toolbar enclosing the whole app. This is accomplished by passing a view to <code translate="no" dir="ltr">installBaseLayoutAround</code> for the toolbar/base layout to wrap around.</p> <p>The plugin should take the provided view, detach it from its parent, inflate the plugin's own layout in the same index of the parent and with the same <code translate="no" dir="ltr">LayoutParams</code> as the view that was just detatched, and then reattach the view somewhere inside the layout that was just inflated. The inflated layout will contain the toolbar, if requested by the app.</p> <p>The app can request a base layout without a toolbar. If it does, <code translate="no" dir="ltr">installBaseLayoutAround</code> should return null. For most plugins, that's all that needs to happen, but if the plugin author would like to apply e.g. a decoration around the edge of the app, that could still be done with a base layout. These decorations are particularly useful for devices with non-rectangular screens, as they can push the app into a rectangular space and add clean transitions into the non-rectangular space.</p> <p><code translate="no" dir="ltr">installBaseLayoutAround</code> is also passed a <code translate="no" dir="ltr">Consumer&lt;InsetsOEMV1&gt;</code>. This consumer can be used to communicate to the app that the plugin is partially covering the app's content (with the toolbar or otherwise). The app will then know to keep drawing in this space, but keep any critical user-interactable components out of it. This effect is used in our reference design, to make the toolbar semi-transparent, and have lists scroll under it. If this feature was not implemented, the first item in a list would be stuck underneath the toolbar and not clickable. If this effect is not needed, the plugin can ignore the Consumer.</p> <p><img src="https://source.android.com/static/docs/automotive/hmi/car_ui/insets_demonstration.png" alt="Content scrolling beneath the toolbar" class="android-image-dark-theme-background" srcset="https://source.android.com/static/docs/automotive/hmi/car_ui/insets_demonstration_36.png 36w,https://source.android.com/static/docs/automotive/hmi/car_ui/insets_demonstration_48.png 48w,https://source.android.com/static/docs/automotive/hmi/car_ui/insets_demonstration_72.png 72w,https://source.android.com/static/docs/automotive/hmi/car_ui/insets_demonstration_96.png 96w,https://source.android.com/static/docs/automotive/hmi/car_ui/insets_demonstration_480.png 480w,https://source.android.com/static/docs/automotive/hmi/car_ui/insets_demonstration_720.png 720w,https://source.android.com/static/docs/automotive/hmi/car_ui/insets_demonstration_856.png 856w,https://source.android.com/static/docs/automotive/hmi/car_ui/insets_demonstration_960.png 960w,https://source.android.com/static/docs/automotive/hmi/car_ui/insets_demonstration_1440.png 1440w,https://source.android.com/static/docs/automotive/hmi/car_ui/insets_demonstration_1920.png 1920w,https://source.android.com/static/docs/automotive/hmi/car_ui/insets_demonstration_2880.png 2880w" sizes="(max-width: 840px) 100vw, 856px"> <strong>Figure 2.</strong> Content scrolling beneath the toolbar</p> <p>From the app's perspective, when the plugin sends new insets, it will receive them from any activities or fragments that implement <code translate="no" dir="ltr">InsetsChangedListener</code>. If an activity or fragment doesn't implement <code translate="no" dir="ltr">InsetsChangedListener</code>, the Car Ui library will handle insets by default by applying the insets as padding to the <code translate="no" dir="ltr">Activity</code> or <code translate="no" dir="ltr">FragmentActivity</code> containing the fragment. The library does not apply the insets by default to fragments. Here is a sample snippet of an implementation that applies the insets as padding on a <code translate="no" dir="ltr">RecyclerView</code> in the app:</p> 
+<pre>public class MainActivity extends Activity implements InsetsChangedListener {
+  @Override
+  public void onCarUiInsetsChanged(Insets insets) {
+    CarUiRecyclerView rv = requireViewById(R.id.recyclerview);
+    rv.setPadding(insets.getLeft(), insets.getTop(),
+                  insets.getRight(), insets.getBottom());
+  }
+}
+</pre> <p>Finally, the plugin is given a <code translate="no" dir="ltr">fullscreen</code> hint, which is used to indicate if the view that should be wrapped takes up the entire app or just a small section. This can be used to avoid applying some decorations along the edge that only make sense if they appear along the edge of the entire screen. An sample app that uses non-fullscreen base layouts is Settings, in which each pane of the dual-pane layout has its own toolbar.</p> <p>Since it is expected for <code translate="no" dir="ltr">installBaseLayoutAround</code> to return null when <code translate="no" dir="ltr">toolbarEnabled</code> is <code translate="no" dir="ltr">false</code>, for the plugin to indicate that it does not wish to customize the base layout, it must return <code translate="no" dir="ltr">false</code> from <code translate="no" dir="ltr">customizesBaseLayout</code>.</p> <p>The base layout must contain a <code translate="no" dir="ltr">FocusParkingView</code> and a <code translate="no" dir="ltr">FocusArea</code> to fully support rotary controls. These views can be omitted on devices that don't support rotary. The <code translate="no" dir="ltr">FocusParkingView/FocusAreas</code> are implemented in the static CarUi library, so a <code translate="no" dir="ltr">setRotaryFactories</code> is used to provide factories to create the views from contexts.</p> <p>The contexts used to create Focus views must be the source context, not the plugin's context. The <code translate="no" dir="ltr">FocusParkingView</code> should be the closest to the first view in the tree as reasonably possible, as it is what is focused when there should be no focus visible to the user. The <code translate="no" dir="ltr">FocusArea</code> must wrap the toolbar in the base layout to indicate that it is a rotary nudge zone. If the <code translate="no" dir="ltr">FocusArea</code> isn't provided, the user is unable to navigate to any buttons in the toolbar with the rotary controller.</p> <h3 id="toolbar_controller">Toolbar controller</h3> <p>The actual <code translate="no" dir="ltr">ToolbarController</code> returned should be much more straightforward to implement than the base layout. Its job is to take information passed to its setters and display it in the base layout. See the Javadoc for information on most methods. Some of the more complex methods are discussed below.</p> <p><code translate="no" dir="ltr">getImeSearchInterface</code> is used for showing search results in the IME (keyboard) window. This can be useful for displaying/animating search results alongside the keyboard, for example if the keyboard only took up half of the screen. Most of the functionality is implemented in the static CarUi library, the search interface in the plugin just provides methods for the static library to get the <code translate="no" dir="ltr">TextView</code> and <code translate="no" dir="ltr">onPrivateIMECommand</code> callbacks. To support this, the plugin should use a <code translate="no" dir="ltr">TextView</code> subclass that overrides <code translate="no" dir="ltr">onPrivateIMECommand</code> and passes the call to the provided listener as its search bar's <code translate="no" dir="ltr">TextView</code>.</p> <p><code translate="no" dir="ltr">setMenuItems</code> simply displays MenuItems on the screen, but it will be called surprisingly often. Since the plugin API for MenuItems are immutable, whenever a MenuItem is changed, a whole new <code translate="no" dir="ltr">setMenuItems</code> call will happen. This could happen for something as trivial as a user clicked a switch MenuItem, and that click caused the switch to toggle. For both performance and animation reasons, it is therefore encouraged to calculate the difference between the old and new MenuItems list, and only update the views that actually changed. The MenuItems provide a <code translate="no" dir="ltr">key</code> field that can help with this, as the key should be the same across different calls to <code translate="no" dir="ltr">setMenuItems</code> for the same MenuItem.</p> <h2 id="contexts">Contexts</h2> <p>The plugin must be careful when using Contexts, as there are both <em>plugin</em> and "source" contexts. The plugin context is given as an argument to <code translate="no" dir="ltr">getPluginFactory</code>, and is the only context that has the plugin's resources in it. This means it's the only context that can be used to inflate layouts in the plugin.</p> <p>However, the plugin context may not have the correct configuration set on it. To get the correct configuration, we provide source contexts in methods that create components. The source context is usually an activity, but in some cases may also be a Service or other Android component. To use the configuration from the source context with the resources from the plugin context, a new context must be created using <code translate="no" dir="ltr">createConfigurationContext</code>. If the correct configuration is not used, there will be an Android strict mode violation, and the inflated views may not have the correct dimensions.</p> 
+<pre>Context layoutInflationContext = pluginContext.createConfigurationContext(
+        sourceContext.getResources().getConfiguration());
+</pre> <h2 id="mode_changes">Mode changes</h2> <p>Some plugins cansupport multiple <em>modes</em> for their components, such as a <em>sport mode</em> or and <em>eco mode</em> that look visually distinct. There is no built-in support for such functionality in CarUi, but there is nothing stopping the plugin from implementing it entirely internally. The plugin can monitor whatever conditions it wants to figure out when to switch modes, such as listening for broadcasts. The plugin cannot trigger a configuration change to change modes, but it isn't recommended to rely on configuration changes anyways, as manually updating the appearance of each component is smoother to the user and also allows for transitions that are not possible with configuration changes.</p> <h2 id="jetpack_compose">Jetpack Compose</h2> <p>Plugins can be implemented using Jetpack Compose, but this is an alpha-level feature and should not be considered stable.</p> <p>Plugins can use <a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/platform/ComposeView"><code translate="no" dir="ltr">ComposeView</code></a> to create a Compose-enabled surface to render into. This <code translate="no" dir="ltr">ComposeView</code> would be what's returned from to app from the <code translate="no" dir="ltr">getView</code> method in components.</p> <p>One major issue with using <code translate="no" dir="ltr">ComposeView</code> is that it sets tags on the root view in the layout in order to store global variables that are shared across different ComposeViews in the hierarchy. Since the plugin's resource ids aren't namespaced separately from the app's, this could cause conflicts when both the app and the plugin set tags on the same view. A custom <code translate="no" dir="ltr">ComposeViewWithLifecycle</code> that moves these global variables down to the <code translate="no" dir="ltr">ComposeView</code> is provided below. Again, this should not be considered stable.</p> <p><code translate="no" dir="ltr">ComposeViewWithLifecycle</code>:</p> 
+<pre>class ComposeViewWithLifecycle @JvmOverloads constructor(
+  context: Context,
+  attrs: AttributeSet? = null,
+  defStyleAttr: Int = 0
+) : FrameLayout(context, attrs, defStyleAttr),
+    LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
+
+  private val lifeCycle = LifecycleRegistry(this)
+  private val modelStore = ViewModelStore()
+  private val savedStateRegistryController = SavedStateRegistryController.create(this)
+  private var composeView: ComposeView? = null
+  private var content = @Composable {}
+
+  init {
+    ViewTreeLifecycleOwner.set(this, this)
+    ViewTreeViewModelStoreOwner.set(this, this)
+    ViewTreeSavedStateRegistryOwner.set(this, this)
+    compositionContext = createCompositionContext()
+  }
+
+  fun setContent(content: @Composable () -&gt; Unit) {
+    this.content = content
+    composeView?.setContent(content)
+  }
+
+  override fun getLifecycle(): Lifecycle {
+    return lifeCycle
+  }
+
+  override fun getViewModelStore(): ViewModelStore {
+    return modelStore
+  }
+
+  override fun getSavedStateRegistry(): SavedStateRegistry {
+    return savedStateRegistryController.savedStateRegistry
+  }
+
+  override fun onAttachedToWindow() {
+    super.onAttachedToWindow()
+    savedStateRegistryController.performRestore(Bundle())
+    lifeCycle.currentState = Lifecycle.State.RESUMED
+    composeView = ComposeView(context)
+    composeView?.setContent(content)
+    addView(composeView, LayoutParams(
+      LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+  }
+
+  override fun onDetachedFromWindow() {
+    super.onDetachedFromWindow()
+    lifeCycle.currentState = Lifecycle.State.DESTROYED
+    modelStore.clear()
+    removeAllViews()
+    composeView = null
+  }
+
+  // Exact copy of View.createCompositionContext() in androidx's WindowRecomposer.android.kt
+  private fun createCompositionContext(): CompositionContext {
+    val currentThreadContext = AndroidUiDispatcher.CurrentThread
+    val pausableClock = currentThreadContext[MonotonicFrameClock]?.let {
+      PausableMonotonicFrameClock(it).apply { pause() }
+    }
+    val contextWithClock = currentThreadContext + (pausableClock ?: EmptyCoroutineContext)
+    val recomposer = Recomposer(contextWithClock)
+    val runRecomposeScope = CoroutineScope(contextWithClock)
+    val viewTreeLifecycleOwner = checkNotNull(ViewTreeLifecycleOwner.get(this)) {
+      "ViewTreeLifecycleOwner not found from $this"
+    }
+    viewTreeLifecycleOwner.lifecycle.addObserver(
+      LifecycleEventObserver { _, event -&gt;
+        @Suppress("NON_EXHAUSTIVE_WHEN")
+        when (event) {
+          Lifecycle.Event.ON_CREATE -&gt;
+            // Undispatched launch since we've configured this scope
+            // to be on the UI thread
+            runRecomposeScope.launch(start = CoroutineStart.UNDISPATCHED) {
+              recomposer.runRecomposeAndApplyChanges()
+            }
+          Lifecycle.Event.ON_START -&gt; pausableClock?.resume()
+          Lifecycle.Event.ON_STOP -&gt; pausableClock?.pause()
+          Lifecycle.Event.ON_DESTROY -&gt; {
+            recomposer.cancel()
+          }
+        }
+      }
+    )
+    return recomposer
+  }
+
+//  TODO: ComposeViewWithLifecycle should handle saving state and other lifecycle things
+//  override fun onSaveInstanceState(): Parcelable? {
+//    val superState = super.onSaveInstanceState()
+//    val bundle = Bundle()
+//    savedStateRegistryController.performSave(bundle)
+//  }
+}
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/hmi/car_ui/plugins" class="_attribution-link">https://source.android.com/docs/automotive/hmi/car_ui/plugins</a>
+  </p>
+</div>

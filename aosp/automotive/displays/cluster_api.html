@@ -1,0 +1,130 @@
+<h1>Instrument Cluster API</h1>  <p>Use the Instrument Cluster API (an Android API) to display navigation apps, including Google Maps, on a secondary display in a car, such as behind the steering wheel on the instrument panel. This page describes how to create a service to control that secondary display and to integrate the service with <code translate="no" dir="ltr">CarService</code> so that navigation apps can display a user interface.</p> <aside class="note"><strong>Note:</strong> This page describes single-VM Android instrument cluster integration. For Software Defined Vehicle (SDV) architectures requiring safety-critical instrument cluster rendering and high availability renderer (HAR) display isolation, see <a href="../sdv/display-safety">Display Safety</a> and <a href="../sdv/display-safety/driverui">DriverUI</a>.</aside> <h2 id="terms">Terminology</h2> <p>The following terms are used on this page.</p> <dt>CarInstrumentClusterManager</dt> <dd>An instance of <code translate="no" dir="ltr">CarManager</code> that enables external apps to launch an activity on the Instrument Cluster and receive callbacks when the Instrument Cluster is ready to display activities.</dd> <dt>CarManager</dt> <dd>Base class of all managers used by external apps to interact with car-specific services implemented by CarService.</dd> <dt>CarService</dt> <dd>Android Platform service that provides communication between external apps (including Google Maps) and car-specific features, such as Instrument Cluster access.</dd> <dt>Destination</dt> <dd>The final destination to which the vehicle will navigate.</dd> <dt>Estimated time of arrival (ETA)</dt> <dd>The estimated time of arrival at a destination.</dd> <dt>Head unit (HU)</dt> <dd>Primary computational unit embedded in a car. The HU runs all Android code and is connected to the central display in the car.</dd> <dt>Instrument Cluster</dt> <dd>Secondary display located behind the steering wheel and between the car instruments. This can be an independent computational unit connected to the HU through the car's internal network (CAN bus) or a secondary display attached to the HU.</dd> <dt>InstrumentClusterRenderingService</dt> <dd>Base class for the service used to interface with the Instrument Cluster display. OEMs must provide an extension of this class that interacts with the OEM-specific hardware.</dd> <dt>KitchenSink app</dt> <dd>Test app included with Android Automotive.</dd> <dt>Route</dt> <dd>A specific path along which a vehicle navigates to arrive at a destination.</dd> <dt><a href="https://developer.android.com/guide/components/bound-services">Singleton service</a></dt> <dd>An Android service with the <code translate="no" dir="ltr">android:singleUser</code> attribute. At any given time, at most one instance of the service runs on the Android system.</dd> <h2 id="prerequisites">Prerequisites</h2> <p>Before you continue, be sure to have these elements:</p> <ul> <li>
+<strong>Android development environment.</strong> To set up the Android development environment, see <a href="https://source.android.com/setup/build/requirements">Build requirements</a>.</li> <li>
+<strong>Download the Android source code.</strong> Get the latest version of the Android source code from the pi-car-release branch (or later) at <a href="https://android.googlesource.com/">https://android.googlesource.com</a>.</li> <li>
+<strong>Head unit (HU).</strong> An Android device capable of running Android 9 (or later). This device must have its own display and be capable of flashing the display with new builds of Android.</li> <li>
+<strong>Instrument Cluster</strong> is one of the following: <ul> <li>
+<strong>Physical secondary display attached to the HU.</strong> If the device hardware and kernel support the management of multiple displays.</li> <li>
+<strong>Independent unit.</strong> Any computational unit connected to the HU via a network connection, capable of receiving and displaying a video stream on its own display.</li> <li>
+<strong>Emulated display.</strong> During development, you can use one of these emulated environments: <ul> <li>
+<strong>Simulated secondary displays.</strong> To enable a simulated secondary display on any AOSP Android distribution, go to the <strong>Developer Options</strong> settings in the <strong>Settings</strong> system app and then select <strong>Simulate secondary displays</strong> This configuration is equivalent to attaching a physical secondary display, with the limitation that this display is superimposed over the primary display.</li> <li>
+<strong>Emulated instrument cluster.</strong> The Android emulator included with AAOS provides an option to display an instrument cluster with <a href="https://android.googlesource.com/platform/packages/apps/Car/Cluster/+/android17-release/DirectRenderingCluster/src/android/car/cluster/ClusterRenderingService.java">ClusterRenderingService</a>.</li> </ul> </li> </ul> </li> </ul> <h2 id="architecture">Integration architecture</h2> <h3 id="components">Integration components</h3> <p>Any integration of the Instrument Cluster API consists of these three components:</p> <ul> <li><code translate="no" dir="ltr">CarService</code></li> <li>Navigation apps</li> <li>OEM Instrument Cluster Service</li> </ul> <p><img src="https://source.android.com/static/docs/automotive/images/image-9207512.png" class="android-image-dark-theme-background" alt="Integration components"></p> <h4 id="carservice">CarService</h4> <p><code translate="no" dir="ltr">CarService</code> mediates between navigation apps and the car, ensuring that only one navigation app is active at any given time and only apps with the <code translate="no" dir="ltr">android.car.permission.CAR_INSTRUMENT_CLUSTER_CONTROL</code> permission can send data to the car.</p> <p><code translate="no" dir="ltr">CarService</code> bootstraps all car-specific services and provides access to these services through a series of managers. To interact with the services, apps running in the car can access these managers.</p> <p>For instrument cluster implementation, automotive OEMs must create a custom implementation of InstrumentClusterRendererService and update the <a href="https://android.googlesource.com/platform/packages/apps/Car/Cluster/+/android17-release/DirectRenderingCluster/src/android/car/cluster/ClusterRenderingService.java">ClusterRenderingService</a>. </p>
+<p>When rendering an Instrument Cluster, during the boot process the <code translate="no" dir="ltr">CarService</code> reads the <code translate="no" dir="ltr">InstrumentClusterRendererService</code> key of the <a href="https://android.googlesource.com/platform/packages/apps/Car/Cluster/+/android17-release/DirectRenderingCluster/src/android/car/cluster/ClusterRenderingService.java">ClusterRenderingService</a> to locate an implementation of <code translate="no" dir="ltr">InstrumentClusterService</code>. In AOSP, this entry points to the Navigation State API sample cluster implementation render service:</p> 
+<pre>&lt;string name="instrumentClusterRendererService"&gt;
+android.car.cluster/.ClusterRenderingService
+&lt;/string&gt;</pre> <p>The service referred to in this entry is initialized and bound to <code translate="no" dir="ltr">CarService</code>. When navigation apps, like Google Maps, request a <code translate="no" dir="ltr">CarInstrumentClusterManager</code>, <code translate="no" dir="ltr">CarService</code> provides a manager that updates the Instrument Cluster state from the bound <code translate="no" dir="ltr">InstrumentClusterRenderingService</code>. (In this case, <em>bound</em> refers to <a href="https://developer.android.com/guide/components/bound-services">Android Services</a>.)</p> <h3 id="cluster-service">Instrument Cluster service</h3> <p>OEMs must create an Android Package (APK) that contains a subclass of <a href="https://android.googlesource.com/platform/packages/apps/Car/Cluster/+/android17-release/DirectRenderingCluster/src/android/car/cluster/ClusterRenderingService.java">ClusterRenderingService</a>.</p> <p>This class serves two purposes:</p> <ul> <li>Provides an interface Android and the Instrument Cluster rendering device (the purpose of this page).</li> <li>Receives and renders navigation state updates, such as turn-by-turn navigation guidance.</li> </ul> <p>For the first purpose, OEM implementations of <code translate="no" dir="ltr">InstrumentClusterRendererService</code> must initialize the secondary display used to render information on screens in the car cabin and communicate this information to <code translate="no" dir="ltr">CarService</code> by calling to the <code translate="no" dir="ltr">InstrumentClusterRendererService.setClusterActivityOptions()</code> and <code translate="no" dir="ltr">InstrumentClusterRendererService.setClusterActivityState()</code> methods.</p> <p>For the second function, the Instrument Cluster service must provide an implementation of the <a href="https://android.googlesource.com/platform/packages/apps/Car/Cluster/+/android17-release/DirectRenderingCluster/src/android/car/cluster/ClusterRenderingService.java">ClusterRenderingService</a> interface that receives navigation status update <em>events</em>, which are encoded as an <code translate="no" dir="ltr">eventType</code> and event data encoded in a bundle.</p> <h3 id="sequence">Integration sequence</h3> <p>The following diagram illustrates the implementation of a navigation state that renders updates:</p> <p><img src="https://source.android.com/static/docs/automotive/images/instrument_cluster_implementation.svg" alt="Integration sequence"></p> <p>In this illustration, colors denote the following:</p> <ul> <li>
+<strong>Yellow.</strong> <code translate="no" dir="ltr">CarService</code> and <code translate="no" dir="ltr">CarNavigationStatusManager</code> provided by the Android platform. To learn more, see <a href="https://developer.android.com/reference/android/car/Car">Car</a> and <a href="https://developer.android.com/reference/android/car/Car#CAR_NAVIGATION_SERVICE">CAR_NAVIGATION_SERVICE</a>.</li> <li>
+<strong>Cyan.</strong> <code translate="no" dir="ltr">InstrumentClusterRendererService</code> implemented by the OEM.</li> <li>
+<strong>Purple.</strong> The Navigation app implemented by Google and third-party developers.</li> <li>
+<strong>Green.</strong> <code translate="no" dir="ltr">CarAppFocusManager</code>. To learn more, see <a href="cluster_api#carappfocus">Using the CarAppFocusManager API</a> below and <a href="https://developer.android.com/reference/android/car/CarAppFocusManager">CarAppFocusManager</a>.</li> </ul> <p>The Navigation State information flow follows this sequence:</p> <ol> <li>
+<code translate="no" dir="ltr">CarService</code> initializes the <code translate="no" dir="ltr">InstrumentClusterRenderingService</code>.</li> <li>During initialization, the <code translate="no" dir="ltr">InstrumentClusterRenderingService</code> updates <code translate="no" dir="ltr">CarService</code> with: <ol> <li>Instrument Cluster display properties, such as unobscure boundaries (see more details about unobscure boundaries later).</li> <li>Activity options needed to launch activities inside the Instrument Cluster display. To learn more, see <a href="https://developer.android.com/reference/android/app/ActivityOptions">ActivityOptions</a>.</li> </ol> </li> <li>A navigation app (such as Google Maps for Android Automotive or any maps app with the required permissions): <ol> <li>Obtains a <code translate="no" dir="ltr">CarAppFocusManager</code> using the Car class from car-lib.</li> <li>Before turn-by-turn directions start, calls to <code translate="no" dir="ltr">CarAppFocusManager.requestFocus()</code> to pass <code translate="no" dir="ltr">CarAppFocusManager.APP_FOCUS_TYPE_NAVIGATION</code> as the <code translate="no" dir="ltr">appType</code> parameter.</li> </ol> </li> <li>
+<code translate="no" dir="ltr">CarAppFocusManager</code> communicates this request to <code translate="no" dir="ltr">CarService</code>. If granted, <code translate="no" dir="ltr">CarService</code> inspects the navigation app package and locates an activity marked with category <code translate="no" dir="ltr">android.car.cluster.NAVIGATION</code>.</li> <li>If found, the navigation app uses the <code translate="no" dir="ltr">ActivityOptions</code> reported by the <code translate="no" dir="ltr">InstrumentClusterRenderingService</code> to launch the activity and includes the Instrument Cluster display properties as extras in the intent.</li> </ol> <h2 id="api">Integrate the API</h2> <p>The <code translate="no" dir="ltr">InstrumentClusterRenderingService</code> implementation must:</p> <ul> <li>Be designated as a singleton service by adding the following value to the AndroidManifest.xml. This is necessary to ensure that a single copy of the Instrument Cluster service runs, even during initialization and user switching:<br> <code translate="no" dir="ltr">android:singleUser="true"</code>
+</li> <li>Hold the <code translate="no" dir="ltr">BIND_INSTRUMENT_CLUSTER_RENDERER_SERVICE</code> system permission. This guarantees that only the Instrument Cluster rendering service included as part of the Android system image is ever bound by the <code translate="no" dir="ltr">CarService</code>: 
+<pre>
+&lt;uses-permission android:name="android.car.permission.BIND_INSTRUMENT_CLUSTER_RENDERER_SERVICE"/&gt;
+</pre> </li> </ul> <h2 id="icrs">Implement InstrumentClusterRenderingService</h2> <p>To build the service:</p> <ol> <li>Write a class that extends from <a href="https://android.googlesource.com/platform/packages/apps/Car/Cluster/+/android17-release/DirectRenderingCluster/src/android/car/cluster/ClusterRenderingService.java">ClusterRenderingService</a> and then add a corresponding entry to your <code translate="no" dir="ltr">AndroidManifest.xml</code> file. This class controls the Instrument Cluster display and can (<em>optionally</em>) render Navigation State API data.</li> <li>During <code translate="no" dir="ltr">onCreate()</code>, use this service to initialize the communication with the rendering hardware. Options include: <ul> <li>Determine the secondary display to be used for the Instrument Cluster.</li> <li>Create a virtual display so that the Instrument Cluster app renders and transmits the rendered image to an external unit (using a video streaming format, such as H.264).</li> </ul> </li> <li>When the display indicated above is ready, this service must call <code translate="no" dir="ltr">InstrumentClusterRenderingService#setClusterActivityLaunchOptions()</code> to define the exact <code translate="no" dir="ltr">ActivityOptions</code> that must be used to display an Activity on the Instrument Cluster. Use these parameters: <ul> <li>
+<code translate="no" dir="ltr">category.</code> <a href="https://android.googlesource.com/platform/packages/apps/Car/Cluster/+/android17-release/DirectRenderingCluster/src/android/car/cluster/ClusterRenderingService.java">ClusterRenderingService</a>.</li> <li>
+<code translate="no" dir="ltr">ActivityOptions.</code> An <code translate="no" dir="ltr">ActivityOptions</code> instance that can be used to launch an Activity in the Instrument Cluster. For example, from the sample Instrument Cluster implementation on AOSP: 
+<pre>getService().setClusterActivityLaunchOptions(
+  CATEGORY_NAVIGATION,
+  ActivityOptions.makeBasic()
+      .setLaunchDisplayId(displayId));</pre> </li>
+</ul> </li> <li>When the Instrument Cluster is ready to display activities, this service must invoke <code translate="no" dir="ltr">InstrumentClusterRenderingService#setClusterActivityState()</code>. Use these parameters: <ul> <li>
+<code translate="no" dir="ltr">category</code> <a href="https://android.googlesource.com/platform/packages/apps/Car/Cluster/+/android17-release/DirectRenderingCluster/src/android/car/cluster/ClusterRenderingService.java">ClusterRenderingService</a>.</li> <li>
+<code translate="no" dir="ltr">state</code> Bundle generated with <a href="https://android.googlesource.com/platform/packages/apps/Car/Cluster/+/android17-release/DirectRenderingCluster/src/android/car/cluster/ClusterRenderingService.java">ClusterRenderingService</a>. Be sure to provide this data: <ul> <li>
+<code translate="no" dir="ltr">visible</code> Specifies the Instrument Cluster as visible and ready to display content.</li> <li>
+<code translate="no" dir="ltr">unobscuredBounds</code> A rectangle that defines the area within the Instrument Cluster display in which it's safe to display content. For example, areas covered by dials and gauges.</li> </ul> </li> </ul> </li>
+<li>Override the <code translate="no" dir="ltr">Service#dump()</code> method and report status information useful for debugging (see <a href="https://developer.android.com/studio/command-line/dumpsys">dumpsys</a> for more information).</li> </ol> <h3 id="sample">Sample InstrumentClusterRenderingService implementation</h3> <p>The following example outlines an <code translate="no" dir="ltr">InstrumentClusterRenderingService</code> implementation, which creates a <code translate="no" dir="ltr">VirtualDisplay</code> to present the Instrument Cluster content on a remote physical display.</p> <p>Alternatively, this code could pass the <code translate="no" dir="ltr">displayId</code> of a physical secondary display connected to the HU, if one is known to be available.</p> 
+<pre>/**
+* Sample {@link InstrumentClusterRenderingService} implementation
+*/
+public class SampleClusterServiceImpl extends InstrumentClusterRenderingService {
+   // Used to retrieve or create displays
+   private final DisplayManager mDisplayManager;
+   // Unique identifier for the display to be used for instrument
+   // cluster
+   private final String mUniqueId = UUID.randomUUID().toString();
+   // Format of the instrument cluster display
+   private static final int DISPLAY_WIDTH = 1280;
+   private static final int DISPLAY_HEIGHT = 720;
+   private static final int DISPLAY_DPI = 320;
+   // Area not covered by instruments
+   private static final int DISPLAY_UNOBSCURED_LEFT = 40;
+   private static final int DISPLAY_UNOBSCURED_TOP = 0;
+   private static final int DISPLAY_UNOBSCURED_RIGHT = 1200;
+   private static final int DISPLAY_UNOBSCURED_BOTTOM = 680;
+   @Override
+   public void onCreate() {
+      super.onCreate();
+      // Create a virtual display to render instrument cluster activities on
+      mDisplayManager = getSystemService(DisplayManager.class);
+      VirtualDisplay display = mDisplayManager.createVirtualDisplay(
+          mUniqueId, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_DPI, null,
+          0 /* flags */, null, null);
+      // Do any additional initialization (e.g.: start a video stream
+      // based on this virtual display to present activities on a remote
+      // display).
+      onDisplayReady(display.getDisplay());
+}
+private void onDisplayReady(Display display) {
+    // Report activity options that should be used to launch activities on
+    // the instrument cluster.
+    String category = CarInstrumentClusterManager.CATEGORY_NAVIGATION;
+    ActionOptions options = ActivityOptions.makeBasic()
+        .setLaunchDisplayId(display.getDisplayId());
+    setClusterActivityOptions(category, options);
+    // Report instrument cluster state.
+    Rect unobscuredBounds = new Rect(DISPLAY_UNOBSCURED_LEFT,
+        DISPLAY_UNOBSCURED_TOP, DISPLAY_UNOBSCURED_RIGHT,
+        DISPLAY_UNOBSCURED_BOTTOM);
+    boolean visible = true;
+    ClusterActivityState state = ClusterActivityState.create(visible,
+       unobscuredBounds);
+    setClusterActivityState(category, options);
+  }
+}</pre> <h3 id="carappfocus">Use the CarAppFocusManager API</h3> <p> The CarAppFocusManager API provides a method named <code translate="no" dir="ltr">getAppTypeOwner()</code>, which allows the cluster service written by OEMs to know which navigation app has navigation focus at any given time. OEMs can use the existing <code translate="no" dir="ltr">CarAppFocusManager#addFocusListener()</code> method, and then use <code translate="no" dir="ltr">getAppTypeOwner()</code> to learn which app has focus. With this information, OEMs can: </p> <ul> <li>Switch the activity shown in the cluster to the cluster activity provided by the navigation app holding focus. </li> <li>Can detect if the focused navigation app has a cluster activity or not. If the focused navigation app doesn't have a cluster activity (or if such activity is disabled), OEMs can send this signal to the car DIM so the navigation facet of the cluster is skipped altogether. </li> </ul> <p>Use <code translate="no" dir="ltr">CarAppFocusManager</code> to set and listen for the current app focus, such as active navigation or a voice command. Usually only one instance of such an app is actively running (or focused) in the system. </p> <p>Use the <code translate="no" dir="ltr">CarAppFocusManager#addFocusListener(..)</code> method to listen for app focus changes:</p> 
+<pre>import android.car.CarAppFocusManager;
+
+...
+
+Car car = Car.createCar(this);
+mAppFocusManager = (CarAppFocusManager)car.getCarManager(Car.APP_FOCUS_SERVICE);
+mAppFocusManager.addFocusListener(this, CarAppFocusManager.APP_FOCUS_TYPE_NAVIGATION);
+
+...
+
+public void onAppFocusChanged(int appType, boolean active) {
+    // Use the CarAppFocusManager#getAppTypeOwner(appType) method call
+    // to retrieve a list of active package names
+}</pre> <p>Use the <code translate="no" dir="ltr">CarAppFocusManager#getAppTypeOwner(..)</code> method to retrieve the package names of the current owner of a given app type that is in focus. This method may return more than one package name if the current owner uses the <code translate="no" dir="ltr">android:sharedUserId</code> feature. </p> 
+<pre>import android.car.CarAppFocusManager;
+
+...
+
+Car car = Car.createCar(this);
+mAppFocusManager = (CarAppFocusManager)car.getCarManager(Car.APP_FOCUS_SERVICE);
+List&lt;String&gt; focusOwnerPackageNames = mAppFocusManager.getAppTypeOwner(
+              CarAppFocusManager.APP_FOCUS_TYPE_NAVIGATION);
+
+if (focusOwnerPackageNames == null || focusOwnerPackageNames.isEmpty()) {
+        // No Navigation app has focus
+        // OEM may choose to show their default cluster view
+} else {
+       // focusOwnerPackageNames
+       // Use the PackageManager to retrieve the cluster activity for the package(s)
+       // returned in focusOwnerPackageNames
+}
+
+...</pre> <h3 id="template-apps-focus">Identify template apps</h3> <p>For template-based navigation apps that use the Car App library, <code translate="no" dir="ltr">CarAppFocusManager#getAppTypeOwner()</code> returns the host's package name (for example, <code translate="no" dir="ltr">com.google.android.apps.automotive.templates.host</code>) because the host holds the system focus on behalf of the client app.</p> <p>To identify the navigating client app, OEMs can extract the package name from the navigation state bundle sent with <code translate="no" dir="ltr">CarNavigationStatusManager</code>. The package name is stored under the key <code translate="no" dir="ltr">active_app_package_name</code> in the bundle received by <code translate="no" dir="ltr">NavigationRenderer#onNavigationStateChanged(Bundle)</code>:</p> 
+<pre>// In your NavigationRenderer implementation
+@Override
+public void onNavigationStateChanged(Bundle bundle) {
+    if (bundle.containsKey("active_app_package_name")) {
+        String activeAppPackage = bundle.getString("active_app_package_name");
+        // Use the package name to identify the navigating app (e.g., com.waze)
+    }
+}</pre> <h2 id="sample-app">Appendix: Use the sample app</h2> <p>AOSP provides a sample app that implements the Navigation State API.</p> <p>To run this sample app:</p> <ol> <li>Build and flash Android Auto on a supported HU. Use the Android building and flashing instructions specific to your device. For instructions, see <a href="../../setup/create/devices">Using Reference Boards</a>.</li> <li>Connect a physical secondary display to the HU (if supported) or turn on the virtual secondary HU: <ol> <li>Select <strong>Developer Mode</strong> in the Settings app.</li> <li>Go to <strong>Settings &gt; System &gt; Advanced &gt; Developer options &gt; Simulate secondary displays</strong>.</li> </ol> </li> <li>Reboot the HU</li> <li>To launch the KitchenSink app:<ol> <li>Open the drawer.</li> <li>Go to <strong>Inst. Cluster</strong>.</li> <li>Click <strong>START METADATA</strong>.</li> </ol> </li> </ol> <p>KitchenSink requests NAVIGATION focus, which instructs the <code translate="no" dir="ltr">DirectRenderingCluster</code> service to display a mocked-up user interface on the Instrument Cluster.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/displays/cluster_api" class="_attribution-link">https://source.android.com/docs/automotive/displays/cluster_api</a>
+  </p>
+</div>

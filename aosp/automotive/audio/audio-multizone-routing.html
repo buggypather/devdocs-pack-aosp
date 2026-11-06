@@ -1,0 +1,97 @@
+<h1>Multi-zone audio routing</h1>  <p>Car audio service uses the Core Audio dynamic audio policy to facilitate use cases in cars.</p> <ul> <li><p>Separate audio playback for each passenger, referred to as multi-zone audio, in which each zone allows for the concurrent playback of sound.</p></li> <li><p>Dynamic audio zone configuration.</p></li> <li><p>Passenger primary zone audio cast.</p></li> <li><p>Passenger's audio mirror.</p></li> </ul> <p>In each use case, the car audio service uses the dynamic audio policy to automatically route audio to the designated output device.</p> <h2 id="multi-zone_audio">Multi-zone audio</h2> <p>Multi-zone audio enables multiple users to simultaneously interact with AAOS. A set of output devices is associated with a zone, and each zone maintains audio focus and volume level. Passengers can listen to their audio while the driver listens to another source in the primary zone (typically, the main cabin).</p> <p>For concurrent multi-user systems, each user zone associated with a main display must have an audio output device. An audio output device can be a physical wired endpoint (such as built-in speakers or USB audio class devices) or a wireless endpoint (such as Bluetooth headphones), provided the underlying hardware supports independent concurrent routing per user zone. Other passenger zones can share the driver's audio zone or have their own dedicated audio output.</p> <h3 id="multi-zone_audio_architecture">Multi-zone audio architecture</h3> <p><img src="https://source.android.com/static/docs/automotive/images/multi-zone-01.png" alt="Car audio service architecture" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> Car audio service architecture.</p> <p>Car audio zones are an abstraction of audio outputs, audio focus, and other audio settings, all of which can be managed independently. For routing purposes, each zone is defined as a set of audio output bus devices as arranged in the audio policy configuration. The devices differ for each audio zone definition. In Figure 1, bus devices 1 through 5 belong to zone zero, bus devices 6 through 8 belong to zone one, and bus devices 9 through 11 belong to zone two.</p> <h3 id="car_audio_configuration">Car audio configuration</h3> <p>Typically, output devices are assigned to one audio zone. Each audio zone is defined in <code translate="no" dir="ltr">car_audio_configuration.xml</code>. The following code snippet shows a car audio configuration for Figure 1:</p> 
+<pre>&lt;carAudioConfiguration version="3"&gt;
+    &lt;zones&gt;
+        &lt;zone name="Zone0" audioZneId="0" occupantZoneId="0"&gt;
+            &lt;zoneConfigs&gt;
+                &lt;zoneConfig name="config0" isDefault="true"&gt;
+                   &lt;volumeGoups&gt;
+                        &lt;group&gt;
+                            &lt;device address="bus_1"&gt;
+                                &lt;context context="music"/&gt;
+                            &lt;/device&gt;
+                        &lt;/group&gt;
+                        &lt;group&gt;
+                            &lt;device address="bus_2"&gt;
+                                &lt;context context="navigation"/&gt;
+                            &lt;/device&gt;
+                        &lt;/group&gt;
+                        ...
+                    &lt;/volumeGroups&gt;
+                &lt;/zoneConfig&gt;
+            &lt;/zoneConfigs&gt;
+        &lt;/zone&gt;
+        &lt;zone name="Zone1" audioZoneId="1" occupantZoneId="1"&gt;
+            &lt;zoneConfigs&gt;
+                &lt;zoneConfig name="config0" isDefault="true"&gt;
+                    &lt;volumeGroups&gt;
+                        &lt;group&gt;
+                            &lt;device address="bus_6"&gt;
+                                &lt;context context="music"/&gt;
+                            &lt;/device&gt;
+                        &lt;/group&gt;
+                        &lt;group&gt;
+                            &lt;device address="bus_7"&gt;
+                                &lt;context context="navigation"/&gt;
+                           &lt;/device&gt;
+                       &lt;/group&gt;
+                       ...
+                    &lt;/volumeGroups&gt;
+                &lt;/zoneConfig&gt;
+            &lt;/zoneConfigs&gt;
+        &lt;/zone&gt;
+        ...
+    ...
+   &lt;/zones&gt;
+&lt;/carAudioConfiguration&gt;
+</pre> <p><code translate="no" dir="ltr">occupantZoneId</code> is a car service definition managed by <code translate="no" dir="ltr">CarOccupantZoneManager</code>. It's used in cars to define a mapping for a user in the car to a specific seat location. <code translate="no" dir="ltr">CarOccupantZoneService</code> also defines mapping from occupant zone to displays, other peripherals, and the user once the user logs into a display. An audio zone has:</p> <ul> <li>
+<p><strong>An audio zone ID and an occupant zone ID.</strong></p> <ul> <li>Maps audio zone to occupant zone (seat, displays, and other peripherals)</li> <li>Map which user ID is assigned with an audio zone upon logging in</li> </ul>
+</li> <li>
+<p><strong>A list of audio configurations.</strong> Each audio configuration has a set of volume groups. Each volume group has a set of audio bus devices.</p> <ul> <li><p>When volume is changed, all audio devices in a group are controlled in the same way.</p></li> <li><p>Each audio device is assigned a list of audio attributes. This information is used to construct the audio policy mixes with differently assigned audio attributes.</p></li> </ul>
+</li> </ul> <p>This configuration allows different audio attribute usages to be routed to different output devices in each zone. Depending on the use case, different sounds can play concurrently. For example, you can choose to configure the main cabin (primary zone) to play media sounds on all speakers but navigation sounds only on the speakers nearest the driver. With concurrent playback of sound, the main cabin continues to listen to media while navigation is delivered to the driver.</p> <h3 id="multi-zone_audio_passenger_login_workflow">Multi-zone audio passenger login workflow</h3> <p>The sequence diagram below shows the flow for enabling the audio routing when a passenger logs into their respective display:</p> <p><img src="https://source.android.com/static/docs/automotive/images/multi-zone-02.png" alt="image" class="android-image-dark-theme-background"> </p> <p><strong>Figure 2.</strong></p> <p>In this sequence, the user login is propagated to the car audio service via the occupant zone service.</p> <ol> <li><p>The car audio service (for a specific audio zone) uses the <code translate="no" dir="ltr">AudioPolicy#removeUserIdDeviceAffinity</code> API to remove the user device affinities. This API takes a user ID. In this case, the previous zone's user.</p></li> <li><p>The <code translate="no" dir="ltr">AudioPolicy#setUserIdDeviceAffinity</code> API assigns the new user to a zone, which takes in the user ID and all devices for a specific zone configuration.</p></li> </ol> <h2 id="dynamic_zone_configurations">Dynamic zone configurations</h2> <p>In Android 14, dynamic zone configurations are introduced to allow OEMs to configure different sets of devices for passengers. The use case allows passengers in the rear seat to switch between a rear seat headrest speaker and a rear seat headphone peripheral.</p> <p>In this case, two configurations are required. One each for the rear seat headrest and the headphone peripheral. Audio for a specific user is routed <strong>only</strong> to one configuration at a time.</p> <p><img src="https://source.android.com/static/docs/automotive/images/multi-zone-03.png" alt="Dynamic zone configuration
+workflow" class="android-image-dark-theme-background"> </p> <p><strong>Figure 3.</strong> Dynamic zone configuration workflow.</p> <p>Figure 3 illustrations the architecture for the dynamic zone configuration workflow. Audio zone 1 contains two configurations, <code translate="no" dir="ltr">Config 0</code> and <code translate="no" dir="ltr">Config 1</code>, which are associated with the output device speaker and headrest, respectively.</p> <p>Upon logging in, the user is automatically assigned the default configuration. When the user elects to change configurations, usually through a system UI, the car audio service executes the switch between the two configurations. In this way, the output device is switched between the Z1 speaker and the Z1 headrest.</p> <p>The code snippet below shows the setup for this dynamic zone configuration.</p> 
+<pre>&lt;carAudioConfiguration version="3"&gt;
+    &lt;zones&gt;
+        &lt;zone name="Zone1" audioZoneId="1" occupantZoneId="1"&gt;
+            &lt;zoneConfigs&gt;
+                &lt;zoneConfig name="Zone 1 Config 0" isDefault="true"&gt;
+                    &lt;volumeGroups&gt;
+                        &lt;group&gt;
+                            &lt;device address="bus_100"&gt;
+                                &lt;context context="music"/&gt;
+                                    ***
+                            &lt;/device&gt;
+                        &lt;/group&gt;
+                    &lt;/volumeGroups&gt;
+                &lt;/zoneConfig&gt;
+                &lt;zoneConfig name="Zone 1 Config 1"&gt;
+                    &lt;volumeGroups&gt;
+                        &lt;group&gt;
+                            &lt;device address="bus_101"&gt;
+                                &lt;context context="music"/&gt;
+                                    ***
+                            &lt;/device&gt;
+                        &lt;/group&gt;
+                    &lt;/volumeGroups&gt;
+                &lt;/zoneConfig&gt;
+            &lt;/zoneConfigs&gt;
+        &lt;/zone&gt;
+    &lt;/zones&gt;
+</pre> <p>To facilitate management of the audio configurations the car audio manager exposes APIs to manage the configurations:</p> <ul> <li>Query configurations available to a zone.</li> <li>Query currently set configuration for a zone.</li> <li>Switch to a different configuration.</li> </ul> <p>A system UI app or service can use these API to manage the configuration for the audio zone as shown in Figure 4. The Query API exposes the two to the passenger. The user can select a different configuration by tapping a command for the desired configuration.</p> <p><img src="https://source.android.com/static/docs/automotive/images/multi-zone-04.png" alt="Dynamic zone configuration
+workflow" class="screenshot android-image-dark-theme-background"> </p> <p><strong>Figure 4.</strong> Dynamic zone configuration workflow.</p> <h2 id="primary_zone_passenger_audio_cast">Primary zone passenger audio cast</h2> <p>The primary zone passenger audio cast is a feature introduced in Android 14 to allow for passengers to cast their media audio in the primary zone. In this manner the passenger's media audio can be cast to the main cabin while the driver remains in full control.</p> <p>The figure below shows a simplified version of the architecture for the primary zone passenger media audio cast.</p> <p><img src="https://source.android.com/static/docs/automotive/images/multi-zone-05.png" alt="Dynamic zone configuration
+workflow" class="android-image-dark-theme-background"> </p> <p><strong>Figure 5.</strong> Dynamic zone configuration workflow.</p> <p>The image shows that the media output device for the driver is shared with the passenger, this only happens while the passenger is in cast to primary zone mode. The dynamic audio policy is also used to manage the audio routing for the driver but no changes are applied to the device affinities for the driver. For the passenger the list of output devices are changed as followed:</p> <ul> <li>Media output device for passenger is removed from list of devices</li> <li>Media output device for driver is added to list of devices</li> <li>Remaining output devices for passenger audio zones stay on list of devices</li> </ul> <p>This new list of devices is assigned to the passenger by the <code translate="no" dir="ltr">AudioPolicy#setUserIdDeviceAffinity</code> API. The parameters passed to the API are the list of devices and the passenger user ID. When the audio system's audio policy service queries which audio mix is to be selected for a media track associated with the passenger, the media audio mix associated with the primary zone is selected.</p> <p>A key requirement for primary zone audio cast is that the primary zone's media output device be isolated from other audio attribute usages. Otherwise, during construction of the audio mixes, other audio attributes are added to the mix. When the mix selection is performed by the audio system, all sounds attached to the mix are selected for playback in the main cabin.</p> <h2 id="passenger_zone_audio_mirror">Passenger zone audio mirror</h2> <p>The audio mirror feature enables passengers to share audio. The mirror feature duplicates audio data in each audio zone so that all passengers can listen to the same audio. In this case, the audio focus is shared with the passengers involved in the audio mirroring.</p> <h3 id="audio_mirror_routing">Audio mirror routing</h3> <p>A minimum of two passengers is needed to enable audio mirroring. As a result, an audio configuration with only two passenger audio zones would require one mirror output device. With the definition above, two concurrent mirroring sessions can be started.</p> <p>The figure below shows a simplified diagram for the multi-zone audio mirroring between two passengers. Audio from both passengers is routed to an audio mirror device, <code translate="no" dir="ltr">bus_1000</code>. The Audio HAL duplicates the signal to the source zones.</p> <p><img src="https://source.android.com/static/docs/automotive/images/multi-zone-06.png" alt="Dynamic zone configuration
+workflow" class="android-image-dark-theme-background"> </p> <p><strong>Figure 6.</strong> Dynamic zone configuration workflow.</p> <p>This routing is enabled <strong>only</strong> when the passengers are in mirroring mode. If not, the corresponding devices for the audio zone are assigned to passengers. When mirroring is first enabled for a passenger, the <code translate="no" dir="ltr">AudioPolicy#setUserIdDeviceAffinity</code> API modifies the routing:</p> <ul> <li>Media output device for passenger is removed from list of devices.</li> <li>Mirror output device added to list of devices.</li> <li>Remaining output devices for passenger audio zone stay on list of devices.</li> </ul> <p>With the list of devices, the API is called with the updated list of devices and the passenger's user ID. The following image provides a sequence diagram of the audio mirror workflow.</p> <p><img src="https://source.android.com/static/docs/automotive/images/multi-zone-07.png" alt="Audio mirror workflow" class="android-image-dark-theme-background"> </p> <p><strong>Figure 7.</strong> Audio mirror workflow.</p> <p>In Figure 7, the car audio manager's APIs for managing the audio mirroring are called from the Media System Service. Specifically, the API to enable audio mirroring for User 1 and User 2, <code translate="no" dir="ltr">CarAudioManager#enableMirrorForAudioZones</code>.</p> <p>The car audio service configures the audio routing for user passengers as described above. Car audio service also sends a signal to the audio HAL to configure and duplicate the audio from the mirror device to the corresponding zones.</p> <p>In the image above, the car audio service sends <code translate="no" dir="ltr">mirroring_src=bus_1000;mirroring_dest=bus_10,bus_20</code></p> <p><em>where,</em></p> <p><code translate="no" dir="ltr">bus_1000</code> is the source bus and <code translate="no" dir="ltr">bus_10</code> and <code translate="no" dir="ltr">bus_20</code> are the destination buses.</p> <p>Not shown in the sequence diagram is the signal sent via the <code translate="no" dir="ltr">AudioManager#setParameters</code> API, which reaches the HAL through the audio service.</p> <p>Upon disabling the audio mirror, the following signal is sent, <code translate="no" dir="ltr">mirroring_src=bus_1000;mirroring=off</code>. This signal can be used by the HAL to disable audio duplication when audio mirroring is not enabled. To define audio mirroring devices, the car audio configuration file contains a section named <code translate="no" dir="ltr">mirroringDevices</code>, as shown on the snippet below.</p> <p>In this snippet, two mirroring devices are defined, <code translate="no" dir="ltr">bus_1000</code> and <code translate="no" dir="ltr">bus_2000</code>, so that four passengers can use audio mirroring.</p> 
+<pre>&lt;carAudioConfiguration version="3"&gt;
+   &lt;mirroringDevices&gt;
+       &lt;mirroringDevice address="bus_1000"/&gt;
+       &lt;mirroringDevice address="bus_2000"/&gt;
+   &lt;/mirroringDevices&gt;
+  &lt;zones&gt;
+    ....
+  &lt;/zones&gt;
+&lt;/carAudioConfiguration&gt;
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/audio/audio-multizone-routing" class="_attribution-link">https://source.android.com/docs/automotive/audio/audio-multizone-routing</a>
+  </p>
+</div>

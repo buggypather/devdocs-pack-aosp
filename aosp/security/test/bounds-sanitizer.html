@@ -1,0 +1,113 @@
+<h1>UndefinedBehaviorSanitizer</h1>  <p> UndefinedBehaviorSanitizer (UBSan) performs compile-time instrumentation to check for various types of undefined behavior. While UBSan is capable of detecting <a href="https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html">many undefined behavior bugs</a>, Android supports: </p>
+<ul> <li>alignment</li> <li>bool</li> <li>bounds</li> <li>enum</li> <li>float-cast-overflow</li> <li>float-divide-by-zero</li> <li>integer-divide-by-zero</li> <li>nonnull-attribute</li> <li>null</li> <li>return</li> <li>returns-nonnull-attribute</li> <li>shift-base</li> <li>shift-exponent</li> <li>signed-integer-overflow</li> <li>unreachable</li> <li>unsigned-integer-overflow</li> <li>vla-bound</li> </ul> <p>unsigned-integer-overflow, while not technically undefined behavior, is included in the sanitizer and used in many Android modules, including the mediaserver components, to eliminate any latent integer-overflow vulnerabilities. </p> <h2 id="ubsan-implementation">Implementation</h2> <p> In the Android build system, you can enable UBSan globally or locally. To enable UBSan globally, set SANITIZE_TARGET in Android.mk. To enable UBSan at a per-module level, set LOCAL_SANITIZE and specify the undefined behaviors that you want to look for in Android.mk. For example: </p> 
+<pre>LOCAL_PATH:= $(call my-dir)
+include $(CLEAR_VARS)
+
+LOCAL_CFLAGS := -std=c11 -Wall -Werror -O0
+
+LOCAL_SRC_FILES:= sanitizer-status.c
+
+LOCAL_MODULE:= sanitizer-status
+
+LOCAL_SANITIZE := alignment bounds null unreachable integer
+LOCAL_SANITIZE_DIAG := alignment bounds null unreachable integer
+
+include $(BUILD_EXECUTABLE)
+</pre> <p> And the equivalent blueprint (Android.bp) configuration: </p> 
+<pre>cc_binary {
+
+    cflags: [
+        "-std=c11",
+        "-Wall",
+        "-Werror",
+        "-O0",
+    ],
+
+    srcs: ["sanitizer-status.c"],
+
+    name: "sanitizer-status",
+
+    sanitize: {
+        misc_undefined: [
+            "alignment",
+            "bounds",
+            "null",
+            "unreachable",
+            "integer",
+        ],
+        diag: {
+            misc_undefined: [
+                "alignment",
+                "bounds",
+                "null",
+                "unreachable",
+                "integer",
+            ],
+        },
+    },
+
+}
+</pre> <h2 id="ubsan-shortcuts">UBSan shortcuts</h2> <p> Android also has two shortcuts, <code translate="no" dir="ltr">integer</code> and <code translate="no" dir="ltr">default-ub</code>, to enable a set of sanitizers at the same time. integer enables <code translate="no" dir="ltr">integer-divide-by-zero</code>, <code translate="no" dir="ltr">signed-integer-overflow</code> and <code translate="no" dir="ltr">unsigned-integer-overflow</code>. <code translate="no" dir="ltr">default-ub</code> enables the checks that have minimal compiler performance issues: <code translate="no" dir="ltr">bool, integer-divide-by-zero, return,
+returns-nonnull-attribute, shift-exponent, unreachable and vla-bound</code>. The integer sanitizer class can be used with SANITIZE_TARGET and LOCAL_SANITIZE, while default-ub can only be used with SANITIZE_TARGET. </p> <h2 id="better-error-reporting">Better error reporting</h2> <p> Android's default UBSan implementation invokes a specified function when undefined behavior is encountered. By default, this function is abort. However, starting in October 2016, UBSan on Android has an optional runtime library that gives more detailed error reporting, including type of undefined behavior encountered, file and source code line information. To enable this error reporting with integer checks add the following to an Android.mk file: </p> 
+<pre>LOCAL_SANITIZE:=integer
+LOCAL_SANITIZE_DIAG:=integer
+</pre> <p> The LOCAL_SANITIZE value enables the sanitizer during the build. LOCAL_SANITIZE_DIAG turns on diagnostic mode for the specified sanitizer. It is possible to set LOCAL_SANITIZE and LOCAL_SANITIZE_DIAG to different values, but only those checks in LOCAL_SANITIZE are enabled. If a check is not specified in LOCAL_SANITIZE, but is specified in LOCAL_SANITIZE_DIAG, the check isn't enabled and diagnostic messages aren't given. </p> <p> Here is an example of the information provided by the UBSan runtime library: </p> 
+<pre>pixel-xl:/ # sanitizer-status ubsan
+sanitizer-status/sanitizer-status.c:53:6: runtime error: unsigned integer overflow: 18446744073709551615 + 1 cannot be represented in type 'size_t' (aka 'unsigned long')
+</pre> <h2 id="intsan">Integer overflow sanitization</h2> <p> Unintended integer overflows can cause memory corruption or information disclosure vulnerabilities in variables associated with memory accesses or memory allocations. To combat this, we added Clang's <a href="https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html">UndefinedBehaviorSanitizer</a> (UBSan) signed and unsigned integer overflow sanitizers to <a href="https://android-developers.googleblog.com/2016/05/hardening-media-stack.html">harden the media framework</a> in Android 7.0. In Android 9, we <a href="https://android-developers.googleblog.com/2018/06/compiler-based-security-mitigations-in.html">expanded UBSan to cover more components</a> and improved build system support for it. </p> <p> This is designed to add checks around arithmetic operations&amp;hairsp;/&amp;hairsp;instructions—which might overflow—to safely abort a process if an overflow does happen. These sanitizers can mitigate an entire class of memory corruption and information disclosure vulnerabilities where the root cause is an integer overflow, such as the original Stagefright vulnerability. </p> <h3 id="examples-and-source">Examples and source</h3> <p> Integer Overflow Sanitization (IntSan) is provided by the compiler and adds instrumentation into the binary during compile time to detect arithmetic overflows. It is enabled by default in various components throughout the platform, for example <a href="https://android.googlesource.com/platform/external/libnl/+/android17-release/Android.bp#105"><code translate="no" dir="ltr">/platform/external/libnl/Android.bp</code></a>. </p> <h3 id="implementation">Implementation</h3> <p> IntSan uses UBSan's signed and unsigned integer overflow sanitizers. This mitigation is enabled on a per-module level. It helps keep critical components of Android secure and should not be disabled. </p> <p> We strongly encourage you to enable Integer Overflow Sanitization for additional components. Ideal candidates are privileged native code or native code that parses untrusted user input. There is a small performance overhead associated with the sanitizer that is dependent on code's usage and the prevalence of arithmetic operations. Expect a small overhead percentage and test if performance is a concern. </p> <h4 id="intsan-in-makefiles">Support IntSan in makefiles</h4> <p> To enable IntSan in a makefile, add: </p> 
+<pre>LOCAL_SANITIZE := integer_overflow
+    # Optional features
+    LOCAL_SANITIZE_DIAG := integer_overflow
+    LOCAL_SANITIZE_BLOCKLIST := modulename_BLOCKLIST.txt</pre> <ul> <li>
+<code translate="no" dir="ltr">LOCAL_SANITIZE</code> takes a comma separated list of sanitizers, with <code translate="no" dir="ltr">integer_overflow</code> being a pre-packaged set of options for the individual signed and unsigned integer overflow sanitizers with a <a href="https://android.googlesource.com/platform/build/soong/+/android17-release/cc/config/integer_overflow_blocklist.txt">default BLOCKLIST</a>.</li> <li>
+<code translate="no" dir="ltr">LOCAL_SANITIZE_DIAG</code> turns on diagnostics mode for the sanitizers. Use diagnostics mode only during testing because this will not abort on overflows, completely negating the security advantage of the mitigation. See <a href="#troubleshooting">Troubleshooting</a> for additional details.</li> <li>
+<code translate="no" dir="ltr">LOCAL_SANITIZE_BLOCKLIST</code> allows you to specify a BLOCKLIST file to prevent functions and source files from being sanitized. See <a href="#troubleshooting">Troubleshooting</a> for additional details.</li> </ul> <p> If you want more granular control, enable the sanitizers individually using one or both flags: </p> 
+<pre>LOCAL_SANITIZE := signed-integer-overflow, unsigned-integer-overflow
+    LOCAL_SANITIZE_DIAG := signed-integer-overflow, unsigned-integer-overflow</pre> <aside class="caution"><strong>Caution</strong>: The individual sanitizers <strong>must</strong> be specified as above for static binaries/libraries; the <code translate="no" dir="ltr">integer_overflow</code> flag does not support static binaries/libraries. Use both signed and unsigned sanitizers when specifying individually.</aside> <h4 id="intsan-in-bp">Support IntSan in blueprint files</h4> <p> To enable integer overflow sanitization in a blueprint file, such as <a href="https://android.googlesource.com/platform/external/libnl/+/android17-release/Android.bp#64"><code translate="no" dir="ltr">/platform/external/libnl/Android.bp</code></a>, add: </p> 
+<pre>   sanitize: {
+          integer_overflow: true,
+          diag: {
+              integer_overflow: true,
+          },
+          BLOCKLIST: "modulename_BLOCKLIST.txt",
+       },</pre> <p> As with make files, the <code translate="no" dir="ltr">integer_overflow</code> property is a pre-packaged set of options for the individual signed and unsigned integer overflow sanitizers with a <a href="https://android.googlesource.com/platform/build/soong/+/android17-release/cc/config/integer_overflow_blocklist.txt">default BLOCKLIST</a>. </p> <p> The <code translate="no" dir="ltr">diag</code> set of properties enables diagnostics mode for the sanitizers. Use diagnostics mode only during testing. Diagnostics mode doesn't abort on overflows, which completely negates the security advantage of the mitigation in user builds. See <a href="#troubleshooting">Troubleshooting</a> for additional details. </p> <p> The <code translate="no" dir="ltr">BLOCKLIST</code> property allows specification of a BLOCKLIST file that allows developers to prevent functions and source files from being sanitized. See <a href="#troubleshooting">Troubleshooting</a> for additional details. </p> <p> To enable the sanitizers individually, use: </p> 
+<pre>   sanitize: {
+          misc_undefined: ["signed-integer-overflow", "unsigned-integer-overflow"],
+          diag: {
+              misc_undefined: ["signed-integer-overflow",
+                               "unsigned-integer-overflow",],
+          },
+          BLOCKLIST: "modulename_BLOCKLIST.txt",
+       },</pre> <aside class="caution"><strong>Caution</strong>: The individual sanitizers <strong>must</strong> be specified as above for static binaries/libraries in Android 9; the <code translate="no" dir="ltr">integer_overflow</code> flag does not support static binaries/libraries. Use both signed and unsigned sanitizers when specifying individually.</aside> <h3 id="troubleshooting">Troubleshooting</h3> <p> If you are enabling integer overflow sanitization in new components, or rely on platform libraries that have had integer overflow sanitization, you may run into a few issues with benign integer overflows causing aborts. You should test components with sanitization enabled to ensure benign overflows can be surfaced. </p> <p> To find, aborts caused by sanitization in user builds, search for <code translate="no" dir="ltr">SIGABRT</code> crashes with Abort messages indicating an overflow caught by UBSan, such as: </p> 
+<pre>pid: ###, tid: ###, name: Binder:###  &gt;&gt;&gt; /system/bin/surfaceflinger &lt;&lt;&lt;
+    signal 6 (SIGABRT), code -6 (SI_TKILL), fault addr --------
+    Abort message: 'ubsan: sub-overflow'</pre> <p> The stack trace should include the function causing the abort, however, overflows that occur in inline functions may not be evident in the stack trace. </p> <aside class="caution"><strong>Caution</strong>: In no-diagnostic mode, all aborts for the same check type within a function are collapsed to a single call site. This also includes code from any <i>other</i> function inlined into the function where the abort seems to occur. Because of this, attempts to symbolize the abort stack will be misleading. To correctly debug a sanitizer abort, reproduce the issue in diagnostic mode as described above.</aside> <p> To more easily determine the root cause, enable diagnostics in the library triggering the abort and attempt to reproduce the error. <strong>With diagnostics enabled, the process will not abort</strong> and will instead continue to run. Not aborting helps maximize the number of benign overflows in a particular execution path without having to recompile after fixing each bug. Diagnostics produces an error message which includes the line number and source file causing the abort: </p> 
+<pre>frameworks/native/services/surfaceflinger/SurfaceFlinger.cpp:2188:32: runtime error: unsigned integer overflow: 0 - 1 cannot be represented in type 'size_t' (aka 'unsigned long')</pre> <p> Once the problematic arithmetic operation is located, ensure that the overflow is benign and intended (e.g. has no security implications). You can address the sanitizer abort by: </p> <ul> <li>Refactoring the code to avoid the overflow (<a href="https://android-review.googlesource.com/c/platform/frameworks/av/+/572808">example</a>) </li>
+<li>Overflow explicitly via Clang's <a href="https://clang.llvm.org/docs/LanguageExtensions.html#checked-arithmetic-builtins">__builtin_*_overflow</a> functions (<a href="https://android-review.googlesource.com/c/platform/frameworks/av/+/588160">example</a>) </li>
+<li>Disabling sanitization in the function by specifying the <code translate="no" dir="ltr">no_sanitize</code> attribute (<a href="https://android-review.googlesource.com/c/platform/frameworks/base/+/531720">example</a>) </li>
+<li>Disabling sanitization of a function or source file via a BLOCKLIST file (<a href="https://android-review.googlesource.com/c/platform/frameworks/base/+/574222">example</a>)</li>
+</ul> <p> You should use the most granular solution possible. For example, a large function with many arithmetic operations and a single overflowing operation should have the single operation refactored rather than the entire function BLOCKLISTed. </p> <p> Common patterns that may result in benign overflows include: </p> <ul> <li>
+<a href="http://www.cplusplus.com/doc/tutorial/typecasting/">Implicit casts</a> where an unsigned overflow occurs before being cast to a signed type (<a href="https://android-review.googlesource.com/c/platform/frameworks/av/+/574011">example</a>) </li>
+<li>Linked list deletions which decrements the loop index on deletion (<a href="https://android-review.googlesource.com/c/platform/frameworks/base/+/588158">example</a>) </li>
+<li>Assigning an unsigned type to -1 instead of specifying the actual max value (<a href="https://android-review.googlesource.com/c/platform/frameworks/native/+/574088/1/services/surfaceflinger/Layer.cpp">example</a>) </li>
+<li>Loops which decrement an unsigned integer in the condition (<a href="https://android-review.googlesource.com/c/platform/frameworks/native/+/573763/1/services/inputflinger/InputReader.cpp">example</a>, <a href="https://android-review.googlesource.com/c/platform/frameworks/rs/+/572756">example</a>)</li>
+</ul> <p> It is recommended that developers assure that cases where the sanitizer detects an overflow that it is indeed benign with no unintended side-effects or security implications before disabling sanitization. </p> <h4 id="disabling-intsan">Disable IntSan</h4> <p> You can disable IntSan with BLOCKLISTs or function attributes. Disable sparingly and only when refactoring the code is otherwise unreasonable or if there is problematic performance overhead. </p> <p> See the upstream Clang documentation for more information on disabling IntSan with <a href="https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html#disabling-instrumentation-with-attribute-no-sanitize-undefined">function attributes</a> and <a href="https://clang.llvm.org/docs/SanitizerSpecialCaseList.html">BLOCKLIST file formatting</a>. BLOCKLISTing should be scoped to the particular sanitizer by using section names specifying the target sanitizer to avoid impacting other sanitizers. </p> <h3 id="validation">Validation</h3> <p> Currently, there are no CTS test specifically for Integer Overflow Sanitization. Instead, make sure that CTS tests pass with or without IntSan enabled to verify that it is not impacting the device. </p> <h2 id="bounds-sanitization">Bounds sanitization</h2> <p>BoundsSanitizer (BoundSan) adds instrumentation to binaries to insert bounds checks around array accesses. These checks are added if the compiler cannot prove at compile time that the access will be safe and if the size of the array will be known at runtime, so that it can be checked against. Android 10 deploys BoundSan in Bluetooth and codecs. BoundSan is provided by the compiler and is enabled by default in various components throughout the platform.</p> <h3 id="implementation">Implementation</h3> <p>BoundSan uses <a href="sanitizers#undefinedbehaviorsanitizer">UBSan's</a> bounds sanitizer. This mitigation is enabled on a per-module level. It helps keep critical components of Android secure and shouldn't be disabled.</p> <p>We strongly encourage you to enable BoundSan for additional components. Ideal candidates are privileged native code or complex native code that parses untrusted user input. The performance overhead associated with enabling BoundSan is dependent on the number of array accesses that can't be proven safe. Expect a small overhead percentage on average and test if performance is a concern.</p> <h4 id="blueprint-files">Enable BoundSan in blueprint files</h4> <p>BoundSan can be enabled in blueprint files by adding <code translate="no" dir="ltr">"bounds"</code> to the <code translate="no" dir="ltr">misc_undefined</code> sanitize property for binary and library modules:</p> 
+<pre>    sanitize: {
+       misc_undefined: ["bounds"],
+       diag: {
+          misc_undefined: ["bounds"],
+       },
+       BLOCKLIST: "modulename_BLOCKLIST.txt",</pre> <h5 id="diag">diag</h5> <p>The <code translate="no" dir="ltr">diag</code> property enables diagnostics mode for the sanitizers. Use diagnostics mode only during testing. Diagnostics mode doesn't abort on overflows, which negates the security advantage of the mitigation and carries a higher performance overhead, so it's not recommended for production builds.</p> <h5 id="BLOCKLIST">BLOCKLIST</h5> <p>The <code translate="no" dir="ltr">BLOCKLIST</code> property allows the specification of a BLOCKLIST file that developers can use to prevent functions and source files from being sanitized. Use this property only if performance is a concern and the targeted files/functions contribute substantially. Manually audit these files/functions to ensure that array accesses are safe. See <a href="#troubleshooting">Troubleshooting</a> for additional details.</p> <h4 id="makefiles">Enable BoundSan in makefiles</h4> <p>BoundSan can be enabled in makefiles by adding <code translate="no" dir="ltr">"bounds"</code> to the <code translate="no" dir="ltr">LOCAL_SANITIZE</code> variable for binary and library modules:</p> 
+<pre>    LOCAL_SANITIZE := bounds
+    # Optional features
+    LOCAL_SANITIZE_DIAG := bounds
+    LOCAL_SANITIZE_BLOCKLIST := modulename_BLOCKLIST.txt</pre> <p><code translate="no" dir="ltr">LOCAL_SANITIZE</code> accepts a list of sanitizers separated by a comma.</p> <p><code translate="no" dir="ltr">LOCAL_SANITIZE_DIAG</code> turns on diagnostics mode. Use diagnostics mode only during testing. Diagnostics mode doesn't abort on overflows, which negates the security advantage of the mitigation and carries a higher performance overhead, so it's not recommended for production builds.</p> <p><code translate="no" dir="ltr">LOCAL_SANITIZE_BLOCKLIST</code> allows specification of a BLOCKLIST file that allows developers to prevent functions and source files from being sanitized. Use this property only if performance is a concern and the targeted files/functions contribute substantially. Manually audit these files/functions to ensure that array accesses are safe. See <a href="#troubleshooting">Troubleshooting</a> for additional details.</p> <h4 id="disabling-boundsan">Disable BoundSan</h4> <p>You can disable BoundSan in functions and source files with BLOCKLISTs or function attributes. It's best to keep BoundSan enabled, so only disable it if the function or file is creating a large amount of performance overhead and the source has been manually reviewed.</p> <p>For more Information on disabling BoundSan with <a href="https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html#disabling-instrumentation-with-attribute-no-sanitize-undefined">function attributes</a> and <a href="https://clang.llvm.org/docs/SanitizerSpecialCaseList.html">BLOCKLIST file formatting</a>, refer to the Clang LLVM <a href="https://clang.llvm.org/docs/">documentation</a>. Scope the BLOCKLISTing to the particular sanitizer by using section names specifying the target sanitizer to avoid impacting other sanitizers.</p> <h3 id="validation">Validation</h3> <p>There are no CTS test specifically for BoundSan. Instead, make sure that CTS tests pass with or without BoundSan enabled to verify that it isn't impacting the device.</p> <h3 id="troubleshooting">Troubleshooting</h3> <p>Thoroughly test components after enabling BoundSan to ensure that any previously undetected out-of-bounds accesses are addressed.</p> <p>BoundSan errors can be easily identified as they include the following tombstone abort message:</p> 
+<pre>    pid: ###, tid: ###, name: Binder:###  &gt;&gt;&gt; /system/bin/foobar &lt;&lt;&lt;
+    signal 6 (SIGABRT), code -6 (SI_TKILL), fault addr --------
+    Abort message: 'ubsan: out-of-bounds'</pre> <p>When running in diagnostics mode, the source file, line number, and index value are printed to <code translate="no" dir="ltr">logcat</code>. By default, this mode doesn't throw an abort message. Review <code translate="no" dir="ltr">logcat</code> to check for any errors.</p> 
+<pre>    external/foo/bar.c:293:13: runtime error: index -1 out of bounds for type 'int [24]'</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/security/test/bounds-sanitizer" class="_attribution-link">https://source.android.com/docs/security/test/bounds-sanitizer</a>
+  </p>
+</div>

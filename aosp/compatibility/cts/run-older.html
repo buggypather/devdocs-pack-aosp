@@ -1,0 +1,29 @@
+<h1>Run CTS automated tests (AOSP 10 or lower)</h1>  <p>This page contains instructions for running CTS automated tests on Android 10 or lower.</p> <h2 id="retry-session">Run a retry session</h2> <p>If this is your first test run, there might be tests that fail due to issues beyond your control. For example, a network connection might be slow or a GPS signal might be weak. So, rerun (retry) the tests until all test modules are completed and the test failure numbers are the same in the last two retry sessions. To run a retry session for Android 9 and 10:</p> 
+<pre>  run retry --retry session_number`
+</pre> <p>To run a retry session for Android 8.1 or lower:</p> 
+<pre>  run cts --retry session_number
+</pre>
+<aside class="note"><strong>Note:</strong><span> For implementation details for CTS retry, see <a href="../../core/tests/tradefed/testing/through-suite/suite-retry">Use suite retry</a>.</span></aside> <h2 id="retry-failed-parameterized-tests">Run a retry session on failed parameterized tests</h2> <p>Passed parameterized tests aren't retried. To run a retry session on failed parameterized tests only:</p> 
+<pre>run retry --retry session_number --new-parameterized-handling
+</pre> <h2 id="individual-test-plans">Run individual test plans</h2> <p>Instead of running all test plans at once, you can run individual test plans. To run an individual test plan:</p> <ol> <li>
+<p>Identify the name of the test plan you want to run.</p> <p>For Android 7 and higher:</p> 
+<pre>list modules
+</pre> <p>For Android 6 or lower:</p> 
+<pre>list plans
+</pre>
+</li> <li>
+<p>Run the test plan:</p> 
+<pre>run cts --plan test_module_or_plan_name
+</pre>
+</li> </ol> <aside class="note"><strong>Note:</strong><span> For a list of all CTS console commands for Android 7 and higher, see <a href="https://source.android.com/compatibility/cts/command-console-v2">CTS v2 command console</a>. For a list of all CTS console commands for Android 6 or lower, see <a href="https://source.android.com/compatibility/cts/command_console">CTS v1 command console</a>.</span></aside> <h2 id="improve_test_execution_time">Improve test execution time</h2> <p>If you want to improve test execution time, you can shard tests across multiple devices. Sharding requires the host to connect at least two devices, but six or more devices are recommended for efficiency.</p> <p>To shard tests on Android 9 or 10, run:</p> 
+<pre>run cts --shard-count number_of_shards
+</pre> <p>To shard tests on Android 8.1 or lower, run:</p> 
+<pre>run cts --shards number_of_shards
+</pre> <h2 id="running-cts-alt-modes">Run CTS for multiscreen devices</h2> <p>If your device is running Android 10, and your device has multiple screens, you must run the <code translate="no" dir="ltr">cts-foldable</code> test plan separately:</p> 
+<pre>run cts-foldable
+</pre> <p>Passed or failed test cases for alternate screen mode are appended with the value from <code translate="no" dir="ltr">display_mode</code>, for example, <code translate="no" dir="ltr">testcase1[display_mode=0]</code>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/compatibility/cts/run-older" class="_attribution-link">https://source.android.com/docs/compatibility/cts/run-older</a>
+  </p>
+</div>

@@ -1,0 +1,419 @@
+<h1>ABI stability</h1>  <p> Application Binary Interface (ABI) stability is a prerequisite of framework-only updates because vendor modules may depend on the Vendor Native Development Kit (VNDK) shared libraries that reside in the system partition. Within an Android release, newly-built VNDK shared libraries must be ABI-compatible to previously released VNDK shared libraries so vendor modules can work with those libraries without recompilation and without runtime errors. Between Android releases, VNDK libraries can be changed and there are no ABI guarantees. </p> <p> To help ensure ABI compatibility, Android 9 includes a header ABI checker, as described in the following sections. </p>
+<h2 id="about-vndk-abi-compliance">About VNDK and ABI compliance</h2> <p> The VNDK is a restrictive set of libraries that vendor modules may link to and which enable framework-only updates. <em>ABI compliance</em> refers to the ability of a newer version of a shared library to work as expected with a module that is dynamically linked to it (i.e. works as an older version of the library would). </p> <h3 id="about-exported-symbols">About exported symbols</h3> <p> An <em>exported symbol</em> (also known as a <em>global symbol</em>) refers to a symbol that satisfies all of the following: </p> <ul> <li>Exported by the <em>public headers</em> of a shared library.</li> <li>Appears in the <code translate="no" dir="ltr">.dynsym</code> table of the <code translate="no" dir="ltr">.so</code> file corresponding to the shared library.</li> <li>Has WEAK or GLOBAL binding.</li> <li>Visibility is DEFAULT or PROTECTED.</li> <li>Section index is not UNDEFINED.</li> <li>Type is either FUNC or OBJECT.</li> </ul> <p> The <em>public headers</em> of a shared library are defined as the headers available to other libraries/binaries through the <code translate="no" dir="ltr">export_include_dirs</code>, <code translate="no" dir="ltr">export_header_lib_headers</code>, <code translate="no" dir="ltr">export_static_lib_headers</code>, <code translate="no" dir="ltr">export_shared_lib_headers</code>, and <code translate="no" dir="ltr">export_generated_headers</code> attributes in <code translate="no" dir="ltr">Android.bp</code> definitions of the module corresponding to the shared library. </p> <h3 id="about-reachable-types">About reachable types</h3> <p> A <em>reachable type</em> is any C/C++ built-in or user-defined type that is reachable directly or indirectly through an exported symbol AND exported through public headers. For example, <code translate="no" dir="ltr">libfoo.so</code> has function <code translate="no" dir="ltr">Foo</code>, which is an exported symbol found in the <code translate="no" dir="ltr">.dynsym</code> table. The <code translate="no" dir="ltr">libfoo.so</code> library includes the following: </p> <table> <tr> <th>foo_exported.h</th> <th>foo.private.h</th> </tr> <tr> <td> 
+<pre>typedef struct foo_private foo_private_t;
+
+typedef struct foo {
+  int m1;
+  int *m2;
+  foo_private_t *mPfoo;
+} foo_t;
+
+typedef struct bar {
+  foo_t mfoo;
+} bar_t;
+
+bool Foo(int id, bar_t *bar_ptr);</pre> </td> <td> 
+<pre>typedef struct foo_private {
+  int m1;
+  float mbar;
+} foo_private_t;</pre> </td> </tr> </table> <table> <tr> <th>Android.bp</th> </tr> <tr> <td> 
+<pre>cc_library {
+  name : libfoo,
+  vendor_available: true,
+  vndk {
+    enabled : true,
+  }
+  srcs : ["src/*.cpp"],
+  export_include_dirs : [
+    "exported"
+  ],
+}</pre> </td> </tr> </table> <table> <tr> <th colspan="8">.dynsym table</th> </tr> <tr> <td>
+<code translate="no" dir="ltr">Num</code> </td> <td>
+<code translate="no" dir="ltr">Value</code> </td> <td>
+<code translate="no" dir="ltr">Size</code> </td> <td>
+<code translate="no" dir="ltr">Type</code> </td> <td>
+<code translate="no" dir="ltr">Bind</code> </td> <td>
+<code translate="no" dir="ltr">Vis</code> </td> <td>
+<code translate="no" dir="ltr">Ndx</code> </td> <td>
+<code translate="no" dir="ltr">Name</code> </td> </tr> <tr> <td>
+<code translate="no" dir="ltr">1</code> </td> <td>
+<code translate="no" dir="ltr">0</code> </td> <td>
+<code translate="no" dir="ltr">0</code> </td> <td>
+<code translate="no" dir="ltr">FUNC</code> </td> <td>
+<code translate="no" dir="ltr">GLOB</code> </td> <td>
+<code translate="no" dir="ltr">DEF</code> </td> <td>
+<code translate="no" dir="ltr">UND</code> </td> <td>
+<code translate="no" dir="ltr">dlerror@libc</code> </td> </tr> <tr> <td>
+<code translate="no" dir="ltr">2</code> </td> <td>
+<code translate="no" dir="ltr">1ce0</code> </td> <td>
+<code translate="no" dir="ltr">20</code> </td> <td>
+<code translate="no" dir="ltr">FUNC</code> </td> <td>
+<code translate="no" dir="ltr">GLOB</code> </td> <td>
+<code translate="no" dir="ltr">DEF</code> </td> <td>
+<code translate="no" dir="ltr">12</code> </td> <td>
+<code translate="no" dir="ltr">Foo</code> </td> </tr> </table> <p> Looking at <code translate="no" dir="ltr">Foo</code>, direct/indirect reachable types include: </p> <table> <tr> <th>Type</th> <th>Description</th> </tr> <tr> <td>
+<code translate="no" dir="ltr">bool</code> </td> <td>Return type of <code translate="no" dir="ltr">Foo</code>. </td> </tr> <tr> <td>
+<code translate="no" dir="ltr">int</code> </td> <td>Type of first <code translate="no" dir="ltr">Foo</code> parameter. </td> </tr> <tr> <td>
+<code translate="no" dir="ltr">bar_t *</code> </td> <td>Type of second Foo parameter. By way of <code translate="no" dir="ltr">bar_t *</code>, <code translate="no" dir="ltr">bar_t</code> is exported through <code translate="no" dir="ltr">foo_exported.h</code>. <br><br> <code translate="no" dir="ltr">bar_t</code> contains a member <code translate="no" dir="ltr">mfoo</code>, of type <code translate="no" dir="ltr">foo_t</code>, which is exported through <code translate="no" dir="ltr">foo_exported.h</code>, which results in more types being exported: <ul> <li>
+<code translate="no" dir="ltr">int :</code> is the type of <code translate="no" dir="ltr">m1</code>.</li> <li>
+<code translate="no" dir="ltr">int * :</code> is the type of <code translate="no" dir="ltr">m2</code>.</li> <li>
+<code translate="no" dir="ltr">foo_private_t * : </code> is the type of <code translate="no" dir="ltr">mPfoo</code>.</li> </ul> <br> However, <code translate="no" dir="ltr">foo_private_t</code> is NOT reachable because it isn't exported through <code translate="no" dir="ltr">foo_exported.h</code>. (<code translate="no" dir="ltr">foo_private_t *</code> is opaque, therefore changes made to <code translate="no" dir="ltr">foo_private_t</code> are allowed.) </td> </tr> </table> <p> A similar explanation can be given for types reachable through base class specifiers and template parameters as well. </p> <h2 id="ensuring-abi-compliance">Ensure ABI compliance</h2> <p> ABI compliance must be ensured for the libraries marked <code translate="no" dir="ltr">vendor_available: true</code> and <code translate="no" dir="ltr">vndk.enabled: true</code> in the corresponding <code translate="no" dir="ltr">Android.bp</code> files. For example: </p> 
+<pre>cc_library {
+    name: "libvndk_example",
+    vendor_available: true,
+    vndk: {
+        enabled: true,
+    }
+}</pre> <p> For data types reachable directly or indirectly by an exported function, the following changes to a library are classified as ABI-breaking: </p> <table> <tr> <th>Data type</th> <th>Description</th> </tr> <tr> <td>Structures and Classes</td> <td> <ul> <li>Change the size of the class type or the struct type.</li> <li>Base classes <ul> <li>Add or remove base classes.</li> <li>Add or remove virtually inherited base classes.</li> <li>Change the order of base classes.</li> </ul> </li> <li>Member functions <ul> <li>Remove member functions*.</li> <li>Add or remove arguments from member functions.</li> <li>Change the argument types or the return types of member functions*.</li> <li>Change the virtual table layout.</li> </ul> </li> <li>Data members <ul> <li>Remove static data members.</li> <li>Add or remove non-static data members.</li> <li>Change the types of data members.</li> <li>Change the offsets to non-static data members**.</li> <li>Change the <code translate="no" dir="ltr">const</code>, <code translate="no" dir="ltr">volatile</code>, and/or <code translate="no" dir="ltr">restricted</code> qualifiers of data members***.</li> <li>Downgrade the access specifiers of data members***.</li> </ul> </li> <li>Change the template arguments.</li> </ul> </td> </tr> <tr> <td>Unions</td> <td> <ul> <li>Add or remove data members.</li> <li>Change the size of the union type.</li> <li>Change the types of data members.</li> </ul> </td> </tr> <tr> <td>Enumerations</td> <td> <ul> <li>Change the underlying type.</li> <li>Change the names of enumerators.</li> <li>Change the values of enumerators.</li> </ul> </td> </tr> <tr> <td>Global Symbols</td> <td> <ul> <li>Remove the symbols exported by public headers.</li> <li>For global symbols of type FUNC <ul> <li>Add or remove arguments.</li> <li>Change the argument types.</li> <li>Change the return type.</li> <li>Downgrade the access specifier***.</li> </ul> </li> <li>For global symbols of type OBJECT <ul> <li>Change the corresponding C/C++ type.</li> <li>Downgrade the access specifier***.</li> </ul> </li> </ul> </td> </tr> </table> <p> <strong>*</strong> Both public and private member functions must not be changed or removed because public inline functions can refer to private member functions. Symbol references to private member functions can be kept in caller binaries. Changing or removing private member functions from shared libraries can result in backward-incompatible binaries. </p> <p> <strong>**</strong> The offsets to public or private data members must not be changed because inline functions can refer to these data members in their function body. Changing data member offsets can result in backward-incompatible binaries. </p> <p> <strong>***</strong> While these don't change the memory layout of the type, there are semantic differences that could lead to libraries not functioning as expected. </p> <h2 id="using-abi-compliance-tools">Use ABI compliance tools</h2> <p> When a VNDK library is built, the library's ABI is compared with the corresponding ABI reference for the version of the VNDK being built. Reference ABI dumps are located in: </p> 
+<pre>${ANDROID_BUILD_TOP}/prebuilts/abi-dumps/vndk/&lt;PLATFORM_VNDK_VERSION&gt;/&lt;BINDER_BITNESS&gt;/&lt;ARCH&gt;/source-based</pre> <p> For example, on building <code translate="no" dir="ltr">libfoo</code> for x86 at API level 27, <code translate="no" dir="ltr">libfoo</code>'s inferred ABI is compared with its reference at: </p> 
+<pre>${ANDROID_BUILD_TOP}/prebuilts/abi-dumps/vndk/27/64/x86/source-based/libfoo.so.lsdump</pre> <h3 id="abit-breakage-error">ABI breakage error</h3> <p> On ABI breakages, the build log displays warnings with the warning type and a path to the abi-diff report. For example, if <code translate="no" dir="ltr">libbinder</code>'s ABI has an incompatible change, the build system throws an error with a message similar to the following: </p> 
+<pre>
+*****************************************************
+error: VNDK library: libbinder.so's ABI has INCOMPATIBLE CHANGES
+Please check compatibility report at:
+out/soong/.intermediates/frameworks/native/libs/binder/libbinder/android_arm64_armv8-a_cortex-a73_vendor_shared/libbinder.so.abidiff
+******************************************************
+---- Please update abi references by running
+platform/development/vndk/tools/header-checker/utils/create_reference_dumps.py -l libbinder ----
+</pre> <h3 id="building-vndk-lib-abi-checks">Build VNDK library ABI checks</h3> <p> When a VNDK library is built: </p> <ol> <li>
+<code translate="no" dir="ltr">header-abi-dumper</code> processes the source files compiled to build the VNDK library (the library's own source files as well as source files inherited through static transitive dependencies), to produce <code translate="no" dir="ltr">.sdump</code> files that correspond to each source. <br> <img src="https://source.android.com/docs/core/architecture/images/abi_check_sdump.png" class="android-image-dark-theme-background" alt="sdump creation" title="sdump creation"> <figcaption><strong>Figure 1.</strong> Creating the <code translate="no" dir="ltr">.sdump</code> files</figcaption> </li> <li>
+<code translate="no" dir="ltr">header-abi-linker</code> then processes the <code translate="no" dir="ltr">.sdump</code> files (using either a version script provided to it or the <code translate="no" dir="ltr">.so</code> file corresponding to the shared library) to produce a <code translate="no" dir="ltr">.lsdump</code> file that logs all of the ABI information corresponding to the shared library. <br> <img src="https://source.android.com/docs/core/architecture/images/abi_check_lsdump.png" class="android-image-dark-theme-background" alt="lsdump creation" title="lsdump creation"> <figcaption><strong>Figure 2.</strong> Creating the <code translate="no" dir="ltr">.lsdump</code> file</figcaption> </li> <li>
+<code translate="no" dir="ltr">header-abi-diff</code> compares the <code translate="no" dir="ltr">.lsdump</code> file with a reference <code translate="no" dir="ltr">.lsdump</code> file to produce a diff report that outlines the differences in the ABIs of the two libraries. <br> <img src="https://source.android.com/docs/core/architecture/images/abi_check_abidiff.png" class="android-image-dark-theme-background" alt="abi diff creation" title="abi diff creation"> <figcaption><strong>Figure 3.</strong> Creating the diff report</figcaption> </li> </ol> <h3 id="header-abi-dumper">header-abi-dumper</h3> <p> The <code translate="no" dir="ltr">header-abi-dumper</code> tool parses a C/C++ source file and dumps the ABI inferred from that source file into an intermediate file. The build system runs <code translate="no" dir="ltr">header-abi-dumper</code> on all compiled source files while also building a library that includes the source files from transitive dependencies. </p> <table> <tr> <th>Inputs</th> <td> <ul> <li>A C/C++ source file</li> <li>Exported include directories</li> <li>Compiler flags</li> </ul> </td> </tr> <tr> <th>Output</th> <td>A file that describes the ABI of the source file (for example, <code translate="no" dir="ltr">foo.sdump </code>represents <code translate="no" dir="ltr">foo.cpp</code>'s ABI). </td> </tr> </table> <p> Currently <code translate="no" dir="ltr">.sdump</code> files are in JSON format, which isn't guaranteed to be stable across future releases. As such, <code translate="no" dir="ltr">.sdump</code> file formatting should be considered a build system implementation detail. </p> <p> For example, <code translate="no" dir="ltr">libfoo.so</code> has the following source file <strong><code translate="no" dir="ltr">foo.cpp</code></strong>: </p> 
+<pre>#include &lt;stdio.h&gt;
+#include &lt;foo_exported.h&gt;
+
+bool Foo(int id, bar_t *bar_ptr) {
+    if (id &gt; 0 &amp;&amp; bar_ptr-&gt;mfoo.m1 &gt; 0) {
+        return true;
+    }
+    return false;
+}</pre> <p> You can use <code translate="no" dir="ltr">header-abi-dumper</code> to generate an intermediate <code translate="no" dir="ltr">.sdump</code> file that represents the ABI presented by the source file using: </p> 
+<pre>$ header-abi-dumper foo.cpp -I exported -o foo.sdump -- -I exported -x c++</pre> <p> This command tells <code translate="no" dir="ltr">header-abi-dumper</code> to parse <code translate="no" dir="ltr">foo.cpp</code> with the compiler flags following <code translate="no" dir="ltr">--</code>, and emit the ABI information that is exported by the public headers in the <code translate="no" dir="ltr">exported</code> directory. The following is <strong><code translate="no" dir="ltr">foo.sdump</code></strong> generated by <code translate="no" dir="ltr">header-abi-dumper</code>: </p> 
+<pre>{
+ "array_types" : [],
+ "builtin_types" :
+ [
+  {
+   "alignment" : 4,
+   "is_integral" : true,
+   "linker_set_key" : "_ZTIi",
+   "name" : "int",
+   "referenced_type" : "_ZTIi",
+   "self_type" : "_ZTIi",
+   "size" : 4
+  }
+ ],
+ "elf_functions" : [],
+ "elf_objects" : [],
+ "enum_types" : [],
+ "function_types" : [],
+ "functions" :
+ [
+  {
+   "function_name" : "FooBad",
+   "linker_set_key" : "_Z6FooBadiP3foo",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIP3foo"
+    }
+   ],
+   "return_type" : "_ZTI3bar",
+   "source_file" : "exported/foo_exported.h"
+  }
+ ],
+ "global_vars" : [],
+ "lvalue_reference_types" : [],
+ "pointer_types" :
+ [
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIP11foo_private",
+   "name" : "foo_private *",
+   "referenced_type" : "_ZTI11foo_private",
+   "self_type" : "_ZTIP11foo_private",
+   "size" : 8,
+   "source_file" : "exported/foo_exported.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIP3foo",
+   "name" : "foo *",
+   "referenced_type" : "_ZTI3foo",
+   "self_type" : "_ZTIP3foo",
+   "size" : 8,
+   "source_file" : "exported/foo_exported.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIPi",
+   "name" : "int *",
+   "referenced_type" : "_ZTIi",
+   "self_type" : "_ZTIPi",
+   "size" : 8,
+   "source_file" : "exported/foo_exported.h"
+  }
+ ],
+ "qualified_types" : [],
+ "record_types" :
+ [
+  {
+   "alignment" : 8,
+   "fields" :
+   [
+    {
+     "field_name" : "mfoo",
+     "referenced_type" : "_ZTI3foo"
+    }
+   ],
+   "linker_set_key" : "_ZTI3bar",
+   "name" : "bar",
+   "referenced_type" : "_ZTI3bar",
+   "self_type" : "_ZTI3bar",
+   "size" : 24,
+   "source_file" : "exported/foo_exported.h"
+  },
+  {
+   "alignment" : 8,
+   "fields" :
+   [
+    {
+     "field_name" : "m1",
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "field_name" : "m2",
+     "field_offset" : 64,
+     "referenced_type" : "_ZTIPi"
+    },
+    {
+     "field_name" : "mPfoo",
+     "field_offset" : 128,
+     "referenced_type" : "_ZTIP11foo_private"
+    }
+   ],
+   "linker_set_key" : "_ZTI3foo",
+   "name" : "foo",
+   "referenced_type" : "_ZTI3foo",
+   "self_type" : "_ZTI3foo",
+   "size" : 24,
+   "source_file" : "exported/foo_exported.h"
+  }
+ ],
+ "rvalue_reference_types" : []
+}</pre> <p> <code translate="no" dir="ltr">foo.sdump</code> contains ABI information exported by the source file <code translate="no" dir="ltr">foo.cpp</code> and the public headers, for example, </p> <ul> <li>
+<code translate="no" dir="ltr">record_types</code>. Refer to structs, unions, or classes defined in the public headers. Each record type has information about its fields, its size, access specifier, the header file it's defined in, and other attributes.</li> <li>
+<code translate="no" dir="ltr">pointer_types</code>. Refer to pointer types directly/indirectly referenced by the exported records/functions in the public headers, along with the type the pointer points to (through the <code translate="no" dir="ltr">referenced_type</code> field in <code translate="no" dir="ltr">type_info</code>). Similar information is logged in the <code translate="no" dir="ltr">.sdump</code> file for qualified types, built-in C/C++ types, array types, and lvalue and rvalue reference types. Such information allows recursive diffing.</li> <li>
+<code translate="no" dir="ltr">functions</code>. Represent functions exported by public headers. They also have information about the function's mangled name, the return type, the types of the parameters, the access specifier, and other attributes.</li> </ul> <aside class="tip"> <strong>Tip:</strong> To get help with the <code translate="no" dir="ltr">header-abi-dumper</code> tool, run <code translate="no" dir="ltr">header-abi-dumper --help</code>. </aside> <h3 id="header-abi-linker">header-abi-linker</h3> <p> The <code translate="no" dir="ltr">header-abi-linker</code> tool takes the intermediate files produced by <code translate="no" dir="ltr">header-abi-dumper</code> as input then links those files: </p> <table> <tr> <th>Inputs</th> <td> <ul> <li>Intermediate files produced by <code translate="no" dir="ltr">header-abi-dumper</code>
+</li> <li>Version script/Map file (optional)</li> <li>
+<code translate="no" dir="ltr">.so</code> file of the shared library</li> <li>Exported include directories</li> </ul> </td> </tr> <tr> <th>Output</th> <td>A file that describes the ABI of a shared library (for example, <code translate="no" dir="ltr">libfoo.so.lsdump </code>represents <code translate="no" dir="ltr">libfoo</code>'s ABI). </td> </tr> </table> <p> The tool merges the type graphs in all the intermediate files given to it, taking into account one-definition (user-defined types in different translation units with the same fully qualified name, might be semantically different) differences across translation units. The tool then parses either a version script or the <code translate="no" dir="ltr">.dynsym</code> table of the shared library (<code translate="no" dir="ltr">.so</code> file) to make a list of the exported symbols. </p> <p> For example, <code translate="no" dir="ltr">libfoo</code> consists of <code translate="no" dir="ltr">foo.cpp</code> and <code translate="no" dir="ltr">bar.cpp</code>. <code translate="no" dir="ltr">header-abi-linker</code> could be invoked to create the complete linked ABI dump of <code translate="no" dir="ltr">libfoo</code> as follows: </p> 
+<pre>header-abi-linker -I exported foo.sdump bar.sdump \
+                  -o libfoo.so.lsdump \
+                  -so libfoo.so \
+                  -arch arm64 -api current</pre> <p> Example command output in <strong><code translate="no" dir="ltr">libfoo.so.lsdump</code></strong>: </p> 
+<pre>{
+ "array_types" : [],
+ "builtin_types" :
+ [
+  {
+   "alignment" : 1,
+   "is_integral" : true,
+   "is_unsigned" : true,
+   "linker_set_key" : "_ZTIb",
+   "name" : "bool",
+   "referenced_type" : "_ZTIb",
+   "self_type" : "_ZTIb",
+   "size" : 1
+  },
+  {
+   "alignment" : 4,
+   "is_integral" : true,
+   "linker_set_key" : "_ZTIi",
+   "name" : "int",
+   "referenced_type" : "_ZTIi",
+   "self_type" : "_ZTIi",
+   "size" : 4
+  }
+ ],
+ "elf_functions" :
+ [
+  {
+   "name" : "_Z3FooiP3bar"
+  },
+  {
+   "name" : "_Z6FooBadiP3foo"
+  }
+ ],
+ "elf_objects" : [],
+ "enum_types" : [],
+ "function_types" : [],
+ "functions" :
+ [
+  {
+   "function_name" : "Foo",
+   "linker_set_key" : "_Z3FooiP3bar",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIP3bar"
+    }
+   ],
+   "return_type" : "_ZTIb",
+   "source_file" : "exported/foo_exported.h"
+  },
+  {
+   "function_name" : "FooBad",
+   "linker_set_key" : "_Z6FooBadiP3foo",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIP3foo"
+    }
+   ],
+   "return_type" : "_ZTI3bar",
+   "source_file" : "exported/foo_exported.h"
+  }
+ ],
+ "global_vars" : [],
+ "lvalue_reference_types" : [],
+ "pointer_types" :
+ [
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIP11foo_private",
+   "name" : "foo_private *",
+   "referenced_type" : "_ZTI11foo_private",
+   "self_type" : "_ZTIP11foo_private",
+   "size" : 8,
+   "source_file" : "exported/foo_exported.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIP3bar",
+   "name" : "bar *",
+   "referenced_type" : "_ZTI3bar",
+   "self_type" : "_ZTIP3bar",
+   "size" : 8,
+   "source_file" : "exported/foo_exported.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIP3foo",
+   "name" : "foo *",
+   "referenced_type" : "_ZTI3foo",
+   "self_type" : "_ZTIP3foo",
+   "size" : 8,
+   "source_file" : "exported/foo_exported.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIPi",
+   "name" : "int *",
+   "referenced_type" : "_ZTIi",
+   "self_type" : "_ZTIPi",
+   "size" : 8,
+   "source_file" : "exported/foo_exported.h"
+  }
+ ],
+ "qualified_types" : [],
+ "record_types" :
+ [
+  {
+   "alignment" : 8,
+   "fields" :
+   [
+    {
+     "field_name" : "mfoo",
+     "referenced_type" : "_ZTI3foo"
+    }
+   ],
+   "linker_set_key" : "_ZTI3bar",
+   "name" : "bar",
+   "referenced_type" : "_ZTI3bar",
+   "self_type" : "_ZTI3bar",
+   "size" : 24,
+   "source_file" : "exported/foo_exported.h"
+  },
+  {
+   "alignment" : 8,
+   "fields" :
+   [
+    {
+     "field_name" : "m1",
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "field_name" : "m2",
+     "field_offset" : 64,
+     "referenced_type" : "_ZTIPi"
+    },
+    {
+     "field_name" : "mPfoo",
+     "field_offset" : 128,
+     "referenced_type" : "_ZTIP11foo_private"
+    }
+   ],
+   "linker_set_key" : "_ZTI3foo",
+   "name" : "foo",
+   "referenced_type" : "_ZTI3foo",
+   "self_type" : "_ZTI3foo",
+   "size" : 24,
+   "source_file" : "exported/foo_exported.h"
+  }
+ ],
+ "rvalue_reference_types" : []
+}</pre> <p> The <code translate="no" dir="ltr">header-abi-linker</code> tool: </p> <ul> <li>Links the <code translate="no" dir="ltr">.sdump</code> files provided to it (<code translate="no" dir="ltr">foo.sdump</code> and <code translate="no" dir="ltr">bar.sdump</code>), filtering out the ABI information not present in the headers residing in the directory: <code translate="no" dir="ltr">exported</code>.</li> <li>Parses <code translate="no" dir="ltr">libfoo.so</code>, and collects information about the symbols exported by the library through its <code translate="no" dir="ltr">.dynsym</code> table.</li> <li>Adds <code translate="no" dir="ltr">_Z3FooiP3bar</code> and <code translate="no" dir="ltr">_Z6FooBadiP3foo</code>.</li> </ul> <p> <code translate="no" dir="ltr">libfoo.so.lsdump</code> is the final generated ABI dump of <code translate="no" dir="ltr">libfoo.so</code>. </p> <aside class="tip"><strong>Tip:</strong> To get help with the <code translate="no" dir="ltr">header-abi-linker</code> tool, run <code translate="no" dir="ltr">header-abi-linker --help</code>. </aside> <h3 id="header-abi-diff">header-abi-diff</h3> <p> The <code translate="no" dir="ltr">header-abi-diff</code> tool compares two <code translate="no" dir="ltr">.lsdump</code> files representing the ABI of two libraries and produces a diff report stating the differences between the two ABIs. </p> <table> <tr> <th>Inputs</th> <td> <ul> <li>
+<code translate="no" dir="ltr">.lsdump</code> file representing the ABI of an old shared library.</li> <li>
+<code translate="no" dir="ltr">.lsdump</code> file representing the ABI of a new shared library. </li> </ul> </td> </tr> <tr> <th>Output</th> <td>A diff report stating the differences in the ABIs offered by the two shared libraries compared. </td> </tr> </table> <p> The ABI diff file is in <a href="https://protobuf.dev/reference/protobuf/textformat-spec/"> protobuf text format</a>. The format is subject to change in future releases. </p> <p> For example, you have two versions of <code translate="no" dir="ltr">libfoo</code>: <code translate="no" dir="ltr">libfoo_old.so</code> and <code translate="no" dir="ltr">libfoo_new.so</code>. In <code translate="no" dir="ltr">libfoo_new.so</code>, in <code translate="no" dir="ltr">bar_t</code>, you change the type of <code translate="no" dir="ltr">mfoo</code> from <code translate="no" dir="ltr">foo_t</code> to <code translate="no" dir="ltr">foo_t *</code>. Since <code translate="no" dir="ltr">bar_t</code> is a reachable type, this should be flagged as an ABI breaking change by <code translate="no" dir="ltr">header-abi-diff</code>. </p> <p> To run <code translate="no" dir="ltr">header-abi-diff</code>: </p> 
+<pre>header-abi-diff -old libfoo_old.so.lsdump \
+                -new libfoo_new.so.lsdump \
+                -arch arm64 \
+                -o libfoo.so.abidiff \
+                -lib libfoo</pre> <p> Example command output in <strong><code translate="no" dir="ltr">libfoo.so.abidiff</code></strong>: </p> 
+<pre>lib_name: "libfoo"
+arch: "arm64"
+record_type_diffs {
+  name: "bar"
+  type_stack: "Foo-&gt; bar *-&gt;bar "
+  type_info_diff {
+    old_type_info {
+      size: 24
+      alignment: 8
+    }
+    new_type_info {
+      size: 8
+      alignment: 8
+    }
+  }
+  fields_diff {
+    old_field {
+      referenced_type: "foo"
+      field_offset: 0
+      field_name: "mfoo"
+      access: public_access
+    }
+    new_field {
+      referenced_type: "foo *"
+      field_offset: 0
+      field_name: "mfoo"
+      access: public_access
+    }
+  }
+}</pre> <p> The <code translate="no" dir="ltr">libfoo.so.abidiff</code> contains a report of all ABI breaking changes in <code translate="no" dir="ltr">libfoo</code>. The <code translate="no" dir="ltr">record_type_diffs</code> message indicates a record has changed and lists the incompatible changes, which include: </p> <ul> <li>The size of the record changing from <code translate="no" dir="ltr">24</code> bytes to <code translate="no" dir="ltr">8</code> bytes.</li> <li>The field type of <code translate="no" dir="ltr">mfoo</code> changing from <code translate="no" dir="ltr">foo</code> to <code translate="no" dir="ltr">foo *</code> (all typedefs are stripped off).</li> </ul> <p> The <code translate="no" dir="ltr">type_stack</code> field indicates how <code translate="no" dir="ltr">header-abi-diff</code> reached the type that changed (<code translate="no" dir="ltr">bar</code>). This field may be interpreted as <code translate="no" dir="ltr">Foo</code> is an exported function that takes in <code translate="no" dir="ltr">bar *</code> as parameter, that points to <code translate="no" dir="ltr">bar</code>, which was exported and changed. </p> <aside class="tip"> <strong>Tip:</strong> To get help with the <code translate="no" dir="ltr">header-abi-diff</code> tool, run <code translate="no" dir="ltr">header-abi-diff --help</code>. You can also refer to <code translate="no" dir="ltr">development/vndk/tools/header-checker/README.md</code>. </aside> <h2 id="enforcing-abi-api">Enforce ABI and API</h2> <p> To enforce the ABI and API of VNDK shared libraries, ABI references must be checked into <code translate="no" dir="ltr">${ANDROID_BUILD_TOP}/prebuilts/abi-dumps/vndk/</code>. To create these references, run the following command: </p> 
+<pre>${ANDROID_BUILD_TOP}/development/vndk/tools/header-checker/utils/create_reference_dumps.py</pre> <p> After creating the references, any change made to the source code that results in an incompatible ABI/API change in a VNDK library now results in a build error. </p> <p> To update ABI references for specific libraries, run the following command: </p> 
+<pre>${ANDROID_BUILD_TOP}/development/vndk/tools/header-checker/utils/create_reference_dumps.py -l &lt;lib1&gt; -l &lt;lib2&gt;</pre> <p> For example, to update <code translate="no" dir="ltr">libbinder</code> ABI references, run: </p> 
+<pre>${ANDROID_BUILD_TOP}/development/vndk/tools/header-checker/utils/create_reference_dumps.py -l libbinder</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/vndk/abi-stability" class="_attribution-link">https://source.android.com/docs/core/architecture/vndk/abi-stability</a>
+  </p>
+</div>

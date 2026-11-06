@@ -1,0 +1,63 @@
+<h1>Instrumentation tests</h1>  <p>First read <a href="https://developer.android.com/studio/test/">Test your app</a> on developer.android.com. Take note there are some differences in how instrumentation tests are used in platform testing.</p> <p>In summary, an instrumentation test provides a special test execution environment as launched via the <code translate="no" dir="ltr">am instrument</code> command, where the targeted application process is restarted and initialized with basic application context, and an instrumentation thread is started inside the application process VM. Your test code starts execution on this instrumentation thread and is provided with an <code translate="no" dir="ltr">Instrumentation</code> instance that provides access to the application context and APIs to manipulate the application process under test.</p> <h2 id="key_concepts">Key concepts</h2> <ul> <li>an instrumentation must be declared in an application package, with an <a href="https://developer.android.com/guide/topics/manifest/instrumentation-element.html"><code translate="no" dir="ltr">&lt;instrumentation&gt;</code></a> tag nested under the <code translate="no" dir="ltr">&lt;manifest&gt;</code> tag of the application package manifest.</li> <li>an application package manifest may technically contain multiple <code translate="no" dir="ltr">&lt;instrumentation&gt;</code> tags, though it's not commonly used in this fashion.</li> <li>each <code translate="no" dir="ltr">&lt;instrumentation&gt;</code> must contain: <ul> <li>an <code translate="no" dir="ltr">android:name</code> attribute: it should be the name of a subclass of <a href="https://developer.android.com/reference/android/app/Instrumentation.html"><code translate="no" dir="ltr">Instrumentation</code></a> that's included in the test application, which is typically the test runner that's being used, e.g.: <code translate="no" dir="ltr">android.support.test.runner.AndroidJUnitRunner</code>
+</li> <li>an <code translate="no" dir="ltr">android:targetPackage</code> attribute must be defined. Its value should be set to the application package under test.</li> </ul>
+</li> </ul> <h2 id="summary_of_steps">Summary of steps</h2> <ol> <li>
+<p>Below are common destinations for hermetic tests against framework services:</p> 
+<pre>frameworks/base/core/tests/coretests
+frameworks/base/services/tests/servicestests
+</pre> <p>If you are adding a brand new instrumentation module for your component, see</p> <ul> <li><a href="instr-self-e2e">Self-Instrumenting Tests: A Complete Example</a></li> <li><a href="instr-app-e2e">Instrumentation Targeting an Application: A Complete Example</a></li> </ul>
+</li> <li><p>Following the existing convention if you are adding tests into one of the locations above. If you are setting up a new test module, please follow the setup of <code translate="no" dir="ltr">AndroidManifest.xml</code> and <code translate="no" dir="ltr">Android.mk</code> in one of the locations above</p></li> <li>
+<p>See <a href="https://android.googlesource.com/platform/frameworks/base.git/+/android17-release/core/tests/coretests/">frameworks/base/core/tests/coretests/</a> for an example. Note these lines install extra apps:</p> 
+<pre>&lt;option name="test-file-name" value="FrameworksCoreTests.apk" /&gt;
+&lt;option name="test-file-name" value="BstatsTestApp.apk" /&gt;
+</pre>
+</li> <li><p>Do not forget to mark your test as <code translate="no" dir="ltr">@SmallTest</code>, <code translate="no" dir="ltr">@MediumTest</code> or <code translate="no" dir="ltr">@LargeTest</code></p></li> <li>
+<p>Build the test module with m, e.g.:</p> 
+<pre>m FrameworksCoreTests
+</pre>
+</li> <li>
+<p>Run the tests:</p> <ul> <li>
+<p>The simplest solution is to use <a href="atest">Atest</a> like so:</p> 
+<pre>atest FrameworksCoreTests
+</pre>
+</li> <li><p>Or for more complex tests, use the <a href="../tradefed">Trade Federation test Harness</a>:</p></li> </ul> 
+<pre>m tradefed-all
+tradefed.sh run template/local_min --template:map test=FrameworksCoreTests
+</pre>
+</li> <li>
+<p>If not using Tradefed, manually install and run the tests:</p> <ol> <li>Install the generated apk:</li> </ol> 
+<pre>adb install -r ${OUT}/data/app/FrameworksCoreTests/FrameworksCoreTests.apk
+</pre>
+<aside class="tip"><strong>Tip:</strong><span> you use <code translate="no" dir="ltr">adb shell pm list instrumentation</code> to find the instrumentations inside the apk just installed</span></aside> <ol> <li>
+<p>Run the tests with various options:</p> <ol> <li>
+<p>all tests in the apk</p> 
+<pre>adb shell am instrument -w com.android.frameworks.coretests\
+  /android.support.test.runner.AndroidJUnitRunner
+</pre>
+</li> <li>
+<p>all tests under a specific Java package</p> 
+<pre>adb shell am instrument -w -e package android.animation \
+  com.android.frameworks.coretests\
+  /android.support.test.runner.AndroidJUnitRunner
+</pre>
+</li> <li>
+<p>all tests under a specific class</p> 
+<pre>adb shell am instrument -w -e class \
+  android.animation.AnimatorSetEventsTest \
+  com.android.frameworks.coretests\
+  /android.support.test.runner.AndroidJUnitRunner
+</pre>
+</li> <li>
+<p>a specific test method</p> 
+<pre>adb shell am instrument -w -e class \
+  android.animation.AnimatorSetEventsTest#testCancel \
+  com.android.frameworks.coretests\
+  /android.support.test.runner.AndroidJUnitRunner
+</pre>
+</li> </ol>
+</li> </ol>
+</li> </ol> <p>Your test can make an explicit assertion on pass or fail using <code translate="no" dir="ltr">JUnit</code> APIs; in addition, any uncaught exceptions will also cause a functional failure.</p> <p>To emit performance metrics, your test code can call <a href="http://developer.android.com/reference/android/app/Instrumentation.html#sendStatus(int,%20android.os.Bundle)"><code translate="no" dir="ltr">Instrumentation#sendStatus</code></a> to send out a list of key-value pairs. It's important to note that:</p> <ol> <li>metrics can be integer or floating point</li> <li>any non-numerical values will be discarded</li> <li>your test apk can be either functional tests or metrics tests, however mixing both are not currently supported</li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/development/instrumentation" class="_attribution-link">https://source.android.com/docs/core/tests/development/instrumentation</a>
+  </p>
+</div>

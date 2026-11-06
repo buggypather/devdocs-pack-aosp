@@ -1,0 +1,173 @@
+<h1>Fuzz with libFuzzer</h1>  <p> Fuzzing, which is simply providing potentially invalid, unexpected, or random data as an input to a program, is an extremely effective way of finding bugs in large software systems, and is an important part of the software development life cycle. </p> <p> Android's build system supports fuzzing through the inclusion of <a href="http://llvm.org/docs/LibFuzzer.html">libFuzzer</a> from the LLVM compiler infrastructure project project. LibFuzzer is linked with the library under test and handles all input selection, mutation, and crash reporting that occurs during a fuzzing session. LLVM's sanitizers are used to aid in memory corruption detection and code coverage metrics. </p> <p> This article provides an introduction to libFuzzer on Android and how to perform an instrumented build. It also includes instructions to write, run, and customize fuzzers. </p> <h3 id="setup-and-build">Setup and build</h3> <p> To ensure you have a working image running on a device, you can download a <a href="https://developers.google.com/android/images">factory image</a> and flash the device. Alternatively, you can download the AOSP source code and follow the setup and build example below. </p> <aside class="note"><strong>Tip</strong>: For more detailed setup information, see the <a href="../../setup/requirements">Downloading and building</a> section. Follow the instructions to <a href="../../setup/initializing">set up</a> your build environment, <a href="../../setup/downloading">download</a> the source, and build Android (up to the <a href="../../setup/building#build-the-code">make command</a>).</aside> <h4 id="setup-example">Setup example</h4> <p> This example assumes the target device is a Pixel (<code translate="no" dir="ltr">taimen</code>) and is already prepared for USB debugging (<code translate="no" dir="ltr">aosp_taimen-userdebug</code>). You can download other Pixel binaries from <a href="https://developers.google.com/android/drivers">Driver Binaries</a>. </p> 
+<pre>mkdir ~/bin
+export PATH=~/bin:$PATH
+curl https://storage.googleapis.com/git-repo-downloads/repo &gt; ~/bin/repo
+chmod a+x ~/bin/repo
+repo init -u https://android.googlesource.com/platform/manifest -b main
+repo sync -c -j8
+wget https://dl.google.com/dl/android/aosp/google_devices-taimen-qq1a.191205.008-f4537f93.tgz
+tar xvf google_devices-taimen-qq1a.191205.008-f4537f93.tgz
+./extract-google_devices-taimen.sh
+wget https://dl.google.com/dl/android/aosp/qcom-taimen-qq1a.191205.008-760afa6e.tgz
+tar xvf qcom-taimen-qq1a.191205.008-760afa6e.tgz
+./extract-qcom-taimen.sh
+. build/envsetup.sh
+lunch aosp_taimen-userdebug</pre> <h4 id="build-example">Build example</h4> <p> The first step of running fuzz targets is to get a fresh system image. We recommend being at least on the latest development version of Android. </p> <ol> <li>Perform the initial build by issuing: 
+<pre>m</pre>
+</li> <li>To allow you to flash your device, boot your device into fastboot mode using the <a href="https://source.android.com/source/running#booting-into-fastboot-mode">appropriate key combination</a>.</li> <li>Unlock the bootloader and flash the newly compiled image with the following commands. 
+<pre>fastboot oem unlock
+fastboot flashall</pre>
+</li> </ol> <p> The target device should now be ready for libFuzzer fuzzing. </p> <h2 id="write-a-fuzzer">Write a fuzzer</h2> <p> To illustrate writing an end-to-end fuzzer using libFuzzer in Android, use the following vulnerable code as a test case. This helps to test the fuzzer, ensure everything is working correctly, and illustrate what crash data looks like. </p> <p> Here is the test function. </p> 
+<pre>#include &lt;stdint.h&gt;
+#include &lt;stddef.h&gt;
+bool FuzzMe(const char *data, size_t dataSize) {
+    return dataSize &gt;= 3  &amp;&amp;
+           data[0] == 'F' &amp;&amp;
+           data[1] == 'U' &amp;&amp;
+           data[2] == 'Z' &amp;&amp;
+           data[3] == 'Z';  // ← Out of bounds access
+}</pre> <p> To build and run this test fuzzer:</p> <ol> <li>A fuzz target consists of two files: a build file and the fuzz target source code. Create your files in a location next to the library you are fuzzing. Give the fuzzer a name that describes what the fuzzer does.</li> <li>Write a fuzz target using libFuzzer. The fuzz target is a function that takes a blob of data of a specified size and passes it to the function to be fuzzed. Here's a basic fuzzer for the vulnerable test function: 
+<pre>#include &lt;stddef.h&gt;
+#include &lt;stdint.h&gt;
+
+extern "C" int LLVMFuzzerTestOneInput(const char *data, size_t size) {
+  // ...
+  // Use the data to call the library you are fuzzing.
+  // ...
+  return FuzzMe(data, size);
+}</pre>
+</li> <li>Tell Android's build system to create the fuzzer binary. To build the fuzzer, add this code to the <code translate="no" dir="ltr">Android.bp</code> file: 
+<pre>cc_fuzz {
+  name: "fuzz_me_fuzzer",
+  srcs: [
+    "fuzz_me_fuzzer.cpp",
+  ],
+  // If the fuzzer has a dependent library, uncomment the following section and
+  // include it.
+  // static_libs: [
+  //   "libfoo", // Dependent library
+  // ],
+  //
+  // The advanced features below allow you to package your corpus and
+  // dictionary files during building. You can find more information about
+  // these features at:
+  //  - Corpus: https://llvm.org/docs/LibFuzzer.html#corpus
+  //  - Dictionaries: https://llvm.org/docs/LibFuzzer.html#dictionaries
+  // These features are not required for fuzzing, but are highly recommended
+  // to gain extra coverage.
+  // To include a corpus folder, uncomment the following line.
+  // corpus: ["corpus/*"],
+  // To include a dictionary, uncomment the following line.
+  // dictionary: "fuzz_me_fuzzer.dict",
+}</pre> </li> <li>To make the fuzzer for running on target (Device): 
+<pre>SANITIZE_TARGET=hwaddress m fuzz_me_fuzzer
+</pre>
+</li> <li>To make the fuzzer for running on host: 
+<pre>SANITIZE_HOST=address m fuzz_me_fuzzer
+</pre>
+</li> </ol> <p> For convenience, define some shell variables containing the path to your fuzz target and the name of the binary (from the build file you wrote earlier).</p> 
+<pre>export FUZZER_NAME=your_fuzz_target</pre> <p> After following these steps, you should have a built fuzzer. The default location for the fuzzer (for this example Pixel build) is: </p>
+<li>$<var translate="no">ANDROID_PRODUCT_OUT</var>/data/fuzz/$<var translate="no">TARGET_ARCH</var>/$<var translate="no">FUZZER_NAME</var>/$<var translate="no">FUZZER_NAME</var> for device.</li> <li>$<var translate="no">ANDROID_HOST_OUT</var>/fuzz/$<var translate="no">TARGET_ARCH</var>/$<var translate="no">FUZZER_NAME</var>/$<var translate="no">FUZZER_NAME</var> for host.</li> <h2 id="run-your-fuzzer">Run your fuzzer on host</h2> <li>Add to your Android.bp build file: 
+<pre>host_supported: true,</pre> Note that this can be applied only if the library you wish to fuzz is host supported. </li> <li>Run the fuzzer on host by simply running the built fuzzer binary: 
+<pre>$ANDROID_HOST_OUT/fuzz/x86_64/$FUZZER_NAME/$FUZZER_NAME</pre> </li> <h2 id="run-your-fuzzer">Run your fuzzer on device</h2> <p> We want to copy this over to your device using <code translate="no" dir="ltr">adb</code>.</p> <ol> <li>To upload these files to a directory on the device, run these commands: 
+<pre>adb root
+adb sync data</pre> </li> <li>Run the test fuzzer on device with this command: 
+<pre>adb shell /data/fuzz/$(get_build_var TARGET_ARCH)/$FUZZER_NAME/$FUZZER_NAME \
+  /data/fuzz/$(get_build_var TARGET_ARCH)/$FUZZER_NAME/corpus</pre> </li>
+</ol> <p> This results in output similar to the example output below. </p> <aside class="note"><strong>Tip</strong>: See the <a href="http://llvm.org/docs/LibFuzzer.html">LibFuzzer docs</a> for more information on how to read libFuzzer output. </aside> 
+<pre>
+INFO: Seed: 913963180
+INFO: Loaded 2 modules   (16039 inline 8-bit counters): 16033 [0x7041769b88, 0x704176da29), 6 [0x60e00f4df0, 0x60e00f4df6),
+INFO: Loaded 2 PC tables (16039 PCs): 16033 [0x704176da30,0x70417ac440), 6 [0x60e00f4df8,0x60e00f4e58),
+INFO: -max_len is not provided; libFuzzer will not generate inputs larger than 4096 bytes
+INFO: A corpus is not provided, starting from an empty corpus
+#2	INITED cov: 5 ft: 5 corp: 1/1b exec/s: 0 rss: 24Mb
+#10	NEW    cov: 6 ft: 6 corp: 2/4b lim: 4 exec/s: 0 rss: 24Mb L: 3/3 MS: 3 CopyPart-ChangeByte-InsertByte-
+#712	NEW    cov: 7 ft: 7 corp: 3/9b lim: 8 exec/s: 0 rss: 24Mb L: 5/5 MS: 2 InsertByte-InsertByte-
+#744	REDUCE cov: 7 ft: 7 corp: 3/7b lim: 8 exec/s: 0 rss: 25Mb L: 3/3 MS: 2 ShuffleBytes-EraseBytes-
+#990	REDUCE cov: 8 ft: 8 corp: 4/10b lim: 8 exec/s: 0 rss: 25Mb L: 3/3 MS: 1 ChangeByte-
+==18631==ERROR: HWAddressSanitizer: tag-mismatch on address 0x0041e00b4183 at pc 0x0060e00c5144
+READ of size 1 at 0x0041e00b4183 tags: f8/03 (ptr/mem) in thread T0
+    #0 0x60e00c5140  (/data/fuzz/arm64/example_fuzzer/example_fuzzer+0xf140)
+    #1 0x60e00ca130  (/data/fuzz/arm64/example_fuzzer/example_fuzzer+0x14130)
+    #2 0x60e00c9b8c  (/data/fuzz/arm64/example_fuzzer/example_fuzzer+0x13b8c)
+    #3 0x60e00cb188  (/data/fuzz/arm64/example_fuzzer/example_fuzzer+0x15188)
+    #4 0x60e00cbdec  (/data/fuzz/arm64/example_fuzzer/example_fuzzer+0x15dec)
+    #5 0x60e00d8fbc  (/data/fuzz/arm64/example_fuzzer/example_fuzzer+0x22fbc)
+    #6 0x60e00f0a98  (/data/fuzz/arm64/example_fuzzer/example_fuzzer+0x3aa98)
+    #7 0x7041b75d34  (/data/fuzz/arm64/lib/libc.so+0xa9d34)
+
+[0x0041e00b4180,0x0041e00b41a0) is a small allocated heap chunk; size: 32 offset: 3
+0x0041e00b4183 is located 0 bytes to the right of 3-byte region [0x0041e00b4180,0x0041e00b4183)
+allocated here:
+    #0 0x70418392bc  (/data/fuzz/arm64/lib/libclang_rt.hwasan-aarch64-android.so+0x212bc)
+    #1 0x60e00ca040  (/data/fuzz/arm64/example_fuzzer/example_fuzzer+0x14040)
+    #2 0x60e00c9b8c  (/data/fuzz/arm64/example_fuzzer/example_fuzzer+0x13b8c)
+    #3 0x60e00cb188  (/data/fuzz/arm64/example_fuzzer/example_fuzzer+0x15188)
+    #4 0x60e00cbdec  (/data/fuzz/arm64/example_fuzzer/example_fuzzer+0x15dec)
+    #5 0x60e00d8fbc  (/data/fuzz/arm64/example_fuzzer/example_fuzzer+0x22fbc)
+    #6 0x60e00f0a98  (/data/fuzz/arm64/example_fuzzer/example_fuzzer+0x3aa98)
+    #7 0x7041b75d34  (/data/fuzz/arm64/lib/libc.so+0xa9d34)
+    #8 0x60e00c504c  (/data/fuzz/arm64/example_fuzzer/example_fuzzer+0xf04c)
+    #9 0x70431aa9c4  (/data/fuzz/arm64/example_fuzzer/example_fuzzer+0x519c4)
+
+Thread: T1 0x006700006000 stack: [0x007040c55000,0x007040d4ecc0) sz: 1023168 tls: [0x000000000000,0x000000000000)
+Thread: T0 0x006700002000 stack: [0x007fe51f3000,0x007fe59f3000) sz: 8388608 tls: [0x000000000000,0x000000000000)
+Memory tags around the buggy address (one tag corresponds to 16 bytes):
+   00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+   00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+   00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+   00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+   00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+   00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+   00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+   08  00  cf  08  dc  08  cd  08  b9  08  1a  1a  0b  00  04  3f
+=&gt; 27  00  08  00  bd  bd  2d  07 [03] 73  66  66  27  27  20  f6 &lt;=
+   5b  5b  87  87  03  00  01  00  4f  04  24  24  03  39  2c  2c
+   05  00  04  00  be  be  85  85  04  00  4a  4a  05  05  5f  5f
+   00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+   00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+   00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+   00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+   00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+   00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+Tags for short granules around the buggy address (one tag corresponds to 16 bytes):
+   04  ..  ..  cf  ..  dc  ..  cd  ..  b9  ..  ..  3f  ..  57  ..
+=&gt; ..  ..  21  ..  ..  ..  ..  2d [f8] ..  ..  ..  ..  ..  ..  .. &lt;=
+   ..  ..  ..  ..  9c  ..  e2  ..  ..  4f  ..  ..  99  ..  ..  ..
+See https://clang.llvm.org/docs/HardwareAssistedAddressSanitizerDesign.html#short-granules for a description of short granule tags
+Registers where the failure occurred (pc 0x0060e00c5144):
+    x0  f8000041e00b4183  x1  000000000000005a  x2  0000000000000006  x3  000000704176d9c0
+    x4  00000060e00f4df6  x5  0000000000000004  x6  0000000000000046  x7  000000000000005a
+    x8  00000060e00f4df0  x9  0000006800000000  x10 0000000000000001  x11 00000060e0126a00
+    x12 0000000000000001  x13 0000000000000231  x14 0000000000000000  x15 000e81434c909ede
+    x16 0000007041838b14  x17 0000000000000003  x18 0000007042b80000  x19 f8000041e00b4180
+    x20 0000006800000000  x21 000000000000005a  x22 24000056e00b4000  x23 00000060e00f5200
+    x24 00000060e0128c88  x25 00000060e0128c20  x26 00000060e0128000  x27 00000060e0128000
+    x28 0000007fe59f16e0  x29 0000007fe59f1400  x30 00000060e00c5144
+SUMMARY: HWAddressSanitizer: tag-mismatch (/data/fuzz/arm64/example_fuzzer/example_fuzzer+0xf140)
+MS: 1 ChangeByte-; base unit: e09f9c158989c56012ccd88111b82f778a816eae
+0x46,0x55,0x5a,
+FUZ
+artifact_prefix='./'; Test unit written to ./crash-0eb8e4ed029b774d80f2b66408203801cb982a60
+Base64: RlVa
+</pre> <p> In the example output, the crash was caused by <code translate="no" dir="ltr">fuzz_me_fuzzer.cpp</code> at line 10:</p> 
+<pre>      data[3] == 'Z';  // :(</pre> <p> This is a straightforward out-of-bounds read if <code translate="no" dir="ltr">data</code> is of length 3. </p> <p> After you run your fuzzer, the output often results in a crash and the offending input is saved in the corpus and given an ID. In the example output, this is <code translate="no" dir="ltr">crash-0eb8e4ed029b774d80f2b66408203801cb982a60</code>. </p> <p> To retrieve crash information when fuzzing on device, issue this command, specifying your crash ID:</p> 
+<pre>adb pull /data/fuzz/arm64/fuzz_me_fuzzer/corpus/CRASH_ID</pre> Note that to get testcases to be saved to the right directory, you can use the corpus folder (as in the example above) or use the artifact_prefix argument (e.g. `-artifact_prefix=/data/fuzz/where/my/crashes/go`). <p> When fuzzing on host, crash information appears in the crash folder in the local folder where the fuzzer is being run.</p> 
+<h2 id="generate-line-coverage">Generate line coverage</h2> <p> Line coverage is very useful for developers as they can pinpoint areas in the code that aren't covered and update their fuzzers accordingly to hit those areas in future fuzzing runs.</p> <ol> <li>In order to generate fuzzer coverage reports, run the following steps : 
+<pre>CLANG_COVERAGE=true NATIVE_COVERAGE_PATHS='*' make ${FUZZER_NAME}</pre> </li> 
+<li>After pushing the fuzzer and its dependencies to the device, run the fuzz target with <code translate="no" dir="ltr">LLVM_PROFILE_FILE</code> as follows: 
+<pre>DEVICE_TRACE_PATH=/data/fuzz/$(get_build_var TARGET_ARCH)/${FUZZER_NAME}/data.profraw
+adb shell LLVM_PROFILE_FILE=${DEVICE_TRACE_PATH} /data/fuzz/$(get_build_var TARGET_ARCH)/${FUZZER_NAME}/${FUZZER_NAME} -runs=1000</pre> </li> 
+<li>Produce the coverage report by first pulling the profraw file out from the device and then generating the html report to a folder called coverage-html as shown below: 
+<pre>adb pull ${DEVICE_TRACE_PATH} data.profraw
+llvm-profdata merge --sparse data.profraw --output data.profdata
+llvm-cov show --format=html --instr-profile=data.profdata \
+  symbols/data/fuzz/$(get_build_var TARGET_ARCH)/${FUZZER_NAME}/${FUZZER_NAME} \
+  --output-dir=coverage-html --path-equivalence=/proc/self/cwd/,$ANDROID_BUILD_TOP</pre> </li>
+</ol> For more information about libFuzzer, see the <a href="http://llvm.org/docs/LibFuzzer.html">upstream documentation</a>.<div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/security/test/libfuzzer" class="_attribution-link">https://source.android.com/docs/security/test/libfuzzer</a>
+  </p>
+</div>

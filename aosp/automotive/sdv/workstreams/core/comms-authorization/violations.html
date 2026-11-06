@@ -1,0 +1,31 @@
+<h1>Debug permissions violations</h1>  <p>An authorization violation occurs when a service attempts to perform an action that it isn't permitted to execute. In the standard <code translate="no" dir="ltr">permissionsOnly</code> enforcement mode, the Software-Defined Vehicle (SDV) framework checks if the subject or its virtual machine (VM) has the required permission declared in its policy.</p> <aside class="note"><strong>Note:</strong><span> Not all authorization violations require remediation. For example, it might be expected that a caller shouldn't be able to discover all service units implementing a given unit type if it is only authorized for a subset of them.</span></aside> <p>You must evaluate violation messages within their security context. Not every violation indicates an error or an attempt at unauthorized access.</p> <p>All authorization decisions are logged. To view them, search the logcat output for audit messages:</p> 
+<pre>adb -s $SERIAL logcat | grep 'audit message'
+</pre> <h2 id="success">Successful authorization</h2> <p>Successful checks are logged at the <code translate="no" dir="ltr">debug</code> level.</p> <p>This indicates that the subject has the required permission declared:</p> 
+<pre>D SdvServiceManagerServer: instance2:com.sdv.google.sample.bar.ServiceBundleBar/instance declares permission to access com.sdv.google.sample.foo.ServiceBundleFoo#foo-rpc, audit message: ...
+</pre> <h2 id="violations">Violations and permissions missing</h2> <p>Violations occur when a permission is missing.</p> <p>This occurs when the subject lacks the necessary permission, such as <code translate="no" dir="ltr">client</code>, <code translate="no" dir="ltr">server</code>, <code translate="no" dir="ltr">publisher</code>, or <code translate="no" dir="ltr">subscriber</code>, in its authorization policy, or the subject's VM lacks it in the VM-level policy.</p> <p>This is logged at the <code translate="no" dir="ltr">error</code> level:</p> 
+<pre>E SdvServiceManagerServer: Authz violation. instance2:com.sdv.google.sample.bar.ServiceBundleBar/instance does not declare permission to access com.sdv.google.sample.foo.ServiceBundleFoo#foo-rpc, audit message: Subject lacks 'client' permission...
+</pre> <h2 id="remediation">Remediation</h2> <p>The log's <code translate="no" dir="ltr">audit message</code> often contains a useful suggestion on what needs to be added to resolve a violation.</p> <p>For example, you might see a permission error like this:</p> 
+<pre>Subject 'vm:com.client.Bundle/default' lacks 'client' permission for service 'com.server.TargetType' with channel 'my-unit'. Add 'client { service: "com.server.TargetType" channel: "my-unit" }' to the subject's Authz policy
+</pre> <p>Remediate this by adding the rule to the subject's authorization policy textproto:</p> 
+<pre>client {
+    service: "com.server.TargetType"
+    channel: "my-unit"
+}
+</pre> <p>If the error message indicates a missing permission in the subject's VM, you must add it to the VM-level policy, such as <code translate="no" dir="ltr">&lt;vm_name&gt;.textproto</code> or <code translate="no" dir="ltr">.default.textproto</code> in the <code translate="no" dir="ltr">com.oem.sdv.authz</code> APEX:</p> 
+<pre>allow_server {
+    service: "com.server.TargetType"
+    channel: "my-unit"
+}
+</pre> <h2 id="acl-migration">Migrate from ACLs</h2> <p>For backward compatibility and migration, the framework supports <code translate="no" dir="ltr">ACLs only</code>, <code translate="no" dir="ltr">Lenient</code>, and <code translate="no" dir="ltr">Strict</code> modes that consider earlier access control lists (ACLs).</p> <h3 id="acls-only-mode">ACLs only mode</h3> <p>In <code translate="no" dir="ltr">ACLs only</code> mode, access is allowed only if ACLs allow it. Permissions are ignored. If ACLs deny access, an error is logged:</p> 
+<pre>E SdvServiceManagerServer: Authz violation. com.sdv.google.sample.foo.ServiceBundleFoo#foo-rpc denies access to instance2:com.sdv.google.sample.bar.ServiceBundleBar/instance, audit message: ...
+</pre> <h3 id="lenient-mode">Lenient mode</h3> <p>In <code translate="no" dir="ltr">Lenient</code> mode, access is allowed if either ACLs or permissions allow it. If access is granted using ACLs but permissions are missing, it is logged as a soft violation at the <code translate="no" dir="ltr">debug</code> level to help you identify missing permissions while keeping the system functional:</p> 
+<pre>D SdvServiceManagerServer: Permissions Authz violation (access granted by ACLs): instance2:com.sdv.google.sample.bar.ServiceBundleBar/instance does not declare permission to access com.sdv.google.sample.foo.ServiceBundleFoo#foo-rpc, audit message: ...
+</pre> <p>If both ACLs and permissions fail, it's logged as an error for both:</p> 
+<pre>E SdvServiceManagerServer: Authz violation. com.sdv.google.sample.foo.ServiceBundleFoo#foo-rpc denies access to instance2:com.sdv.google.sample.bar.ServiceBundleBar/instance, audit message: ...
+E SdvServiceManagerServer: Authz violation. instance2:com.sdv.google.sample.bar.ServiceBundleBar/instance does not declare permission to access com.sdv.google.sample.foo.ServiceBundleFoo#foo-rpc, audit message: ...
+</pre> <h3 id="strict-mode">Strict mode</h3> <p>In <code translate="no" dir="ltr">Strict</code> mode, both ACLs and permissions must allow access. If either ACLs or permissions fail, access is denied and an error is logged.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/core/comms-authorization/violations" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/core/comms-authorization/violations</a>
+  </p>
+</div>

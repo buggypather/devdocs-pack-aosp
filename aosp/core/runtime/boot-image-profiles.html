@@ -1,0 +1,67 @@
+<h1>Boot image profiles</h1>  <p>Android 11 or higher supports generating boot image profiles, which encapsulate information about the code of various system-level components such as system server and boot classpath. Android Runtime (ART) uses this information to perform system-wide optimizations, some of which are critical to Android's performance and impact the execution of all nonnative code (system or app level). In some cases, boot image profiles can impact execution performance and memory consumption by double digit percentages.</p> <aside class="note"><strong>Note:</strong><span> This page doesn't detail specific optimizations (such as profile guided optimizations, Zygote preloading, and <code translate="no" dir="ltr">.art</code> images) or how profiles hook into the build system.</span></aside> <h2 id="getting-boot-profile-information">Get boot profile information</h2> <p>Boot image profiles are derived from the profiles of apps executed during critical user journeys (CUJs). In a specific device configuration, ART captures (as part of the JIT profiles) the boot classpath methods and classes used by apps, then records that information in the app profile (for example, <code translate="no" dir="ltr">/data/misc/profiles/cur/0/com.android.chrome/primary.prof</code>), where it's indexed by the boot classpath Dalvik EXecutable (DEX) file (see <a href="#art-profile-format">ART profile format</a>).</p> <aside class="key-point"><strong>Key Point:</strong><span> Boot image profiles are built into the system image and can't be updated outside OTAs, so it's critical to select a good set of profiles before creating an image.</span></aside> <p>Review the app profiles recorded during CUJs to determine which part of the boot classpath is most used and most important to optimize (for an example, see <a href="#art-profile-format">ART profile format</a>). Including all methods or classes negatively affects performance, so focus on the most commonly used code paths. For example, if a method from the boot classpath is used by a single app, it shouldn't be part of the boot profiles. Each device should configure the method/class selection based on the CUJ selection and the amount of data produced by testing.</p> <p>To aggregate boot classpath information from all individual app profiles on the device, run the <code translate="no" dir="ltr">adb shell cmd package snapshot-profile android</code> command. You can use the aggregated information as the basis for processing and method/class selection without manually aggregating individual profiles (although you can do that if desired).</p> <p><img src="https://source.android.com/static/docs/core/architecture/bootloader/images/boot-image-profiles.png" alt="Boot image profile" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> Process for getting boot image profiles</p> <h3 id="boot-image-profile-data">Boot image profile data</h3> <p>Boot image profiles include the following files and data.</p> <ul> <li><p>Profile for the boot classpath (<a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/boot/boot-image-profile.txt"><code translate="no" dir="ltr">frameworks/base/config/boot-image-profile.txt</code></a>. Determines which methods from the boot classpath get optimized and which class is included in the boot <code translate="no" dir="ltr">.art</code> image.</p></li> <li><p>List of <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/config/preloaded-classes">preloaded classes</a>. Determines which classes are preloaded in Zygote.</p></li> <li><p>Profile for the system server components (<a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/services/art-profile;l=1"><code translate="no" dir="ltr">frameworks/base/services/art-profile</code></a>). Determines which methods from the system server get optimized/compiled, which class is included in the boot <code translate="no" dir="ltr">.art</code> image, and how the corresponding DEX files are laid out.</p></li> </ul> <aside class="note"><strong>Note:</strong><span> The system server contains multiple JAR files and each JAR gets its own profile (as opposed to the boot classpath, where all the data is in the same file). This page describes the profile for <code translate="no" dir="ltr">services.jar</code>.</span></aside> <h3 id="art-profile-format">ART profile format</h3> <p>The ART profile captures information from each of the loaded DEX files, including information about methods worth optimizing and classes used during startup. When boot image profiling is enabled, ART also includes the boot classpath and system server JAR files in the profile and annotates each DEX file with the name of the package that uses it.</p> <p>For example, dump the raw boot image profile with the following command:</p> 
+<pre>adb shell profman --dump-only --profile-file=/data/misc/profman/android.prof</pre> <p>This produces output similar to:</p> 
+<pre>=== Dex files  ===
+=== profile ===
+ProfileInfo [012]
+
+core-oj.jar:com.google.android.ext.services [index=0] [checksum=e4e3979a]
+        hot methods: 520[], 611[] …
+        startup methods: …
+        classes: …
+...
+core-oj.jar:com.android.systemui [index=94] [checksum=e4e3979a]
+        hot methods: 520[], 521[]…
+        startup methods: …
+        classes: …
+</pre> <p>In the above example:</p> <ul> <li><p><code translate="no" dir="ltr">core-oj.jar</code> is used by <code translate="no" dir="ltr">com.google.android.ext.services</code> and <code translate="no" dir="ltr">com.android.systemui</code>. Each entry lists the two packages used from <code translate="no" dir="ltr">core-oj.jar</code>.</p></li> <li><p>Both processes use the method with DEX index 520, but only the <code translate="no" dir="ltr">systemui</code> process uses the method with DEX index 521. The same rationale applies to the other profile sections (for example, the startup classes).</p></li> </ul> <p>During data processing, filter methods/classes based on usage, giving priority to system-level processes (for example, the system server or <code translate="no" dir="ltr">systemui</code>) or to methods that might not be commonly used but are still important (for example, methods used by the camera app).</p> <p>The profile format internally annotates each method with multiple flags (startup, post-startup, hotness, abi), which is more than is displayed in the dump-only format. To make use of all the signals, modify the available scripts.</p> <h3 id="recommendations">Recommendations</h3> <p>Use the following guidelines for best results.</p> <ul> <li><p>Deploy the configuration for generating boot image profiles to several test devices and aggregate the results before generating the final boot image profile. The <code translate="no" dir="ltr">profman</code> tool supports aggregating and selecting multiple boot image profiles, but it works only with the same version of the boot image (same boot classpath).</p></li> <li><p>Give selection priority to the methods/classes that are used by system processes. These methods/classes might use code that isn't often used by other apps but that's still critical to optimize.</p></li> <li><p>The data shape from a single device run looks very different compared to test devices that execute real-world CUJs. If you don't have a large fleet of test devices, use the same device to run several CUJs to increase the confidence that the boot image profile optimizations will work well in production (this scenario is described below).</p></li> </ul> <h2 id="configuring-devices">Configure devices</h2> <p>To enable boot profile configuration through system properties, use one of the following methods.</p> <ul> <li>
+<p><strong>Option 1:</strong> Manually set up props (works up to reboot):</p> 
+<pre>adb root
+adb shell stop
+adb shell setprop dalvik.vm.profilebootclasspath true
+adb shell setprop dalvik.vm.profilesystemserver true
+adb shell start</pre>
+</li> <li>
+<p><strong>Option 2:</strong> Use a <code translate="no" dir="ltr">local.prop</code> (permanent effect until the file is deleted). To do so:</p> <ol> <li>
+<p>Create a <code translate="no" dir="ltr">local.prop</code> file with the content:</p> 
+<pre>dalvik.vm.profilebootclasspath=true
+dalvik.vm.profilesystemserver=true
+</pre>
+</li> <li>
+<p>Run the following commands:</p> 
+<pre>adb push local.prop /data/
+adb shell chmod 0750 /data/local.prop
+adb reboot</pre>
+</li> </ol>
+</li> <li>
+<p><strong>Option 3:</strong> Use device configuration to set the following server-side properties:</p> 
+<pre>adb shell device_config put runtime_native_boot profilebootclasspath true
+adb shell device_config put runtime_native_boot profilesystemserver true
+</pre>
+</li> </ul> <aside class="note"><strong>Note:</strong><span> The <code translate="no" dir="ltr">art/tools/boot-image-profile-configure-device.sh</code> script includes the above steps.</span></aside> <h2 id="generating-boot-image-profiles">Generate boot image profiles</h2> <p>Use the following instructions to generate a basic boot image profile using testing on a single device.</p> <ol> <li>
+<p>Set up the device.</p> <ol> <li><p>Configure the device as described in <a href="#configuring-devices">Configuring devices</a>.</p></li> <li>
+<p>(Optional) It takes time for the new profile format to clean and replace the other profiles. To speed up profile collection, reset all profiles on the device.</p> 
+<pre>adb shell stop
+adb shell find "/data/misc/profiles -name *.prof -exec truncate -s 0 {} \;"
+adb shell start</pre>
+</li> <li><p>Run the CUJs on the device.</p></li> </ol>
+</li> <li>
+<p>Capture the profile using the following command:</p> 
+<pre>adb shell cmd package snapshot-profile android</pre>
+</li> <li>
+<p>Extract the profile using the following command:</p> 
+<pre>adb pull /data/misc/profman/android.prof</pre>
+</li> <li>
+<p>Navigate to the boot classpath JAR files using the following commands:</p> 
+<pre>m dist
+ls $ANDROID_PRODUCT_OUT/boot.zip</pre>
+</li> <li>
+<p>Generate the boot image profile using the following <code translate="no" dir="ltr">profman</code> command.</p> 
+<pre>profman --generate-boot-image-profile --profile-file=android.prof --out-profile-path=... --out-preloaded-classes-path=...</pre>
+</li> <li>
+<p>Using data, tweak the <code translate="no" dir="ltr">profman</code> command using the available selection threshold flags.</p> <ul> <li><code translate="no" dir="ltr">--method-threshold</code></li> <li><code translate="no" dir="ltr">--class-threshold</code></li> <li><code translate="no" dir="ltr">--clean-class-threshold</code></li> <li><code translate="no" dir="ltr">--preloaded-class-threshold</code></li> <li><code translate="no" dir="ltr">--upgrade-startup-to-hot</code></li> <li><code translate="no" dir="ltr">--special-package</code></li> </ul> <p>To view the full list, refer to the <code translate="no" dir="ltr">profman</code> help page or source code.</p>
+</li> </ol> <aside class="note"><strong>Note:</strong><span> The <code translate="no" dir="ltr">art/tools/boot-image-profile-generate.sh</code> script includes these steps.</span></aside><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/runtime/boot-image-profiles" class="_attribution-link">https://source.android.com/docs/core/runtime/boot-image-profiles</a>
+  </p>
+</div>

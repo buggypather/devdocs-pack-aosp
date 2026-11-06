@@ -1,0 +1,14 @@
+<h1>Code location</h1>  <p>This page describes the structure and how to access the source code.</p> <h2 id="source-code-access">Source code access</h2> <p>Start with <a href="../../../setup/download">Download the Android source</a>.</p> <h2 id="pdk-source">PDK and source</h2> <p>See the complete list of SDV source code here:</p> <ul> <li>
+<code translate="no" dir="ltr">/system/software_defined_vehicle/platform</code> contains specific libraries and wrappers related to built-in development: log, trace, and time synchronization.</li> <li>
+<code translate="no" dir="ltr">/system/software_defined_vehicle/automotive_services</code> contains the Automotive-specific services: diagnostics, configuration, calibration, vehicle mode, and user profile.</li> <li>
+<code translate="no" dir="ltr">/system/software_defined_vehicle/vsidl</code> and <code translate="no" dir="ltr">/system/software_defined_vehicle/middleware</code> contain the <a href="../core-areas/vsidl">VSIDL and middleware functionality</a>.</li> <li>
+<code translate="no" dir="ltr">/system/software_defined_vehicle/update_manager</code> contains the <a href="../core-areas/sdv-update-manager">Update Manager</a> functionality.</li> <li>
+<code translate="no" dir="ltr">/system/software_defined_vehicle/sdv_gateway</code> contains the <a href="../sdv-gateway-on-ivi">SDV Gateway for integration with IVI</a>.</li> <li>
+<code translate="no" dir="ltr">/system/software_defined_vehicle/telemetry</code> contains the <a href="../workstreams/telemetry">Telemetry</a> source code.</li> <li>
+<code translate="no" dir="ltr">/system/software_defined_vehicle/samples</code> contains samples you can start with and run.</li> <li>
+<code translate="no" dir="ltr">/device/google/sdv_display_safety</code> contains the build targets for display safety. The code is located in <code translate="no" dir="ltr">/packages/services/display_safety/</code> and <code translate="no" dir="ltr">/packages/apps/Car/DriverUI</code>.</li> </ul> <h2 id="lunch-targets">Lunch targets</h2> <p>SDV <code translate="no" dir="ltr">lunch</code> targets reside in <code translate="no" dir="ltr">/device/google/sdv</code>. SDV also uses AOSP components, including <a href="https://android.googlesource.com/platform/frameworks/native/+/main/libs/binder/Android.bp">Binder</a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/getting-started/code-location" class="_attribution-link">https://source.android.com/docs/automotive/sdv/getting-started/code-location</a>
+  </p>
+</div>

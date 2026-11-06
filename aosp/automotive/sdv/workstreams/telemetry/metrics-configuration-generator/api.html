@@ -1,0 +1,78 @@
+<h1>API reference</h1>  <p>This page provides reference documentation for the Metrics Configuration Generator (MCG) API endpoints.</p> <h2 id="endpoints-overview">Endpoints overview</h2> <p>The following sections detail the API endpoints available in MCG.</p> <h3 id="metrics-configuration">Metrics configuration</h3> <ul> <li>
+<a href="#post-generate-metrics-config"><code translate="no" dir="ltr">POST /api/v2/generate_metrics_config</code></a>: Create a <code translate="no" dir="ltr">MetricsConfig</code> instance from metric configuration request details.</li> <li>
+<a href="#post-get-file-descriptor-set"><code translate="no" dir="ltr">POST /api/v2/get_file_descriptor_set</code></a>: Return file descriptors for a given <code translate="no" dir="ltr">MetricsConfig</code> for decoding reports.</li> <li>
+<a href="#post-validate-metrics-config"><code translate="no" dir="ltr">POST /api/v2/validate_metrics_config</code></a>: Validate the passed <code translate="no" dir="ltr">MetricsConfig</code>, returning a list of any validation errors.</li> </ul> <h3 id="vehicle-signal-catalogs">Vehicle Signal Catalogs</h3> <ul> <li>
+<a href="#post-vs-create"><code translate="no" dir="ltr">POST /api/v2/vs/</code></a>: Create a new or update an existing Vehicle Signal Catalog.</li> <li>
+<a href="#get-vs-list"><code translate="no" dir="ltr">GET /api/v2/vs/</code></a>: List all Vehicle Signal Catalog metadata.</li> <li>
+<a href="#delete-vs-version"><code translate="no" dir="ltr">DELETE /api/v2/vs/{version}</code></a>: Delete the specified Vehicle Signal Catalog.</li> </ul> <h3 id="service-status">Service status</h3> <ul> <li>
+<a href="#get-health"><code translate="no" dir="ltr">GET /health</code></a>: Check the service's health.</li> </ul> <h2 id="protobuf-content-types">Protobuf content types</h2> <p>Several API endpoints accept or return data in protocol buffer (protobuf) format. Two content types are used:</p> <ul> <li>
+<code translate="no" dir="ltr">application/x-protobuf</code>: Indicates protobuf data in its binary wire format. This format is efficient for machine-to-machine communication but isn't human readable.</li> <li>
+<code translate="no" dir="ltr">text/x-protobuf</code>: Indicates protobuf data in its text format, which is human readable and useful for debugging or manual inspection.</li> </ul> <p>When an endpoint supports multiple protobuf formats for a request or response, use the <code translate="no" dir="ltr">Content-Type</code> header to specify the format of request data, and the <code translate="no" dir="ltr">Accept</code> header to specify the selected format of response data. For example:</p> <ul> <li><code translate="no" dir="ltr">-H 'Content-Type: application/x-protobuf'</code></li> <li><code translate="no" dir="ltr">-H 'Accept: text/x-protobuf'</code></li> </ul> <aside class="caution"><strong>Caution:</strong><span> While <code translate="no" dir="ltr">text/x-protobuf</code> is convenient for inspecting the output during development or debugging, the protobuf text format isn't canonical and isn't stable across different library versions or implementations. For all production use cases, or any scenario requiring stable data interchange and wire compatibility, you must use the binary <code translate="no" dir="ltr">application/x-protobuf</code> format.</span></aside> <h2 id="call-api">Call the API</h2> <p>The examples on this page use <code translate="no" dir="ltr">curl</code> for calling the REST API and assume you set the <code translate="no" dir="ltr">SERVICE_URL</code> environment variable to refer to the host where MCG is deployed. When running locally, this is usually <code translate="no" dir="ltr">http://localhost:8005</code>.</p> <p>To target a remote Cloud Run instance, set <code translate="no" dir="ltr">SERVICE_URL</code> using <code translate="no" dir="ltr">gcloud</code>:</p> 
+<pre>SERVICE_URL=$(gcloud run services describe mcg-service \
+  --region=GCP_REGION \
+  --format='value(status.url)')</pre> <p>When calling remote Cloud Run endpoints, append the following authorization header to your <code translate="no" dir="ltr">curl</code> commands:</p> 
+<pre>-H "Authorization: Bearer $(gcloud auth print-identity-token)"</pre> <h2 id="metrics-configuration-2">Metrics configuration</h2> <p>This section describes endpoints for generating and validating metrics configurations.</p> <h3 id="post-generate-metrics-config">POST /api/v2/generate_metrics_config</h3> <p>Create a <code translate="no" dir="ltr">MetricsConfig</code> instance from metrics configuration request details. This process includes validation, and if generation fails due to schema violations, invalid references, cyclic dependencies, or other issues, the API returns a list of error details.</p> <table class="blue details responsive"> <thead> <tr> <th colspan="2">Endpoint details</th> </tr> </thead> <tr> <td><strong>Query parameters</strong></td> <td> <code translate="no" dir="ltr">ignore_validation</code>: <code translate="no" dir="ltr">boolean</code><br> Optional. If <code translate="no" dir="ltr">true</code>, ignore validation errors and return <code translate="no" dir="ltr">MetricsConfig</code>. </td> </tr> <tr> <td><strong>Request body</strong></td> <td> The request body must contain metrics configuration request details in JSON format.<br>  </td> </tr> <tr> <td><strong>Success response</strong></td> <td> The response body contains a <code translate="no" dir="ltr">MetricsConfig</code> message in <code translate="no" dir="ltr">application/x-protobuf</code> or <code translate="no" dir="ltr">text/x-protobuf</code> format.<br> The <code translate="no" dir="ltr">Metrics-Config-Size</code> header contains the configuration size in bytes. </td> </tr> <tr> <td><strong>Example</strong></td> <td> 
+<pre>curl -H "Content-Type: application/json" \
+  -H "Accept: text/x-protobuf" \
+  --data-binary @PATH_TO_METRICS_CONFIG_JSON \
+  "$SERVICE_URL/api/v2/generate_metrics_config"
+      </pre> </td> </tr> </table> <h3 id="post-get-file-descriptor-set">POST /api/v2/get_file_descriptor_set</h3> <p>Return file descriptors for a given <code translate="no" dir="ltr">MetricsConfig</code> for decoding reports.</p> <table class="blue details responsive"> <thead> <tr> <th colspan="2">Endpoint details</th> </tr> </thead> <tr> <td><strong>Request body</strong></td> <td> The request body must contain a <code translate="no" dir="ltr">google.sdv.telemetry.MetricsConfig</code> message in <code translate="no" dir="ltr">application/x-protobuf</code> or <code translate="no" dir="ltr">text/x-protobuf</code> format. </td> </tr> <tr> <td><strong>Success response</strong></td> <td> The response body contains a <code translate="no" dir="ltr">google.protobuf.FileDescriptorSet</code> message in <code translate="no" dir="ltr">application/x-protobuf</code> or <code translate="no" dir="ltr">text/x-protobuf</code> format. </td> </tr> <tr> <td><strong>Example</strong></td> <td> 
+<pre>curl -H "Content-Type: application/x-protobuf" \
+  -H "Accept: application/x-protobuf" \
+  --data-binary @PATH_TO_METRICS_CONFIG_PB \
+  "$SERVICE_URL/api/v2/get_file_descriptor_set"
+      </pre> </td> </tr> </table> <h3 id="post-validate-metrics-config">POST /api/v2/validate_metrics_config</h3> <p>Validate the provided <code translate="no" dir="ltr">MetricsConfig</code>, returning a list of any validation errors.</p> <table class="blue details responsive"> <thead> <tr> <th colspan="2">Endpoint details</th> </tr> </thead> <tr> <td><strong>Query parameters</strong></td> <td> <code translate="no" dir="ltr">return_config</code>: <code translate="no" dir="ltr">boolean</code><br> Optional. If <code translate="no" dir="ltr">true</code>, return <code translate="no" dir="ltr">MetricsConfig</code> upon successful validation. </td> </tr> <tr> <td><strong>Request body</strong></td> <td> The request body must contain a <code translate="no" dir="ltr">google.sdv.telemetry.MetricsConfig</code> message in <code translate="no" dir="ltr">application/x-protobuf</code> or <code translate="no" dir="ltr">text/x-protobuf</code> format. </td> </tr> <tr> <td><strong>Success response</strong></td> <td> The response body contains an empty object (default) or <code translate="no" dir="ltr">MetricsConfig</code> (if <code translate="no" dir="ltr">return_config</code> is <code translate="no" dir="ltr">true</code>).<br> The <code translate="no" dir="ltr">Metrics-Config-Size</code> header contains the configuration size in bytes. </td> </tr> <tr> <td><strong>Example</strong></td> <td> 
+<pre>curl -H "Content-Type: application/x-protobuf" \
+  -H "Accept: application/json" \
+  --data-binary @PATH_TO_METRICS_CONFIG_PB \
+  "$SERVICE_URL/api/v2/validate_metrics_config"
+      </pre> </td> </tr> </table> <h2 id="vehicle-signal-catalogs-2">Vehicle Signal Catalogs</h2> <p>This section describes endpoints for managing Vehicle Signal Catalogs.</p> <h3 id="post-vs-create">POST /api/v2/vs/</h3> <p>Create new or update existing Vehicle Signal Catalog.</p> <table class="blue details responsive"> <thead> <tr> <th colspan="2">Endpoint details</th> </tr> </thead> <tr> <td><strong>Request body</strong></td> <td> The request body must contain a JSON object with a <code translate="no" dir="ltr">version</code> string and a base64-encoded <code translate="no" dir="ltr">FileDescriptorSet</code> for <code translate="no" dir="ltr">vehicle_signals</code>. 
+<pre>{
+  "version": "string",
+  "vehicle_signals": "string"
+}</pre> </td> </tr> <tr> <td><strong>Success response</strong></td> <td> If successful, the API returns <code translate="no" dir="ltr">application/json</code> with the version of the catalog that was added or updated: 
+<pre>{"version": "string"}</pre> </td> </tr> <tr> <td><strong>Example</strong></td> <td> For instructions on generating the base64-encoded <code translate="no" dir="ltr">FileDescriptorSet</code> for the <code translate="no" dir="ltr">vehicle_signals</code> field, see <a href="vehicle-signals#modify-catalog-version">Vehicle Signal Catalogs</a>. 
+<pre>curl -H "Content-Type: application/json" \
+  --data-binary @- "$SERVICE_URL/api/v2/vs/" &lt;&lt; EOF
+{
+  "version": "v1.0",
+  "vehicle_signals": "VEHICLE_SIGNALS_BASE64"
+}
+EOF
+      </pre> </td> </tr> </table> <h3 id="get-vs-list">GET /api/v2/vs/</h3> <p>List all Vehicle Signal Catalog metadata.</p> <table class="blue details responsive"> <thead> <tr> <th colspan="2">Endpoint details</th> </tr> </thead> <tr> <td><strong>Success response</strong></td> <td> If successful, the API returns <code translate="no" dir="ltr">application/json</code> containing a list of catalog versions: 
+<pre>{"versions": [{"version": "string"}]}</pre> </td> </tr> <tr> <td><strong>Example</strong></td> <td> 
+<pre>curl "$SERVICE_URL/api/v2/vs/"
+      </pre> </td> </tr> </table> <h3 id="delete-vs-version">DELETE /api/v2/vs/{version}</h3> <p>Delete the specified Vehicle Signal Catalog.</p> <table class="blue details responsive"> <thead> <tr> <th colspan="2">Endpoint details</th> </tr> </thead> <tr> <td><strong>Path parameters</strong></td> <td> <code translate="no" dir="ltr">version</code>: <code translate="no" dir="ltr">string</code><br> Required. The identifier of the Vehicle Signal Catalog to delete, as provided in the <code translate="no" dir="ltr">version</code> field of the POST request. </td> </tr> <tr> <td><strong>Success response</strong></td> <td> If successful, the API returns <code translate="no" dir="ltr">application/json</code> with the version of the catalog that was deleted: 
+<pre>{"version": "string"}</pre> </td> </tr> <tr> <td><strong>Example</strong></td> <td> 
+<pre>curl --request DELETE "$SERVICE_URL/api/v2/vs/v1.0"
+      </pre> </td> </tr> </table> <h2 id="service-status-2">Service status</h2> <p>This section describes endpoints for checking service health.</p> <h3 id="get-health">GET /health</h3> <p>Check the service's health.</p> <table class="blue details responsive"> <thead> <tr> <th colspan="2">Endpoint details</th> </tr> </thead> <tr> <td><strong>Success response</strong></td> <td> If healthy, the service returns a <code translate="no" dir="ltr">200 OK</code> status code. </td> </tr> <tr> <td><strong>Example</strong></td> <td> 
+<pre>curl "$SERVICE_URL/health"
+      </pre> </td> </tr> </table> <h2 id="error-responses">Error responses</h2> <p>When an API call results in an error (<code translate="no" dir="ltr">HTTP status 4xx</code> or <code translate="no" dir="ltr">5xx</code>), the response body contains an error object with the following structure:</p> 
+<pre>{
+  "error": {
+    "code": 400,
+    "status": "INVALID_ARGUMENT",
+    "message": "Request validation failed",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.BadRequest",
+        "fieldViolations": [
+          {
+            "field": "fieldName",
+            "description": "error description"
+          }
+        ]
+      }
+    ]
+  }
+}
+</pre> <table class="blue responsive"> <thead> <tr> <th colspan="2">Error fields</th> </tr> </thead> <tr> <td><strong><code translate="no" dir="ltr">code</code></strong></td> <td>
+<code translate="no" dir="ltr">int32</code><br>The HTTP status code (for example, <code translate="no" dir="ltr">400</code>, <code translate="no" dir="ltr">404</code>, or <code translate="no" dir="ltr">500</code>).</td> </tr> <tr> <td><strong><code translate="no" dir="ltr">status</code></strong></td> <td>
+<code translate="no" dir="ltr">string</code><br>The Google RPC canonical status code (for example, <code translate="no" dir="ltr">INVALID_ARGUMENT</code>, <code translate="no" dir="ltr">NOT_FOUND</code>, or <code translate="no" dir="ltr">INTERNAL</code>).</td> </tr> <tr> <td><strong><code translate="no" dir="ltr">message</code></strong></td> <td>
+<code translate="no" dir="ltr">string</code><br>A developer-facing error message in English.</td> </tr> <tr> <td><strong><code translate="no" dir="ltr">details</code></strong></td> <td>
+<code translate="no" dir="ltr">Array&lt;object&gt;</code><br>An array of objects containing further error details, identified by their <code translate="no" dir="ltr">@type</code> member.</td> </tr> </table><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/telemetry/metrics-configuration-generator/api" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/telemetry/metrics-configuration-generator/api</a>
+  </p>
+</div>

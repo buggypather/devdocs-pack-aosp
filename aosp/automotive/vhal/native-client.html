@@ -1,0 +1,42 @@
+<h1>Use VHAL with the native client</h1>  <p>VHAL supports Java and native clients. Car Service is the only Java client for VHAL. For car apps, use the Car APIs (for example, <a href="https://developer.android.com/reference/android/car/hardware/property/CarPropertyManager"><code translate="no" dir="ltr">CarPropertyManager</code></a>) to access VHAL properties instead of directly communicating with the VHAL. In fact, SELinux blocks direct access. For details, see the Car API documentation at <a href="https://developer.android.com/reference/android/car/packages">Package Index</a>. </p> <p>For native clients, starting with Android 13, use <a href="https://android.googlesource.com/platform/packages/services/Car/+/refs/heads/android17-release/cpp/vhal/client/"><code translate="no" dir="ltr">libvhalclient</code></a> instead of directly connecting with VHAL. This is a client library that exposes one common interface, <code translate="no" dir="ltr">IVhalClient.h</code> for AIDL and HIDL VHAL implementations. The following example shows how to create a VHAL native client and use it to get a Vehicle Identification Number (VIN) number: </p> 
+<pre>#include &lt;IVhalClient.h&gt;
+#include &lt;VehicleHalTypes.h&gt;
+#include &lt;VehicleUtils.h&gt;
+
+using ::aidl::android::hardware::automotive::vehicle::VehicleProperty;
+using ::android::frameworks::automotive::vhal::IVhalClient;
+using ::android::hardware::automotive::vehicle::toInt;
+
+int main(int argc, char** argv) {
+  auto vhalClient = IVhalClient::tryCreate();
+  if (vhalClient == nullptr) {
+    // handle error.
+    return -1;
+  }
+  auto result = vhalClient-&gt;getValueSync(
+      *vhalClient-&gt;createHalPropValue(toInt(VehicleProperty::INFO_VIN)));
+  // Use result
+
+  return 0;
+}</pre> <p>You must configure SELinux policy to allow your native client to access VHAL. For example: </p>
+
+<pre># Define my domain
+type my_native_daemon, domain;
+
+# Define the exec file type.
+type my_native_daemon_exec, exec_type, file_type, system_file_type;
+
+# Initialize domain.
+init_daemon_domain(my_native_daemon)
+
+# Allow using hwbinder for HIDL VHAL, not required if AIDL is used.
+hwbinder_use(my_native_daemon)
+# Allow using binder for AIDL VHAL
+binder_use(my_native_daemon)
+# Allow my_native_daemon to be a VHAL client.
+hal_client_domain(my_native_daemon, hal_vehicle)</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/vhal/native-client" class="_attribution-link">https://source.android.com/docs/automotive/vhal/native-client</a>
+  </p>
+</div>

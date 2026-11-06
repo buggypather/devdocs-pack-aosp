@@ -1,0 +1,10 @@
+<h1>Global filters in Trade Federation</h1>  <p>Global filters is a way to provide test filters to Tradefed that will apply to the invocation automatically without having to worry about whether a test supports it or not.</p> <p>It will be inop if the configuration doesn't support filtering, but provide the benefit of not throwing a configuration exception like it's usually the case in Tradefed. This allows a service with minimal knowledge about Tradefed to easily generate and provide filter flags generically.</p> <h2 id="syntax">Syntax</h2> 
+<pre>--global-filters:include-filter [abi] module-name [test-class][#method-name]
+
+--global-filters:exclude-filter [abi] module-name [test-class][#method-name]
+</pre> <p>Where module-name is the only mandatory part to be provided.</p> <p>For example:</p> <ul> <li>--global-filters:include-filter moduleA : will only run the module</li> <li>--global-filters:include-filter moduleA class#method : will only run the matching method</li> </ul> <p>The option can be repeated if more filters are needed. Exclusion has priority over inclusion.</p> <h2 id="implementation">Implementation</h2> <p><a href="https://source.android.com/reference/tradefed/com/android/tradefed/config/filter/GlobalTestFilter">Source code</a></p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/tradefed/testing/through-tf/global-filters" class="_attribution-link">https://source.android.com/docs/core/tests/tradefed/testing/through-tf/global-filters</a>
+  </p>
+</div>

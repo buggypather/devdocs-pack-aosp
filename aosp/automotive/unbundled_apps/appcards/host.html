@@ -1,0 +1,49 @@
+<h1>Configure an AppCard host</h1> <p>Use <code translate="no" dir="ltr">AppCardHost</code> to communicate with apps that show AppCards.</p> <h2 id="permissions">Permissions</h2> <p>Any app that uses an <code translate="no" dir="ltr">AppCardHost</code> must have the following permissions:</p> <ul> <li><code translate="no" dir="ltr">android.permission.INTERACT_ACROSS_USERS_FULL</code></li> <li><code translate="no" dir="ltr">android.permission.QUERY_ALL_PACKAGES</code></li> <li>(In API level 34 and higher <strong>only</strong>) <code translate="no" dir="ltr">android.car.permission.BIND_APP_CARD_PROVIDER</code>
+</li> </ul> <h2 id="initialize">Initialize</h2> <p>To initialize the host, provide:</p> <ul> <li>Context</li> <li>
+<code translate="no" dir="ltr">updateRate</code> AppCard update rate in milliseconds.</li> <li>
+<code translate="no" dir="ltr">fastUpdateRate</code> Update rate in milliseconds for components tagged with <code translate="no" dir="ltr">EnforceFastUpdateRate</code>
+</li> <li>
+<code translate="no" dir="ltr">responseExecutor</code> A thread on which you want to receive responses from AppCard apps.</li> </ul> <h2 id="design">Design</h2> <p>An <code translate="no" dir="ltr">AppCardHost</code> can be interacted with in one of two ways:</p> <ul> <li>Register as an <a href="#appcardlistener"><code translate="no" dir="ltr">AppCardListener</code></a>
+</li> </ul> <p>OR,</p> <ul> <li>Interact with the <a href="#api"><code translate="no" dir="ltr">AppCardHost</code> APIs</a>
+</li> </ul> <h3 id="appcardlistener">AppCardListener</h3> <p>The <code translate="no" dir="ltr">AppCardListener</code> component registers itself with an <code translate="no" dir="ltr">AppCardHost</code> to receive communication updates from the <code translate="no" dir="ltr">AppCardHost</code> and AppCard apps. The interface functions of an <code translate="no" dir="ltr">AppCardListener</code> are detailed here.</p> 
+<dt><code translate="no" dir="ltr">fun onAppCardReceived(AppCardContainer)</code></dt> 
+<dd>This function is triggered when an AppCard has been received from an app. It's sent as an <code translate="no" dir="ltr">AppCardContainer</code> which provides an AppCard and an <code translate="no" dir="ltr">appIdentifier</code> to identify the app that sent the AppCard</dd> 
+<dt><code translate="no" dir="ltr">fun onComponentReceived(AppCardComponentContainer)</code></dt> 
+<dd> This function is triggered when an AppCard component is received from an app. It's sent as an <code translate="no" dir="ltr">AppCardComponentContainer</code>, which provides an AppCards component, <code translate="no" dir="ltr">Identifier</code> to identify the app that sent the AppCard, and a string ID to point to the AppCard to which the component is related.</dd> 
+<dt><code translate="no" dir="ltr">fun onProviderRemoved(String, String?)</code></dt> 
+<dd>This function is triggered when an AppCard provider has been removed or disabled. Use this method to clean up any active AppCard related to the given package name and provider authority. <p>If authority is <code translate="no" dir="ltr">{@code null}</code>, then an entire package was removed.</p>
+</dd> 
+<dt><code translate="no" dir="ltr">fun onProviderAdded(String, String?)</code></dt> 
+<dd>This function is triggered when an AppCard provider has been added or enabled. <p><strong>Sample usage.</strong> Use this function as a trigger to refresh all available AppCards in an AppCard picker. If authority is <code translate="no" dir="ltr">{@code null}</code>, then an entire package was added.</p>
+</dd> 
+<dt><code translate="no" dir="ltr">fun onPackageCommunicationError(appIdentifier, Throwable)</code></dt> 
+<dd>This function is triggered when the <code translate="no" dir="ltr">AppCardHost</code> encounters an error when communicating with an AppCard provider. <p><strong>Sample usage.</strong> Use this method to show to the user that an AppCard they have selected has encountered an error.</p>
+</dd> <h3 id="api">APIs</h3> 
+<dt><code translate="no" dir="ltr">fun refreshCompatibleapp()</code></dt> 
+<dd>This method should be called whenever the activity that is using the host is resumed so that the host can refresh its list of apps that support AppCards. </dd> 
+<dt><code translate="no" dir="ltr">fun destroy()</code></dt> 
+<dd>Call this method when an activity that is using a host is destroyed so that the host can clean up all connections and internal members.</dd> 
+<dt><code translate="no" dir="ltr">fun registerListener(AppCardListener)</code></dt> 
+<dd>Used to register an <code translate="no" dir="ltr">AppCardListener</code>.</dd> 
+<dt><code translate="no" dir="ltr">fun unregisterListener(AppCardListener)</code></dt> 
+<dd>Used to unregister an <code translate="no" dir="ltr">AppCardListener</code>.</dd> 
+<dt><code translate="no" dir="ltr">fun getAllAppCards(AppCardContext)</code></dt> 
+<dd>Call this method to supply a registered <code translate="no" dir="ltr">AppCardListener</code> with all the AppCards provided in the system with a given <code translate="no" dir="ltr">AppCardContext</code> that provides hints to the providers on how to structure their AppCard.</dd> 
+<dt><code translate="no" dir="ltr">fun requestAppCard(AppCardContext, appIdentifier, String)</code></dt> 
+<dd>Call this method to supply a registered <code translate="no" dir="ltr">AppCardListener</code> with a specific AppCard, given an <code translate="no" dir="ltr">AppCardContext</code> that gives hints to the providers on how to structure their AppCard.</dd> 
+<dt><code translate="no" dir="ltr">fun notifyAppCardRemoved(appIdentifier, String)</code></dt> 
+<dd>Notify an AppCard provider that its AppCard is no longer active.</dd> 
+<dt><code translate="no" dir="ltr">fun notifyAppCardInteraction(appIdentifier, String, String, String)</code></dt> 
+<dd>Notify an AppCard provider that its AppCard has been interacted with. The only supported interaction is a button click, which is signified by a <code translate="no" dir="ltr">AppCardMessageConstants.InteractionMessageConstants.MSG_INTERACTION_ON_CLICK</code>. </dd> 
+<dd>We recommend creating a button for an AppCard with an <code translate="no" dir="ltr">onClick</code> listener that calls this function with <code translate="no" dir="ltr">appIdentifier</code>, AppCard ID, component ID, and interaction ID.</dd> 
+<dt><code translate="no" dir="ltr">fun sendAppCardContextUpdate(AppCardContext, appIdentifier, String)</code></dt> 
+<dd>Send an <code translate="no" dir="ltr">AppCardContext</code> update for a specific AppCard. For example, when shifting from Park mode to Drive mode, use this method to send an <code translate="no" dir="ltr">AppCardContext</code> update in which <code translate="no" dir="ltr">isInteractable</code> is set to <code translate="no" dir="ltr">false</code> for each active AppCard.</dd> <h2 id="faq">FAQ</h2> <ol> <li>
+<p>Where can I find sample implementations?</p> <ul> <li><p><a href="https://android.googlesource.com/platform/packages/apps/Car/libs/+/refs/tags/ub-automotive-master-20250418/car-app-card-host-lib/sample-host/">Sample host</a>. Shows all available AppCards in the system, along with testing capabilities.</p></li> <li><p>DriverUI and <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/services/Car/car_product/distant_display/apps/CarDistantDisplayPanoManager/;l=1">Pano manager</a>. Pano manager acts as the picker while DriverUI acts as the presenter.</p></li> </ul>
+</li> <li>
+<p>How many AppCards can each <code translate="no" dir="ltr">AppCardContentProvider</code> support?</p> <p>An <code translate="no" dir="ltr">AppCardContentProvider</code> can support an infinite number of AppCards. However, be sure to balance the number of AppCards with degraded performance versus a positive user experience.</p>
+</li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/unbundled_apps/appcards/host" class="_attribution-link">https://source.android.com/docs/automotive/unbundled_apps/appcards/host</a>
+  </p>
+</div>

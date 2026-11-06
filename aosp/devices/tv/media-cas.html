@@ -1,0 +1,82 @@
+<h1>CAS framework</h1>  <p>The Media conditional access systems (Media CAS) framework provides standard APIs to enable conditional access (CA) services on a range of digital TV hardware, including digital cable, satellite, terrestrial systems, and IPTV systems. The framework works with the <a href="../tv">Android TV Input framework</a> and <a href="tuner-framework">Android TV Tuner framework</a>, providing Java APIs invoked from the TV Input Service (TIS) app.</p> <p>The main objectives of Media CAS are as follows.</p> <ul> <li>Provide a public Java API and native plugin framework that can be used by third-party developers and OEMs to support CAS for broadcast TV in Android.</li> <li>Provide a CAS framework within Android that lets ATV OEMs interoperate with a variety of CAS vendors in a consistent manner.</li> <li>Support multiple third-party CAS vendors using native plugins. CAS plugins might use vendor-specific network protocols, entitlement management message (EMM)/entitlement control message (ECM) formats, and descramblers.</li> <li>Support hardware security such as key ladders.</li> <li>Support trusted execution environments (TEEs) such as TrustZone.</li> </ul> <h2 id="supported-configurations">Supported configurations</h2> <h3 id="hardware-tuner-config">Hardware Tuner configuration</h3> <p>If the hardware is responsible for MPEG transport stream demultiplexing and descrambling, <a href="tuner-framework">Tuner framework</a> provides conditional access program-specific information (PSI) data to the TIS app in order to interface with hardware-based TV tuners.</p> <p>Conditional access PSI data includes CA descriptors, ECMs, and EMMs. These structures enable the CAS plugin to obtain keys needed to decrypt the content streams.</p> <p><img src="https://source.android.com/static/docs/devices/tv/images/hardware-tuner-config.png" alt="Diagram of the hardware Tuner configuration." width="750"> </p> <p><strong>Figure 1.</strong> Hardware Tuner configuration</p> <p>The hardware configuration might have a TEE layer, such as TrustZone, which is illustrated in Figure 1. If there isn't a TEE layer, a CAS client plugin can communicate with hardware key ladder services provided by the platform. Due to vendor-specific variations of these interfaces, Media CAS doesn't standardize them.</p> <h3 id="software-config">Software configuration</h3> <p>Before Android 11, the Media CAS framework could still be used to process software-based content, such as IPTV from IP multicast/unicast. The TIS app is responsible for instantiating and properly provisioning the Media CAS Java object.</p> <p>The app might use MediaExtractor or other MPEG2-TS parsers to extract CA-related PSI data, such as CA descriptors, ECMs, and EMMs. If the app uses the framework MediaExtractor, it can delegate the CAS session management, such as opening a session and processing EMM/ECM, to the framework MediaExtractor. MediaExtractor then configures the CAS session using the native API directly.</p> <p>Otherwise, the app is responsible for extracting the CA-related PSI data and configuring the CAS session using the Media CAS Java APIs (for example, when the app uses its own MPEG2-TS parser).</p> <p><img src="https://source.android.com/static/docs/devices/tv/images/tuner-config.png" alt="Diagram of the Tuner configuration." width="750"> </p> <p><strong>Figure 2.</strong> IPTV input, CAS, and descrambler configuration using the framework MediaExtractor</p> <p>In the software extractor scenario, the extractor requires a software or hardware-based descrambler object for each scrambled track, regardless of whether the track calls for secure decoders. This is due to the following.</p> <ul> <li>If the track doesn’t require secure decoding, the extractor descrambles the access unit to clear buffers and extracts samples as if from a clear stream. This way <code translate="no" dir="ltr">MediaCodec</code> doesn’t need to be involved in the descrambling.</li> <li>
+<p>If the track requires secure decoding, the extractor might still need a descrambler. This happens when the transport stream is scrambled at the transport packet level, where the packetized elementary stream (PES) header is scrambled. The extractor needs to access the PES header to downstream certain information (for example, the presentation timestamp).</p> <p>The descrambler isn't used by the extractor if the transport stream is scrambled at the PES packet level, where the PES header is left clear. However, it's not possible to confirm when the scrambling happens until the actual scrambled packet arrives. For simplicity, assume a descrambler is used if the track is determined to be scrambled based on the program mapping table (PMT).</p>
+</li> </ul> <h4 id="secure-decode">Limitations of software configuration</h4> <p>When the track requires secure decoding, the descrambler needs to be cautious when letting a descramble operation into clear buffers. Because insecure audio decoding is required, if video decoding requires secure decoders, it should be scrambled on a different session from audio. The ECM for the session must signal to the plugin that a secure decoder is required.</p> <p>Alternatively, the plugin must be able to reliably tie a key to its security policy. Otherwise, the app can easily get video frames with the audio descrambler.</p> <p>Even when the session requires a secure decoder, it might be asked to output a small amount of data to clear buffers by the extractor to process the PES header. To prevent a malicious app from making the plugin return the entire access unit, the plugin needs to parse the transport payload to ensure that the payload starts with a PES header of the appropriate stream type. Otherwise, the plugin should deny the request.</p> <aside class="note"><strong>Note:</strong><span> Due to this limitation, software configuration isn't recommended.</span></aside> <h2 id="ca-tuning">CA tuning sequence</h2> <p>When tuning to a new channel, the TIS module registers to receive CA descriptors, ECMs, and EMMs from the PSI Tuner framework. A CA descriptor contains the CA system ID, which uniquely identifies a specific CA vendor and other vendor-specific data. TIS queries the Media CAS to determine if a CAS plugin exists that can handle the CA descriptor.</p> <p><img src="https://source.android.com/static/docs/devices/tv/images/tuner-cas.png" alt="Diagram of tuning CAS content." width="750"> </p> <p><strong>Figure 3.</strong> Tuning CAS content</p> <p>If the CA system ID is supported, an instance of the Media CAS is created and the vendor private data from the CA descriptor is provided to the plugin. Then, new sessions are opened in Media CAS to handle the audio and video streams. The newly opened sessions receive ECMs and EMMs for the plugin.</p> <h2 id="cas-plugin-flow">Sample CAS plugin flow</h2> <p>TIS delivers ECMs to the CAS plugin using Media CAS APIs. An ECM contains the encrypted control word, which needs to be decrypted using information from an EMM. The CAS plugin determines how to acquire an EMM for the asset based on vendor-specific information in the CA descriptor, which is provided by the <code translate="no" dir="ltr">setPrivateData()</code> method.</p> <p>EMMs might be delivered in band in the content stream or out of band using a network request initiated by the CA plugin. TIS uses the <code translate="no" dir="ltr">processEMM()</code> method to deliver any in band EMMs to the CA plugin.</p> <p>If a network request is required to obtain an EMM, the CA plugin is responsible for performing the network transaction with a license server.</p> <p><img src="https://source.android.com/static/docs/devices/tv/images/example-cas.png" alt="Diagram of an example CAS." width="800"> </p> <p><strong>Figure 4.</strong> Example CAS plugin for EMM and ECM processing</p> <p>When the EMM is received, the CA plugin parses it to obtain the encrypted key to decrypt the control word. The encrypted EMM key and encrypted control word might be loaded into a key ladder or trusted environment to perform the control word decryption and subsequent descrambling of the content stream.</p> <h2 id="mediacas-java-api">Media CAS Java API</h2> <p>The Media CAS Java API contains the following methods.</p> <ul> <li>
+<p>List all available CA plugins on the device.</p> 
+<pre>class MediaCas.PluginDescriptor {
+  public String getName();
+  public int getSystemId();
+}
+static PluginDescriptor[] enumeratePlugins();
+</pre>
+</li> <li>
+<p>Construct a Media CAS instance for the specified CA system. This means that the Media CAS framework can handle multiple CAS systems simultaneously.</p> 
+<pre>MediaCas(int CA_system_id);
+MediaCas(@NonNull Context context, int casSystemId,
+         @Nullable String tvInputServiceSessionId,
+         @PriorityHintUseCaseType int priorityHint);
+</pre>
+</li> <li>
+<p>Register an event listener and allow the app to specify a handler whose looper is used.</p> 
+<pre>interface MediaCas.EventListener {
+  void onEvent(MediaCas, int event, int arg, byte[] data);
+  void onSessionEvent(@NonNull MediaCas mediaCas, @NonNull Session session, int event, int arg, @Nullable byte[] data);
+  void onPluginStatusUpdate(@NonNull MediaCas mediaCas, @PluginStatus int status, int arg);
+  void onResourceLost(@NonNull MediaCas mediaCas);
+}
+void setEventListener(MediaCas.EventListener listener, Handler handler);
+</pre>
+</li> <li>
+<p>Send the private data for the CA system. The private data can come from the CA descriptor, the conditional access table, or out of band sources. This isn't associated with a particular session.</p> 
+<pre>void setPrivateData(@NonNull byte[] data);
+</pre>
+</li> <li>
+<p>Process an EMM packet.</p> 
+<pre>void processEmm(@NonNull byte[] data, int offset, int length);
+</pre>
+</li> <li>
+<p>Send an event to a CA system. The format of the event is specific to the scheme and opaque to the framework.</p> 
+<pre>void sendEvent(int event, int arg, @Nullable byte[] data);
+</pre>
+</li> <li>
+<p>Initiate a provisioning operation of the specified type for a CA system. When a device signs up for a pay TV service for the first time, it needs to get provisioned to the CAS server first. Provide a set of related parameters to the device for provisioning.</p> 
+<pre>void provision(String provisionString);
+</pre>
+</li> <li>
+<p>Trigger a refresh of entitlements. When a user subscribes to a new channel (for example, by responding to an advertisement or by adding a channel on the electronic program guide (EPG)), the app should be able to tell the CA clients to refresh entitlement keys.</p> 
+<pre>void refreshEntitlements(int refreshType);
+</pre>
+</li> <li>
+<p>Close the Media CAS object.</p> 
+<pre>void close();
+</pre>
+</li> <li>
+<p>Open a session.</p> 
+<pre>Session openSession();
+Session openSession(@SessionUsage int sessionUsage, @ScramblingMode int scramblingMode);
+</pre>
+</li> <li>
+<p>Close a previously opened session.</p> 
+<pre>void Session#close();
+</pre>
+</li> <li>
+<p>Provide the CA private data from a CA descriptor in the PMT, which can be from the program info or ES info section, to a CAS session.</p> 
+<pre>void Session#setPrivateData(@NonNull byte[] sessionId, @NonNull byte[] data);
+</pre>
+</li> <li>
+<p>Process an ECM packet for a session.</p> 
+<pre>void Session#processEcm(@NonNull byte[] data, int offset, int length);
+</pre>
+</li> <li>
+<p>Get the session ID.</p> 
+<pre>byte[] Session#getSessionId();
+</pre>
+</li> <li>
+<p>Send a session event to a CA system. The format of the event is specific to the scheme and is opaque to the framework.</p> 
+<pre>void Session#sendSessionEvent(int event, int arg, @Nullable byte[] data);
+</pre>
+</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/devices/tv/media-cas" class="_attribution-link">https://source.android.com/docs/devices/tv/media-cas</a>
+  </p>
+</div>

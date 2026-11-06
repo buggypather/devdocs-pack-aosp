@@ -1,0 +1,14 @@
+<h1>Implement advanced windowing</h1>  <p>This section describes optimal uses of Scalable UI.</p> <ul> <li><a href="#enable">Create persistent multipanel layouts</a></li> <li><a href="#verify">Implement a dynamic home scene</a></li> <li><a href="#panels">Apply contextual overlays</a></li> <li><a href="#transition">Design complex panel interactions</a></li> </ul> <h2 id="enable">Enable the feature</h2> <p>Set the required flag in your System UI configuration file (<code translate="no" dir="ltr">config.xml</code> or similar):</p> 
+<pre>&lt;bool name="config_enableScalableUI"&gt;true&lt;/bool&gt;
+</pre> <h2 id="verify">Verify the system configuration</h2> <p>Verify that your system includes the required feature and disables any legacy or conflicting windowing features:</p> <ul> <li><p>The system must include the feature, <code translate="no" dir="ltr">android.software.car.splitscreen_multitasking</code></p></li> <li><p>Confirm that any legacy windowing or split-screen features that conflict with the new root-task model are disabled.</p></li> </ul> <h2 id="panels">Define panels and variants</h2> <p>To declare all the config files that contain <code translate="no" dir="ltr">Panel</code> configurations, add an array resource named <code translate="no" dir="ltr">window_states</code>.</p> <p>To address role mapping, Panels must use the <code translate="no" dir="ltr">role</code> attribute to be mapped to the apps they host. <code translate="no" dir="ltr">role</code> references an array of component names, such as <code translate="no" dir="ltr">role="@array/nav_components</code>.</p> <h2 id="transition">Define transitions</h2> <p>Within each Panel definition, define the transitions by mapping system or custom Events to a target Variant. For example, to define behavior for the navigation panel:</p> 
+<pre>&lt;Transitions&gt;
+    &lt;Transition onEvent="_System_TaskOpenEvent" toVariant="@id/opened"/&gt;
+    &lt;Transition onEvent="_System_HomeEvent" toVariant="@id/closed"/&gt;
+    &lt;Transition onEvent="@string/event_system_nav_focus_lost" toVariant="@id/minimized"/&gt;
+&lt;/Transitions&gt;
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/scalableui/implement" class="_attribution-link">https://source.android.com/docs/automotive/scalableui/implement</a>
+  </p>
+</div>

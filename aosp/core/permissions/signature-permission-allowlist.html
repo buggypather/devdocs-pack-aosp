@@ -1,0 +1,21 @@
+<h1>Signature permission allowlist</h1>  <p>Platform signed apps are apps sharing the same (or compatible) signing certificate with the platform package (<code translate="no" dir="ltr">android</code>). A platform signed app can be a system app (located on a system image partition), or a nonsystem app. Platform signature permissions are permissions defined by the platform package that also have the <code translate="no" dir="ltr">signature</code> protection level. Debuggable builds are builds whose <code translate="no" dir="ltr">android.os.Build.isDebuggable()</code> return <code translate="no" dir="ltr">true</code>, such as <code translate="no" dir="ltr">userdebug</code> or <code translate="no" dir="ltr">eng</code> builds.</p> <aside class="note"><strong>Note:</strong><span> On this page, <code translate="no" dir="ltr">/etc/permissions</code> resolves to <code translate="no" dir="ltr"><var translate="no">partition</var>/etc/permissions</code>.</span></aside> <p>Historically, device manufacturers had little control over which platform <code translate="no" dir="ltr">signature</code> permissions could be granted to platform signed nonsystem apps. Starting in Android 15, manufacturers can explicitly grant platform signature permissions in the system configuration XML files in the <code translate="no" dir="ltr">/etc/permissions</code> directory. If a platform signed nonsystem app isn't added to the allowlist for a platform signature permission, that permission acts as if the app isn't platform signed on nondebuggable builds.</p> <aside class="note"><strong>Note:</strong><span> The allowlist isn't enforced on debuggable builds to facilitate easier testing.</span></aside><aside class="note"><strong>Note:</strong><span> platform signed system apps and their requested permissions aren't affected by this change, however permissions newly requested by a system app update (but not requested by the original system app) still need to be added to the allowlist.</span></aside> <h2 id="add-an-allowlist">Add an allowlist</h2> <p>You can list permission allowlists for apps in a single XML file or in multiple XML files located in the <code translate="no" dir="ltr">/etc/permissions</code> directory:</p> <ul> <li><code translate="no" dir="ltr">/etc/permissions/signature-permissions-<var translate="no">OEM_NAME</var>.xml</code></li> <li><code translate="no" dir="ltr">/etc/permissions/signature-permissions-<var translate="no">DEVICE_NAME</var>.xml</code></li> </ul> <p>No strict rule applies to how content is organized. Device implementers can determine content structure as long as the appropriate apps and their permissions are added to the allowlist.</p> <h2 id="customize-an-allowlist">Customize an allowlist</h2> <p>AOSP includes an allowlist implementation that you can customize as needed, similar to the <a href="perms-allowlist">privileged permission allowlist</a>. For example:</p> 
+<pre>&lt;!--
+  ~ This XML file declares which platform signature permissions to grant to
+  ~ platform signed nonsystem apps.
+  --&gt;
+
+&lt;permissions&gt;
+    &lt;signature-permissions package="com.android.example"&gt;
+        &lt;permission name="android.permission.READ_DEVICE_CONFIG"/&gt;
+        ...
+    &lt;/signature-permissions&gt;
+    ...
+&lt;/permissions&gt;
+</pre> <h2 id="find-missing-permissions">Find missing permissions</h2> <p>To find missing permissions, install your platform signed app and inspect device logs for the following format of warning messages:</p> 
+<pre>Signature permission {PERMISSION_NAME} for package {PACKAGE_NAME} ({PACKAGE_PATH}) not in signature permission allowlist
+</pre> <p>The system can still grant the permission on debuggable builds, but not on nondebuggable builds such as <code translate="no" dir="ltr">user</code> builds.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/permissions/signature-permission-allowlist" class="_attribution-link">https://source.android.com/docs/core/permissions/signature-permission-allowlist</a>
+  </p>
+</div>

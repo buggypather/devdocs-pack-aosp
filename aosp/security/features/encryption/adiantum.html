@@ -1,0 +1,70 @@
+<h1>Enable Adiantum</h1>  <p> Adiantum is an encryption method designed for devices running Android 9 and higher whose CPUs lack <a href="https://en.wikipedia.org/wiki/Advanced_Encryption_Standard">AES</a> instructions. If you are shipping an ARM-based device with ARMv8 Cryptography Extensions or an x86-based device with AES-NI, you should <strong>not</strong> use Adiantum. AES is faster on those platforms. </p> <p> For devices lacking these AES CPU instructions, Adiantum provides encryption on your device with very little performance overhead. For benchmarking numbers, see the <a href="https://tosc.iacr.org/index.php/ToSC/article/view/7360">Adiantum paper</a>. For the benchmarking source to run on your hardware, see the <a href="https://github.com/google/adiantum">Adiantum source on GitHub</a>. </p> <p> To enable Adiantum on a device running Android 9 or higher, you need to make kernel changes and userspace changes. </p> <h2 id="kernel-changes">Kernel changes</h2> <p> Adiantum is supported by the Android common kernels, version 4.9 and higher. </p> <p> If your device's kernel doesn't already have Adiantum support, cherry-pick the changes listed below. If you're having trouble cherry-picking, devices using <a href="full-disk">full-disk encryption</a> (FDE) can exclude the <code translate="no" dir="ltr">fscrypt: </code> patch. </p> <table> <tr> <th>Kernel version</th> <th>Crypto and fscrypt patches</th> <th>
+<code translate="no" dir="ltr">dm-crypt</code> patch</th> </tr> <tr> <td>4.19 </td> <td>
+<a href="https://android-review.googlesource.com/q/topic:%22adiantum-4.19%22+(status:open%20OR%20status:merged)">4.19 kernel</a> </td> <td>
+<a href="https://android-review.googlesource.com/c/kernel/common/+/851273"><code translate="no" dir="ltr">dm-crypt</code> patch</a> </td> </tr> <tr> <td>4.14 </td> <td>
+<a href="https://android-review.googlesource.com/q/topic:%22adiantum-4.14%22+(status:open%20OR%20status:merged)">4.14 kernel</a> </td> <td>
+<a href="https://android-review.googlesource.com/c/kernel/common/+/851275"><code translate="no" dir="ltr">dm-crypt</code> patch</a> </td> </tr> <tr> <td>4.9 </td> <td>
+<a href="https://android-review.googlesource.com/q/topic:%22adiantum-4.9%22+(status:open%20OR%20status:merged)">4.9 kernel</a> </td> <td>
+<a href="https://android-review.googlesource.com/c/kernel/common/+/851278"><code translate="no" dir="ltr">dm-crypt</code> patch</a> </td> </tr> </table> <h3 id="enable-adiantum-kernel">Enable Adiantum in your kernel</h3> <h4 id="enable-adiantum-kernel-latest">Android 11 and higher</h4> <p> If your device is launching with Android 11 or higher, enable the following settings in your device's kernel configuration: </p> 
+<pre>CONFIG_CRYPTO_ADIANTUM=y
+CONFIG_FS_ENCRYPTION=y
+CONFIG_BLK_INLINE_ENCRYPTION=y
+CONFIG_BLK_INLINE_ENCRYPTION_FALLBACK=y
+CONFIG_FS_ENCRYPTION_INLINE_CRYPT=y
+CONFIG_DM_DEFAULT_KEY=y
+</pre> <aside class="note"><strong>Note</strong>: <code translate="no" dir="ltr">CONFIG_CRYPTO_ADIANTUM</code> is always required for Adiantum. <code translate="no" dir="ltr">CONFIG_FS_ENCRYPTION</code> is required for <a href="file-based">file-based encryption</a>, while the other settings above are required for <a href="metadata">metadata encryption</a>. </aside> <p> If your device is running a 32-bit ARM kernel, also enable NEON instructions to improve performance: </p> 
+<pre>CONFIG_KERNEL_MODE_NEON=y
+CONFIG_CRYPTO_AES_ARM=y
+CONFIG_CRYPTO_CHACHA20_NEON=y
+CONFIG_CRYPTO_NHPOLY1305_NEON=y
+</pre> <h4 id="enable-adiantum-kernel-9-10">Android 9 and 10</h4> <p> If your device is launching with Android 9 or 10, then slightly different kernel configuration settings are needed. Enable the following settings: </p> 
+<pre>CONFIG_CRYPTO_ADIANTUM=y
+CONFIG_DM_CRYPT=y
+</pre> <aside class="note"><strong>Note</strong>: Devices launching with Android 9 or 10 need <code translate="no" dir="ltr">CONFIG_DM_CRYPT</code> even if they use file-based encryption, since dm-crypt was required by <a href="metadata#configuration-on-adoptable-storage">metadata encryption on adoptable storage</a>. </aside> <p> If your device uses file-based encryption, also enable: </p> 
+<pre>CONFIG_F2FS_FS_ENCRYPTION=y
+</pre> <p> Finally, if your device runs a 32-bit ARM kernel, enable NEON instructions to improve performance: </p> 
+<pre>CONFIG_KERNEL_MODE_NEON=y
+CONFIG_CRYPTO_AES_ARM=y
+CONFIG_CRYPTO_CHACHA20_NEON=y
+CONFIG_CRYPTO_NHPOLY1305_NEON=y
+</pre> <h2 id="userspace-changes">Userspace changes</h2> <p> For devices running Android 10 or higher, the <a href="https://android-review.googlesource.com/q/topic:%22userspace_adiantum_support%22+(status:open%20OR%20status:merged)">Adiantum userspace changes</a> are already present. </p> <p> For devices running Android 9, cherry-pick the following changes: </p> <ul> <li><a href="https://android-review.googlesource.com/c/platform/system/vold/+/850789"><code translate="no" dir="ltr">cryptfs</code>: Add Adiantum support</a></li> <li><a href="https://android-review.googlesource.com/c/platform/system/vold/+/850790"><code translate="no" dir="ltr">cryptfs</code>: Allow setting dm-crypt sector size</a></li> <li><a href="https://android-review.googlesource.com/c/platform/system/vold/+/890517"><code translate="no" dir="ltr">cryptfs</code>: Round down dm-crypt device size to crypto sector boundary</a></li> <li><a href="https://android-review.googlesource.com/c/platform/system/vold/+/890518"><code translate="no" dir="ltr">cryptfs</code>: Improve logging of dm-crypt device creation</a></li> <li><a href="https://android-review.googlesource.com/c/platform/system/extras/+/850402"><code translate="no" dir="ltr">libfscrypt</code>: Add Adiantum support</a></li> <li><a href="https://android-review.googlesource.com/c/platform/system/core/+/850139"><code translate="no" dir="ltr">fs_mgr_fstab</code>: Add Adiantum support</a></li> </ul> <h2 id="enable-adiantum-device">Enable Adiantum in your device</h2> <p> First, ensure that your device has <code translate="no" dir="ltr">PRODUCT_SHIPPING_API_LEVEL</code> set correctly to match the Android version it is launching with. For example, a device launching with Android 11 must have <code translate="no" dir="ltr">PRODUCT_SHIPPING_API_LEVEL := 30</code>. This is important because some of the encryption settings have different defaults on different launch versions. </p> <h3 id="fbe-devices">Devices with file-based encryption</h3> <p> To enable Adiantum file-based encryption on your device's internal storage, add the following option to the last column (the <strong>fs_mgr_flags</strong> column) of the row for the <code translate="no" dir="ltr">userdata</code> partition in the device's <code translate="no" dir="ltr">fstab</code> file: </p> 
+<pre>fileencryption=adiantum
+</pre> <p> If your device is launching with Android 11 or higher, then <a href="metadata#implementation-on-internal-storage">enabling metadata encryption</a> is also required. To use Adiantum for metadata encryption on internal storage, the <strong>fs_mgr_flags</strong> for <code translate="no" dir="ltr">userdata</code> must also contain the following options: </p> 
+<pre>metadata_encryption=adiantum,keydirectory=/metadata/vold/metadata_encryption
+</pre> <p> Next, enable Adiantum encryption on <a href="../../../core/storage/adoptable">adoptable storage</a>. To do this, set the following system properties in <code translate="no" dir="ltr">PRODUCT_PROPERTY_OVERRIDES</code>: </p> <p> For Android 11 and higher: </p> 
+<pre>
+ro.crypto.volume.options=adiantum
+ro.crypto.volume.metadata.encryption=adiantum
+</pre> <p> For Android 9 and 10: </p> 
+<pre>
+ro.crypto.volume.contents_mode=adiantum
+ro.crypto.volume.filenames_mode=adiantum
+ro.crypto.fde_algorithm=adiantum
+ro.crypto.fde_sector_size=4096
+</pre> <aside class="caution"><strong>Important</strong>: Some of these properties reference FDE but are needed on FBE devices; they affect <a href="metadata">metadata encryption</a>, which is always enabled on adoptable storage when FBE is also enabled. </aside> <aside class="note"><strong>Note</strong>: Setting <code translate="no" dir="ltr">ro.crypto.fde_sector_size</code> to 4096 improves performance, but is not required for Adiantum to work. </aside> <p> Finally, optionally add <code translate="no" dir="ltr">blk-crypto-fallback.num_keyslots=1</code> to the kernel command line. This reduces memory usage slightly when Adiantum metadata encryption is used. Before doing this, verify that the <code translate="no" dir="ltr">inlinecrypt</code> mount option isn't specified in the <code translate="no" dir="ltr">fstab</code>. If it is specified, remove it, since it isn't needed for Adiantum encryption, and it causes performance problems when used in combination with <code translate="no" dir="ltr">blk-crypto-fallback.num_keyslots=1</code>. </p> <p> To verify that your implementation worked, take a bug report or run: </p> 
+<pre>
+adb root
+adb shell dmesg
+</pre> <p> If Adiantum is enabled correctly, you should see this in the kernel log: </p> 
+<pre>fscrypt: Adiantum using implementation "adiantum(xchacha12-neon,aes-arm,nhpoly1305-neon)"
+</pre> <aside class="note"> <strong>Note</strong>: For ARM-based devices, the implementation name should match exactly. If you don't see references to <code translate="no" dir="ltr">neon</code>, your device won't perform as well. See the <em><a href="#enable-adiantum-kernel">Enable Adiantum in your kernel</a></em> section for details on enabling NEON instructions. </aside> <p> If you enabled metadata encryption, also run the following to verify that Adiantum metadata encryption is correctly enabled: </p> 
+<pre>
+adb root
+adb shell dmctl table userdata
+</pre> <p> The third field of the output should be <code translate="no" dir="ltr">xchacha12,aes-adiantum-plain64</code>. </p> <h3 id="fde-devices">Devices with full-disk encryption</h3> <aside class="note"><b>Note:</b> Full-disk encryption is not allowed on new devices running Android 10 and higher. For new devices, use <a href="file-based">file-based encryption</a>. </aside> <p> To enable Adiantum and improve its performance, set these properties in <code translate="no" dir="ltr">PRODUCT_PROPERTY_OVERRIDES</code>: </p> 
+<pre>ro.crypto.fde_algorithm=adiantum
+ro.crypto.fde_sector_size=4096
+</pre> <p> Setting <code translate="no" dir="ltr">fde_sector_size</code> to 4096 improves performance, but is not required for Adiantum to work. To use this setting, the userdata partition must begin at a 4096-byte aligned offset on-disk. </p> <p> In the <code translate="no" dir="ltr">fstab</code>, for userdata set: </p> 
+<pre>forceencrypt=footer
+</pre> <p> To verify that your implementation worked, take a bug report or run: </p> 
+<pre>
+adb root
+adb shell dmesg
+</pre> <p> If Adiantum is enabled correctly, you should see this in the kernel log: </p> 
+<pre>device-mapper: crypt: adiantum(xchacha12,aes) using implementation "adiantum(xchacha12-neon,aes-arm,nhpoly1305-neon)"
+</pre> <aside class="note"> <strong>Note</strong>: For ARM-based devices, the implementation name should match exactly. If you don't see references to <code translate="no" dir="ltr">neon</code>, your device won't perform as well. See the <em><a href="#enable-adiantum-kernel">Enable Adiantum in your kernel</a></em> section for details on enabling NEON instructions. </aside><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/security/features/encryption/adiantum" class="_attribution-link">https://source.android.com/docs/security/features/encryption/adiantum</a>
+  </p>
+</div>

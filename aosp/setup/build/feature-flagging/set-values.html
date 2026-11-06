@@ -1,0 +1,35 @@
+<h1>Set feature launch flag values</h1>  <p>By default, all feature launch flags are <code translate="no" dir="ltr">READ_WRITE</code> and set to <code translate="no" dir="ltr">DISABLED</code>. Before you can test a feature, you must override the default value used in the build by creating a <em>flag values file</em> for the flag. In a flag values file, you set a individual flag's state (<code translate="no" dir="ltr">ENABLED</code> or <code translate="no" dir="ltr">DISABLED</code>) and permission (<code translate="no" dir="ltr">READ_WRITE</code> or <code translate="no" dir="ltr">READ_ONLY</code>).</p> <p>A <em>release configuration</em> is a directory that contains all of the flag values files for a specific build of Android (with certain features enabled and disabled).</p> <p>AOSP ships with a few release configurations, such as <code translate="no" dir="ltr">trunk_staging</code>. Release configuration directories are found under <code translate="no" dir="ltr"><var translate="no">WORKING_DIRECTORY</var>/build/release/aconfig/</code>.</p> <aside class="note"><strong>Note:</strong><span> This page shows you how to add a flag to an existing release configuration as a means of teaching how release configurations work. The release configurations included in AOSP are defined by Google. Google doesn't accept contributions to update or change a configuration's feature release flags. Instead, you can define your own custom release configurations including default flag values in your forks of AOSP. For more information on release configurations, see <a href="set-values">Set feature launch flag values</a>.</span></aside> <p>When you use the <code translate="no" dir="ltr">lunch</code> command to <a href="../building#choose-a-target">choose a target</a>, you're also setting the release configuration for the target. For example, the following is a <code translate="no" dir="ltr">trunk_staging</code> target:</p> 
+<pre>lunch aosp_cf_x86_64_only_phone-aosp_current-userdebug
+</pre> <p>Trunk staging is a <em>development release configuration</em> because Google uses it to test features before general release. This configuration uses mostly <code translate="no" dir="ltr">READ_WRITE</code> flags that let you test your code with features enabled or disabled at runtime.</p> <p>At general release, use a <em>release release configuration</em>. A release release configuration mostly uses <code translate="no" dir="ltr">READ_ONLY</code> flags and reflects all of the code enabled for that release.</p> <h2 id="add">Add a flag to the trunk_staging release configuration</h2> <p>To test a new flag, add it to the <code translate="no" dir="ltr">trunk_staging</code> release configuration as follows:</p> <ol> <li>Navigate to <code translate="no" dir="ltr"><var translate="no">WORKING_DIRECTORY</var>/build/release/aconfig/trunk_staging/</code>
+</li> <li>Create a directory with the same package name as your flag, such as <code translate="no" dir="ltr">com.example.android.aconfig.demo.flags</code> shown in <a href="declare-flag">Declare an aconfig flag for Java</a>.</li> <li>Navigate to the new directory.</li> <li>In the directory, create a flag values file that combines the name used in the flag declaration (<code translate="no" dir="ltr">.aconfig</code>) file, such as <code translate="no" dir="ltr">my_static_flag</code> shown in <a href="declare-flag">Declare an aconfig flag for Java</a> with <code translate="no" dir="ltr">_flag_values.textproto</code>. The resulting filename is <code translate="no" dir="ltr">my_static_flag_flag_values.textproto</code>.</li> <li>
+<p>Edit the file and add a <code translate="no" dir="ltr">flag_value</code> similar to the following:</p> 
+<pre>flag_value {
+  package: "com.example.android.aconfig.demo.flags"
+  name: "my_static_flag"
+  state: DISABLED
+  Permission: READ_WRITE
+}
+</pre> <p>Where:</p> <ul> <li>
+<code translate="no" dir="ltr">package</code> contains the same package name used in the declaration.</li> <li>
+<code translate="no" dir="ltr">name</code> contains the same name used in the declaration.</li> <li>
+<code translate="no" dir="ltr">state</code> is either <code translate="no" dir="ltr">ENABLED</code> or <code translate="no" dir="ltr">DISABLED</code>.</li> <li>
+<code translate="no" dir="ltr">permission</code> is either <code translate="no" dir="ltr">READ_WRITE</code> or <code translate="no" dir="ltr">READ_ONLY</code>. Generally, the <code translate="no" dir="ltr">permission</code> is set to <code translate="no" dir="ltr">READ_ONLY</code> for flag values files that are part of a release configuration.</li> </ul>
+</li> <li><p>Save the file and exit your editor.</p></li> <li><p>In the same directory as the flag values file, create a build file called <code translate="no" dir="ltr">Android.bp</code>. This file is used to include the flag values file in the build.</p></li> <li>
+<p>In the <code translate="no" dir="ltr">Android.bp</code> file, create a <code translate="no" dir="ltr">aconfig_values</code> section similar to:</p> 
+<pre>aconfig_values {
+  name: "aconfig-values-platform_build_release-trunk-staging-com.example.android.aconfig.demo.flags-all",
+  package: "com.example.android.aconfig.demo.flags",
+  srcs: [
+    "*_flag_values.textproto",
+  ]
+}
+</pre> <p>Where:</p> <ul> <li>
+<code translate="no" dir="ltr">name</code> is the unique name for the Soong build module. Google uses the convention of <code translate="no" dir="ltr">aconfig-values-platform_<var translate="no">PATH_TO_RELEASE_CONFIG_DIR</var>-<var translate="no">CONFIG_NAME</var>-<var translate="no">package.name</var>-all</code>. This name must must match the name that soong auto-generates based on the <code translate="no" dir="ltr">aconfig_value_set</code> declaration in the parent directory's <code translate="no" dir="ltr">Android.bp</code> file. Note that <code translate="no" dir="ltr"><var translate="no">PATH_TO_RELEASE_CONFIG_DIR</var></code> is <code translate="no" dir="ltr">build_release</code>.</li> <li>
+<code translate="no" dir="ltr">package</code> contains the same package name used in the declaration.</li> <li>
+<code translate="no" dir="ltr">srcs</code> is a list of all of your flag values files. </li> </ul>
+</li> <li><p>Save the file and exit your editor.</p></li> <li><p>Navigate to the directory above the current directory (<code translate="no" dir="ltr">cd ..</code>)</p></li> <li><p>Build Android, and run your new code to verify that it's enabled per the setting in the flag values file.</p></li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/setup/build/feature-flagging/set-values" class="_attribution-link">https://source.android.com/docs/setup/build/feature-flagging/set-values</a>
+  </p>
+</div>

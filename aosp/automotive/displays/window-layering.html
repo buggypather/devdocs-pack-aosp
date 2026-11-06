@@ -1,0 +1,10 @@
+<h1>Automotive window layering</h1>  <p>In Automotive device configurations where safety-critical components are rendered in the same area of the screen as Android Automotive, it's imperative that Android layers are behind regulatory layers. Although it's possible to have transparent regions in Android, they aren't officially supported and can't be relied upon. Automotive device implementations MUST NOT layer Android Automotive OS on top of any safety relevant or regulatory components.</p> <p><img src="https://source.android.com/static/docs/automotive/images/window-layering-01.png" alt="Window layers" width="700" class="android-image-dark-theme-background screenshot"> </p> <p><strong>Figure 1.</strong> Window layers.</p> <p>Devices can render non-critical components underneath Android. However, we recommended you use Android as the base layer when multiple systems render in the same space.</p> <table class="columns"> <tr>
+<td>
+<img src="https://source.android.com/static/docs/automotive/images/window-layering-02.png" alt="Recommended" width="350" class="screenshot"> <p class="compare-better">Recommended</p> </td> <td> <img src="https://source.android.com/static/docs/automotive/images/window-layering-03.png" alt="Possible, not recommended" width="350" class="screenshot"> <p class="compare-worse">Possible, not recommended</p> </td>
+</tr>
+</table> <p><strong>Figure 2.</strong> Recommended and not recommended layering.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/displays/window-layering" class="_attribution-link">https://source.android.com/docs/automotive/displays/window-layering</a>
+  </p>
+</div>

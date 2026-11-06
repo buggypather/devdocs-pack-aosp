@@ -1,0 +1,21 @@
+<h1>NFC</h1>  <p>This page describes how to control NFC on a Cuttlefish device using the Cuttlefish NFC feature. NFC is supported on Cuttlefish devices running Android 15 or higher.</p> <h2 id="casimir">Use Casimir</h2> <p>The Cuttlefish NFC feature uses Casimir, an external NFC device simulation tool, which supports injecting APDU bytes for host card emulation. Casimir is implemented in <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/Nfc/libnfc-nci/tools/casimir/"><code translate="no" dir="ltr">/platform/system/nfc/tools/casimir/</code></a>.</p> <p>When launching Cuttlefish, Casimir is also launched by default. To control Casimir, use the <code translate="no" dir="ltr">CasimirControlService</code> service.</p> <h3 id="casimir_control_service">CasimirControlService</h3> <p>You can use the <code translate="no" dir="ltr">CasimirControlService</code> service through the REST API or the command line interface. For details, see <a href="../../setup/create/cuttlefish-control-environment">Cuttlefish: Environment Control</a>.</p> <p>The following table describes the method in <code translate="no" dir="ltr">CasimirControlService</code>. For more information, see <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:device/google/cuttlefish/host/commands/casimir_control_server/casimir_control.proto"><code translate="no" dir="ltr">casimir_control.proto</code></a>.</p> <table> <thead> <tr> <th>Method</th> <th>Description</th> </tr> </thead> <tbody> <tr> <td>
+<code translate="no" dir="ltr">SendApdu</code> </td> <td>Sends APDU bytes (hex strings) with NFC-A and ISO-DEP. The response is returned as hex strings.</td> </tr> </tbody> </table> <p>The following is an example command and a simplified response for sending two APDU bytes, <code translate="no" dir="ltr">[0x00, 0x11, 0x22]</code> and <code translate="no" dir="ltr">[0x33, 0x44, 0x55]</code>.</p> <ul> <li>
+<p>Command</p> 
+<pre>cvd env call CasimirControlService SendApdu '{apdu_hex_strings: ["001122", "334455"]}'
+</pre>
+</li> <li>
+<p>Simplified response</p> 
+<pre>Rpc succeeded with OK status
+{
+"responseHexStrings": [
+  "9000",
+  "9000",
+]
+}
+</pre>
+</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/devices/cuttlefish/nfc" class="_attribution-link">https://source.android.com/docs/devices/cuttlefish/nfc</a>
+  </p>
+</div>

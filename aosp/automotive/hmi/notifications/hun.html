@@ -1,0 +1,29 @@
+<h1>Heads-up notifications</h1>  <p>A <em>notification</em> is a message that Android displays outside an app to provide updates, reminders, and other timely information to users. In the Android Automotive OS, a notification can be displayed either as a <em>heads-up notification (HUN)</em> or in the Notification panel (or in both). This page explains how to customize HUNs.</p> <p><img src="https://source.android.com/static/docs/automotive/images/hun_01.png" class="screenshot android-image-dark-theme-background" alt="Notification"></p> <p><b>Figure 1.</b> Notification</p> <p>By overriding the configuration values detailed below, you can customize HUNs in two ways:</p> <ul> <li>Position</li> <li>Animation</li> </ul> <p>When customizing a HUN, be sure to determine how it is affected by the Z-order of system bars. If the Z-order of a system bar is 10 or higher, it appears on top of the HUNs. For example, if the HUN is displayed at the top of the screen and the top system bar has a Z-order of 10, the top system bar is displayed on top of the HUN <em>unless</em> the HUN animation helper is customized to offset the final position of the HUN by the height of the top system bar.</p> <h2 id="docs">Related documentation</h2> <ul> <li> <p>To learn how and why to overlay resources, see <a href="../../../core/architecture/rros">Overlays</a> in Customizing System UI.</p> </li> <li> <p>To learn more about notifications, see <a href="https://developer.android.com/training/cars/notifications">Notifications on Android Automotive OS</a> on developer.android.com.</p> </li> </ul> <h2 id="hun_showbottom">config_showHeadsUpNotificationOnBottom</h2> <p>A HUN can be displayed either on the top or bottom of the screen based on the configuration value <code translate="no" dir="ltr">config_showHeadsUpNotificationOnBottom</code>. Set to <code translate="no" dir="ltr">false</code> by default, this value sets the final position of the notification at the <em>top</em> of the screen.</p> <p><img src="https://source.android.com/static/docs/automotive/images/hun_01.png" class="screenshot android-image-dark-theme-background" alt="Default notification"></p> <p><b>Figure 2.</b> Default HUN</p> <h2 id="hun_helper">config_headsUpNotificationAnimationHelper</h2> <p>There are multiple ways of how the notification should appear on screen and leave the screen. A set of default animator helper classes are provided and can be switched out by overriding <code translate="no" dir="ltr">config_headsUpNotificationAnimationHelper</code>. </p> <h4 id="hun_top">com.android.car.notification.headsup.animationhelper.CarHeadsUpNotificationTopAnimationHelper</h4> <p>Animates the HUN to transition from the initial position, down to the final position, to visible, and then to invisible.</p> <p><img src="https://source.android.com/static/docs/automotive/images/hun_05.gif" alt="Top Animation Helper"></p> <p><b>Figure 3.</b> Top Animation Helper</p> <h4 id="hun_bottom">com.android.car.notification.headsup.animationhelper.CarHeadsUpNotificationBottomAnimationHelper</h4> <p>Animates the HUN to transition from the initial position, to the final position, to visible, and then to invisible.</p> <p><img src="https://source.android.com/static/docs/automotive/images/hun_03.gif" alt="Bottom Animation Helper"></p> <p><b>Figure 4.</b> Bottom Animation Helper</p> <h4 id="hun_right">com.android.car.notification.headsup.animationhelper.CarHeadsUpNotificationRightAnimationHelper</h4> <p>Animates the HUN to transition from the initial position left, to the final position, to visible, and then to invisible.</p> <table> <tr> <td><img src="https://source.android.com/static/docs/automotive/images/hun_02.gif" alt="Right animation helper"></td> <td><img src="https://source.android.com/static/docs/automotive/images/hun_04.gif" alt="Right animation helper"></td> </tr> </table> <p><b>Figure 5.</b> Right Animation Helper</p> <h4 id="hun_custom">Custom animation helper</h4> <p>Should additional customization be required, the animator helper classes can be overridden or a custom animator helper class can be used provided the help class implements the <code translate="no" dir="ltr">HeadsUpNotificationAnimationHelper</code> interface as shown in this code snippet:</p> 
+<pre>[...]
+
+public class SampleAnimationHelper implements
+       HeadsUpNotificationAnimationHelper {
+
+   @Override
+   public AnimatorSet getAnimateInAnimator(Context context, View view) {
+       return (AnimatorSet) AnimatorInflater.loadAnimator(
+               context, R.animator.heads_up_notification_transition_in);
+   }
+
+   @Override
+   public AnimatorSet getAnimateOutAnimator(Context context, View view) {
+       return (AnimatorSet) AnimatorInflater.loadAnimator(
+               context, R.animator.heads_up_notification_transition_out);
+   }
+
+   @Override
+   public void resetHUNPosition(View view) {
+       view.setY(-1 * view.getHeight());
+       view.setAlpha(0);
+   }
+}</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/hmi/notifications/hun" class="_attribution-link">https://source.android.com/docs/automotive/hmi/notifications/hun</a>
+  </p>
+</div>

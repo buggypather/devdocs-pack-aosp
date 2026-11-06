@@ -1,0 +1,30 @@
+<h1>SDV communications authorization overview</h1>  <p>The software-defined vehicle (SDV) platform provides an authorization framework to allow OEM control access to some resources.</p> <p>Android has a permission model where every app declares its own permissions in the manifest file to describe its capabilities. The SDV authorization model is similar. <a href="../../../core-areas/what-service">SDV service bundles</a> define permissions to declare the actions they can perform, such as publish, subscribe, serve, and call.</p> <h2 id="permission-types">Permission types</h2> <p>The following permission types are supported:</p> <dl> <dt>Client</dt> <dd>Authorized to call methods on an RPC interface, identified by service type and channel.</dd> <dt>Server</dt> <dd>Authorized to implement and serve an RPC interface, identified by service type and channel.</dd> <dt>Publisher</dt> <dd>Authorized to publish messages into a data topic, identified by message type and topic.</dd> <dt>Subscriber</dt> <dd>Authorized to receive messages from a data topic, identified by message type and topic.</dd> </dl> <h2 id="authz-policy-file">Authorization policy file</h2> <p>The authorization policy file is a single source of truth for the SDV communications stack authorization configuration for an SDV service bundle.</p> <h4 id="authz-policy-file-example">Example</h4> 
+<pre># Allows this SB to register publication of TireStatus type with "left-tire" topic only.
+publisher {
+  message: "com.sdv.TireStatus"
+  topic: "left-tire"
+}
+
+# Allows this SB to subscribe to publication of TireStatus type with "left-tire" topic only.
+subscriber {
+  message: "com.sdv.TireStatus"
+  topic: "left-tire"
+}
+
+# Allows this SB to implement and serve UserPreferencesManager service.
+server {
+  service: "com.sdv.UserPreferencesManager"
+  channel: "default"
+}
+
+# Allows this SB to discover and call UserPreferencesManager service.
+client {
+  service: "com.sdv.UserPreferencesManager"
+  channel: "default"
+}
+</pre> <p>See <a href="deployment">Deployment</a> to determine which service a specific authorization policy file belongs to. For more information about the proto schema, see <a href="authz-policy">Authorization policy</a>. To learn how policies are enforced and how to inspect audit logs when a permission check fails, see <a href="enforcement">Enforcement</a> and <a href="violations">Debug permissions violations</a>.</p> <h2 id="vm-level-permissions">VM-level permissions</h2> <p>VM-level permissions define authorization policies for communication between different VMs in the mesh network. This provides defense-in-depth security in case one VM is compromised. For more information, see <a href="vm-authz-policy">VM-level permissions</a>.</p> <h2 id="mesh-network">Mesh network</h2> <p>The Service Discovery architecture is set up so that all authorization policies are shared across VMs in the mesh network. No user intervention is required.</p> <p>Service Discovery does a local cache lookup to discover service units on a remote VM. All authorization policies are shared among VMs to check whether the Service Discovery caller is authorized for the discovered service units.</p> <p>Each node within the mesh network caches authorization policies from all other nodes. When a new node is introduced, its authorization policies are replicated to every other node. If a node connection is lost, such as during a reboot or crash, all cached authorization policies from that node are deleted. For guidance on placing unit type access control lists (ACLs) across multiple VMs and avoiding policy conflicts when a node disconnects, see <a href="unit-type-acls">Unit type ACLs</a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/core/comms-authorization/overview" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/core/comms-authorization/overview</a>
+  </p>
+</div>

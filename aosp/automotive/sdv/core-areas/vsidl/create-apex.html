@@ -1,0 +1,143 @@
+<h1>Build and deploy service bundles</h1>  <p>After you have created the middleware and written your custom code, you can deploy your service bundles as APEX files.</p> <ol> <li>
+<p>Create SDV configuration files:</p> <div> <section><p class="_code-tab"><strong>Rust</strong></p>
+<ol> <li>
+<p>Generate SDV configuration files by running:</p> 
+<pre data-language="">vsidlc -c /path/to/catalog -o /path/to/output --apex
+</pre> <p>Running <code translate="no" dir="ltr">vsidlc</code> with the <code translate="no" dir="ltr">--apex</code> flag automatically generates all necessary configuration files, including:</p> <ul> <li>APEX manifest (<code translate="no" dir="ltr">apex_manifest.json</code>)</li> <li>SDV metadata manifest (<code translate="no" dir="ltr">sdv_service_bundles_manifest.textproto</code>)</li> <li>Linker configuration (<code translate="no" dir="ltr">linker.config.json</code>)</li> <li>SELinux file contexts (<code translate="no" dir="ltr">file_contexts</code>)</li> <li>Public and private keys (<code translate="no" dir="ltr">.avbpubkey</code> and <code translate="no" dir="ltr">.pem</code>)</li> <li>Permission declarations and orchestration configurations</li> <li>An <code translate="no" dir="ltr">Android.bp</code> file defining all necessary Soong modules.</li> </ul> <p>You can find the generated configurations under:</p> 
+<pre data-language="">/path/to/output/apex/
+</pre> <p>and,</p> 
+<pre data-language="">/path/to/output/configs/
+</pre>
+</li> </ol></section> <section><p class="_code-tab"><strong>C++</strong></p>
+ <ol> <li>
+<p>Create an SDV metadata manifest file, <code translate="no" dir="ltr"><var class="edit" scope="service_bundle.manifest.textproto" translate="no">service_bundle.manifest.textproto</var></code> with these essential execution metadata fields:</p> <ul> <li>Name of the service according to the <a href="../naming-conventions">naming conventions</a>
+</li> <li>Integer and string representation of the service bundle version</li> <li>Path to the library created previously</li> </ul> <p>Preparing essential service bundle metadata is mandatory for service bundle packaging and deployment.</p> <aside class="note"><strong>Note:</strong><span> A package name isn't required in the manifest file; instead, it's extracted from the package name.</span></aside>
+<pre data-language="cpp"># proto-file: //system/software_defined_vehicle/core_services/service_bundles_registry/proto/sdv_service_bundles_manifest.proto
+# proto-message: SdvServiceBundleManifestEntry
+
+# SDV service bundle metadata definition with mandatory fields.
+sdv_service_bundle_metadata {
+  # Service bundle name.
+  name: "ServiceBundleName"
+  # Service bundle integer version.
+  version_number: 42
+  # Service bundle version as a string.
+  version_name: "42.alpha"
+  # Service bundle library path.
+  native_library_path: "lib64/libservice_bundle.so"
+}
+</pre>
+<aside class="tip"><strong>Tip:</strong><span> To view all metadata, see <a href="../../workstreams/core/service-bundle-metadata">Service bundle metadata</a>.</span></aside>
+</li> <li>
+<p>Create a new <a href="../../../../core/architecture/vndk/linker-namespace#namespace-properties">linker configuration</a> file, <code translate="no" dir="ltr"><var class="edit" scope="linker.config.json" translate="no">linker.config.json</var></code>:</p> 
+<pre data-language="cpp">{ "visible": true }
+</pre>
+</li> <li>
+<p>Create a new <code translate="no" dir="ltr"><var class="edit" scope="apex_manifest.json" translate="no">apex_manifest.json</var></code> file with these fields:</p> <ul> <li>Unique SDV package name</li> <li>Version of the APEX</li> <li>Dependency on SDV Comms libs</li> </ul> <aside class="caution"><strong>Caution:</strong><span> To avoid collisions and boot issues, the APEX package name defined in the APEX manifest must be unique across the entire SDV system. To help ensure that the build system can enforce this, we recommend using the same name as the APEX module name in <code translate="no" dir="ltr">Android.bp</code>.</span></aside>
+<pre data-language="cpp">{
+  "name": "com.sdv.oem.apex_and_module_name",
+  "version": 1,
+  "requireNativeLibs": [
+      "libsdv_comms_ctx_ffi.so",
+      "libsdv_comms_dt_ffi.so",
+      "libsdv_comms_id_ffi.so",
+      "libsdv_comms_sd_ffi.so"
+  ]
+}
+</pre>
+</li> <li><p>Create a public key, <code translate="no" dir="ltr"><var class="edit" scope="apex_name.apex_key" translate="no">apex_name.apex_key</var>.avbpubkey</code> and a private key, <code translate="no" dir="ltr"><var class="edit" scope="apex_name.apex_key" translate="no">apex_name.apex_key</var>.pem</code>.</p></li> <li>
+<p>Create a new <a href="../../../../security/features/selinux/implement#context-files">SELinux file context</a> <code translate="no" dir="ltr"><var class="edit" scope="apex_file_contexts" translate="no">apex_file_contexts</var></code>.</p> 
+<pre data-language="cpp">(/.*)?    u:object_r:system_file:s0
+</pre> <p>To learn more, see <a href="../../../../security/features/selinux/concepts#security_contexts">Security context and categories</a>.</p>
+</li> <li>
+<p>Create prebuilt targets in a new or an existing <a href="https://source.android.com/docs/setup/reference/androidbp"><code translate="no" dir="ltr">Android.bp</code></a> file:</p> 
+<pre data-language="cpp">// SDV manifest file prebuilt.
+prebuilt_etc {
+    name: "com.sdv.oem.apex_and_module_name.service_bundles_manifest",
+    // The source filename of the manifest file.
+    src: "service_bundle.manifest.textproto",
+    // The name of the installed file needs be `sdv_service_bundles_manifest.textproto`.
+    filename: "sdv_service_bundles_manifest.textproto",
+    // Disable direct installation of the prebuilt to one of the partitions.
+    // The manifest is used only inside of an apex.
+    installable: false,
+}
+// The linker config to allow libraries for the apex to be linkable.
+linker_config {
+    name: "com.sdv.oem.apex_and_module_name.linker_config",
+    src: "linker.config.json",
+    // Disable direct installation of the prebuilt to one of the partitions.
+    // The linker configuration is used only inside of an apex.
+    installable: false,
+}
+// Key to be used for signing the apex.
+apex_key {
+    name: "apex_name.apex_key",
+    public_key: "apex_name.apex_key.avbpubkey",
+    private_key: "apex_name.apex_key.pem",
+}
+</pre>
+</li> <li>
+<p>Create a new APEX module in a new or existing <a href="https://source.android.com/docs/setup/reference/androidbp"><code translate="no" dir="ltr">Android.bp</code></a> file. Use the SDV package name as the APEX module name.</p> 
+<pre data-language="cpp">apex {
+    name: "com.sdv.oem.apex_and_module_name",
+    // The service bundle(s) to be included in the apex.
+    native_shared_libs: [
+        "libservice_bundle",
+    ],
+    prebuilts: [
+        // SDV service bundles manifest file.
+        "com.sdv.oem.apex_and_module_name.service_bundles_manifest",
+        // Linker configuration to enable loading library from apex.
+        "com.sdv.oem.apex_and_module_name.linker_config",
+    ],
+    // Json manifest file describes metadata of the APEX package.
+    // The 'name' field from the JSON is used as a mounting point.
+    manifest: "apex_manifest.json",
+    // Setting the security contexts to files in this APEX bundle.
+    file_contexts: "apex_file_contexts",
+    // Name of the apex_key module that provides the private key to sign the APEX bundle.
+    key: "apex_name.apex_key",
+    // Mark apex as non-updatable for now, this might be revisited going forward.
+    updatable: false,
+    // Service bundle package is installed into /product partition.
+    product_specific: true,
+}
+</pre>
+<aside class="note"><strong>Note:</strong><span> Service bundle APEXes are only supported on the <code translate="no" dir="ltr">/product</code> partition (<code translate="no" dir="ltr">product_specific: true</code>) or the <code translate="no" dir="ltr">/system</code> and <code translate="no" dir="ltr">/system_ext</code> partitions (and can be updated using <code translate="no" dir="ltr">/data</code>). Installing service bundle APEXes on the <code translate="no" dir="ltr">/vendor</code> partition (<code translate="no" dir="ltr">vendor: true</code> or <code translate="no" dir="ltr">soc_specific: true</code>) isn't supported. Native services or HALs on <code translate="no" dir="ltr">/vendor</code> that use SDV comms should be deployed as native vendor daemons rather than as SDV service bundle APEXes.</span></aside>
+</li> </ol></section> </div>
+</li> <li><p>To include the new makefile in an SDV image, add the new APEX module to the <code translate="no" dir="ltr">PRODUCT_PACKAGES</code> in the <a href="../../../../setup/create/new-device#build-a-product">product makefile</a>. For example, see <code translate="no" dir="ltr">sdv_samples_core_services.mk</code>.</p></li> <li>
+<p>If you're using Cuttlefish, run the following command to start a device:</p> 
+<pre>sdv-cf create --instance_name=instance1
+</pre>
+</li> <li>
+<p>Run the service bundle when the system is booted:</p> 
+<pre># Grant root access.
+adb root
+# Launch the new service bundle.
+adb shell sdv_service_bundle start \
+  local-vm:com.sdv.oem.apex_and_module_name.ServiceBundleName/instance-1
+</pre>
+</li> </ol> <h2 id="fast-updates">Fast service bundle updates during development</h2> <p>If you use Android Studio for Platform (ASfP), you can deploy changes to an already installed service bundle APEX directly from the IDE without rebuilding the system image. For more information, see <a href="../../getting-started/ide-setup#build-deploy-apex">Deploy SDV service bundles</a>.</p> <h2 id="deps-management">Service bundle dependency management</h2> <p>In some scenarios, you can use static linking of the service bundle dependencies to reduce APEX size and service bundle memory footprint, and to improve the startup time of the service bundles. These scenarios include APEXes with:</p> <ul> <li>Single service bundles</li> <li>Several service bundles that don't share many common dependencies</li> </ul> <p>To enable static linking, add the following properties to the service bundle library definition:</p> 
+<pre>// Service bundle library.
+rust_ffi_shared {
+  // See rust_ffi_shared basic template.
+  ...
+  // uses static linking for the dependencies
+  prefer_rlib: true,
+  // needed to correctly resolve commstack deps
+  ld_flags: ["-Wl,--no-as-needed"],
+}
+</pre> <p>For each situation, we recommend you confirm that static linking to dependencies leads to improvements in memory footprint and start times of service bundles.</p> <h2 id="debug">Debug (dumpsys)</h2> <p>The lifecycle manager implements the <a href="https://developer.android.com/tools/dumpsys">dumpsys</a> interface. This interface displays the list of service bundles to the user that are in either the <code translate="no" dir="ltr">created</code> or <code translate="no" dir="ltr">started</code> state. The interface also displays the FQIN or UID of the service bundle process.</p> <p>To view the current state and identifiers of your service bundles, execute:</p> 
+<pre># Grant root access.
+adb root
+
+# Execute dumpsys to see service bundles state
+adb shell dumpsys google.sdv.lifecycle.ILifecycleManager/default
+</pre>
+<aside class="note"><strong>Note:</strong><span> Dumpsys output shows only service bundles that are in the created, started, and stopped states. Service bundles that were destroyed or never created aren't displayed.</span></aside> <h2 id="whats-next">What's next</h2> <p>To automatically execute <code translate="no" dir="ltr">vsidlc</code> and enable the IDE plugin to work with dependencies, see <a href="catalog-config">Automatic catalog updates and LSP integration</a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/core-areas/vsidl/create-apex" class="_attribution-link">https://source.android.com/docs/automotive/sdv/core-areas/vsidl/create-apex</a>
+  </p>
+</div>

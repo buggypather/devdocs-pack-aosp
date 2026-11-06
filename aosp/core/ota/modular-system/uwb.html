@@ -1,0 +1,25 @@
+<h1>UWB</h1>  <p>The ultra-wideband (UWB) module, introduced in Android 13, contains a UWB stack above the HAL interface, which is based on the FiRa specification.</p> <p>The UWB module provides the following benefits for device manufacturers:</p> <ul> <li>A complete Android native UWB stack available for UWB capable devices</li> <li>Improved quality and interoperability of UWB across the Android ecosystem</li> <li>Faster and more flexible support for new FiRa use cases and specification updates</li> </ul> <h3 id="details">Details</h3> <p>The following are details of the UWB module:</p> <ul> <li>Includes a complete UWB stack in AOSP in Android 13 that uses the UCI specification defined by FiRa as the HAL interface.</li> <li>Allows system apps to provision custom profiles.</li> <li>Includes a system API surface to allows system apps to use custom profiles in their ranging sessions.</li> <li>Includes infrastructure to expose RROs that can be used by device manufacturers to customize the behavior of the stack.</li> </ul> <h2 id="uwb-stack-architecture">UWB stack architecture</h2> <p>The UWB stack consists of the UWB mainline module and the HAL implementation provided by a UWB chip vendor.</p> <p><img src="https://source.android.com/static/docs/core/architecture/images/uwb-module-architecture.png" alt="UWB stack architecture diagram" width="650" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> UWB stack architecture</p> <h2 id="module-boundary">Module boundary</h2> <p>The module code is in the following locations:</p> <ul> <li>
+<p><strong>UWB Mainline Apex</strong>: <code translate="no" dir="ltr">com.android.uwb</code></p> <ul> <li>
+<p>UWB API surface (Java)</p> <ul> <li>Code location: <code translate="no" dir="ltr">packages/modules/Uwb/framework</code>
+</li> <li>Process: <code translate="no" dir="ltr">&lt;bootclasspath&gt;</code>
+</li> </ul>
+</li> <li>
+<p>UwbService (Java)</p> <ul> <li>Code location: <code translate="no" dir="ltr">packages/modules/Uwb/service</code>
+</li> <li>Process: <code translate="no" dir="ltr">system_server</code>
+</li> </ul>
+</li> <li>
+<p>Uwb Native stack (C++/Rust)</p> <ul> <li>Code location: <code translate="no" dir="ltr">external/uwb</code>
+</li> <li>Process: <code translate="no" dir="ltr">system_server</code>
+</li> </ul>
+</li> </ul>
+</li> <li>
+<p><strong>HAL interface and implementations (C++)</strong></p> <ul> <li>Interface code location: <code translate="no" dir="ltr">hardware/interfaces/uwb</code>
+</li> <li>Implementation code location: <code translate="no" dir="ltr">vendor/&lt;vendor-name&gt;/uwb</code>
+</li> <li>Process: <code translate="no" dir="ltr">&lt;vendor defined&gt;</code>
+</li> </ul>
+</li> </ul> <h2 id="package-format">Package format</h2> <p>The UWB module (<code translate="no" dir="ltr">com.google.android.uwb</code>) uses the <a href="../apex">APEX</a> format.</p> <h2 id="dependencies">Dependencies</h2> <p>The UWB mainline module depends on the following:</p> <ul> <li>HAL implementation from a UWB chip vendor.</li> <li>Bluetooth stack for all OOB interactions.</li> <li>Secure element for all secure service interactions.</li> <li>Core framework for UWB runtime permission enforcement.</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/ota/modular-system/uwb" class="_attribution-link">https://source.android.com/docs/core/ota/modular-system/uwb</a>
+  </p>
+</div>

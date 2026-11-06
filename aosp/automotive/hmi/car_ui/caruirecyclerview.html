@@ -1,0 +1,79 @@
+<h1>Customize CarUiRecyclerView</h1>  <p>This page describes the process of customizing<code translate="no" dir="ltr">CarUiRecyclerView</code> and the scroll bar.</p> <h2 id="prerequisites">Prerequisites</h2> <p>This page presumes knowledge of a runtime resource overlay (RRO) target APK. To learn more, see <a href="customize">Customize apps</a>.</p> <h2 id="about-caruirecyclerview">About CarUiRecyclerView</h2> <p>When <code translate="no" dir="ltr">car_ui_scrollbar_enable</code> is set to <code translate="no" dir="ltr">false</code> in <code translate="no" dir="ltr">bools.xml</code>, <code translate="no" dir="ltr">CarUiRecyclerView</code> doesn't inflate the scrollbar. That said, only the <code translate="no" dir="ltr">androidx.recyclerview</code> is inflated with customizable styles as defined below. When <code translate="no" dir="ltr">car_ui_scrollbar_enable</code> is set to <code translate="no" dir="ltr">true</code>, <code translate="no" dir="ltr">CarUiRecyclerView</code> inflates the container with the scrollbar installed within it. Later <code translate="no" dir="ltr">androidx.recyclerview</code> is also added within the same container.</p> <p><code translate="no" dir="ltr">CarUiRecyclerView</code> can take any adapter to display the data. But the recommendation is to use <code translate="no" dir="ltr">CarUiListItemAdapter</code> where the chassis lib defines the layout for listItems and hence can be customized by OEMs. The customization for ListItems are defined in <a href="caruilistitem">Customization options for CarUiListItem</a>.</p> <p>By default, <code translate="no" dir="ltr">car_ui_scrollbar_margin</code> is used as the width of the scrollbar view. This margin is also added as <code translate="no" dir="ltr">android:endMargin</code> of the CarUiRecyclerView so there is equal margin at the start and end of the data. If the developer had used <code translate="no" dir="ltr">enableDivider=true</code> then the OEM can control how the dividers should appear. Dimensions that can be adjusted for <code translate="no" dir="ltr">CarUiRecyclerView</code> are:</p> 
+<pre>  &lt;dimen name="car_ui_recyclerview_divider_height"&gt;0dp&lt;/dimen&gt;
+  &lt;dimen name="car_ui_recyclerview_divider_start_margin"&gt;0dp&lt;/dimen&gt;
+  &lt;dimen name="car_ui_recyclerview_divider_end_margin"&gt;0dp&lt;/dimen&gt;
+  &lt;dimen name="car_ui_recyclerview_divider_top_margin"&gt;0dp&lt;/dimen&gt;
+  &lt;dimen name="car_ui_recyclerview_divider_bottom_margin"&gt;0dp&lt;/dimen&gt;</pre> <h2 id="scrollbar">Scrollbar</h2> <aside class="note"> <strong>Note:</strong> You can only customize scrollbar layout in releases of Android 10 and higher. </aside> <p>The layout file for <code translate="no" dir="ltr">CarUiRV</code> scrollbar is defined in <code translate="no" dir="ltr">car_ui_recyclerview_scrollbar.xml</code>. In total, these four views are defined within the view:</p> <table class="responsive fixed"> <colgroup> <col width="35%"> </colgroup> <tr> <th colspan="2">Views</th> </tr> <tr> <td><code translate="no" dir="ltr">Car_ui_scrollbar_page_up</code></td> <td>Defines the up button of the scrollbar.</td> </tr> <tr> <td><code translate="no" dir="ltr">Car_ui_scrollbar_page_down</code></td> <td>defines the down button of the scrollbar.</td> </tr> <tr> <td><code translate="no" dir="ltr">Car_ui_scrollbar_thumb</code></td> <td>Height is calculated dynamically depending on the number of list items in the Recycler View (RV).</td> </tr> <tr> <td><code translate="no" dir="ltr">Car_ui_scrollbar_track</code></td> <td>Total height that defines the bounds in which the thumb will move.</td> </tr> </table> <p>OEMs should overlay this layout file to customize the scrollbar. Track view should be placed carefully as that would define the bounds in which the thumb will move. Thumb height is calculated dynamically based on the list items in the RV and the height of the viewholders. </p> <p>This layout is included in the <code translate="no" dir="ltr">CarUiRV</code> container <code translate="no" dir="ltr">car_ui_recycler_view.xml</code> <strong>only</strong> if <code translate="no" dir="ltr">car_ui_scrollbar_enable</code> is <code translate="no" dir="ltr">true</code>. </p> <p>Other dimensions that can be adjusted for scrollbar are:</p> 
+<pre>  &lt;dimen name="car_ui_scrollbar_container_width"&gt;@dimen/car_ui_margin&lt;/dimen&gt;
+  &lt;dimen name="car_ui_scrollbar_button_size"&gt;@dimen/car_ui_touch_target_width&lt;/dimen&gt;
+  &lt;dimen name="car_ui_scrollbar_thumb_width"&gt;7dp&lt;/dimen&gt;
+  &lt;dimen name="car_ui_scrollbar_separator_margin"&gt;16dp&lt;/dimen&gt;
+  &lt;dimen name="car_ui_scrollbar_margin"&gt;@dimen/car_ui_margin&lt;/dimen&gt;
+  &lt;dimen name="car_ui_scrollbar_thumb_radius"&gt;100dp&lt;/dimen&gt;
+
+  &lt;item name="car_ui_button_disabled_alpha" format="float" type="dimen"&gt;0.2&lt;/item&gt;
+  &lt;item name="car_ui_scrollbar_milliseconds_per_inch" format="float" type="dimen"&gt;150.0&lt;/item&gt;
+  &lt;item name="car_ui_scrollbar_deceleration_times_divisor" format="float" type="dimen"&gt;0.45&lt;/item&gt;
+  &lt;item name="car_ui_scrollbar_decelerate_interpolator_factor" format="float" type="dimen"&gt;1.8&lt;/item&gt;
+
+  &lt;dimen name="car_ui_scrollbar_padding_start"&gt;0dp&lt;/dimen&gt;
+  &lt;dimen name="car_ui_scrollbar_padding_end"&gt;0dp&lt;/dimen&gt;</pre> <h2 id="example">Example</h2> <p>For example, to bring both the Up and Down arrow together at the bottom of the screen:</p> <ol> <li>Overlay <code translate="no" dir="ltr">car_ui_recyclerview_scrollbar.xml</code>: 
+<pre>&lt;?xml version="1.0" encoding="utf-8"?&gt;
+&lt;RelativeLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="@dimen/car_ui_margin"
+    android:layout_height="match_parent"
+    android:id="@+id/car_ui_scroll_bar"&gt;
+
+    &lt;!-- View height is dynamically calculated during layout. --&gt;
+    &lt;View
+        android:id="@+id/car_ui_scrollbar_thumb"
+        android:layout_width="7dp"
+        android:layout_height="20dp"
+        android:layout_alignParentTop="true"
+        android:layout_centerHorizontal="true"
+        android:background="@drawable/car_ui_recyclerview_scrollbar_thumb"/&gt;
+
+    &lt;View
+        android:id="@+id/car_ui_scrollbar_track"
+        android:layout_width="10dp"
+        android:layout_height="match_parent"
+        android:layout_marginTop="10dp"
+        android:layout_centerHorizontal="true"
+        android:layout_above="@+id/car_ui_scrollbar_page_up"/&gt;
+
+    &lt;ImageView
+        android:id="@+id/car_ui_scrollbar_page_up"
+        android:layout_width="76dp"
+        android:layout_height="76dp"
+        android:focusable="false"
+        android:hapticFeedbackEnabled="false"
+        android:src="@drawable/car_ui_recyclerview_ic_up"
+        android:scaleType="centerInside"
+        android:layout_centerHorizontal="true"
+        android:layout_above="@+id/car_ui_scrollbar_page_down"/&gt;
+
+    &lt;ImageView
+        android:id="@+id/car_ui_scrollbar_page_down"
+        android:layout_width="76dp"
+        android:layout_height="76dp"
+        android:focusable="false"
+        android:hapticFeedbackEnabled="false"
+        android:src="@drawable/car_ui_recyclerview_ic_down"
+        android:scaleType="centerInside"
+        android:layout_centerHorizontal="true"
+      android:layout_alignParentBottom="true"/&gt;
+&lt;/RelativeLayout&gt;</pre> </li> <li>To define the resources to be overlaid by the RRO, add <code translate="no" dir="ltr">Overlays.xml</code>: 
+<pre>&lt;overlay&gt;
+    &lt;item target="id/car_ui_scroll_bar" value="@id/car_ui_scroll_bar"/&gt;
+    &lt;item target="id/car_ui_scrollbar_thumb" value="@id/car_ui_scrollbar_thumb"/&gt;
+    &lt;item target="id/car_ui_scrollbar_track" value="@id/car_ui_scrollbar_track"/&gt;
+    &lt;item target="id/car_ui_scrollbar_page_up" value="@id/car_ui_scrollbar_page_up"/&gt;
+    &lt;item target="id/car_ui_scrollbar_page_down" value="@id/car_ui_scrollbar_page_down"/&gt;
+    &lt;item target="layout/car_ui_recyclerview_scrollbar" value="@layout/car_ui_recyclerview_scrollbar"/&gt;
+&lt;/overlay&gt;</pre> </li> <li>If an Up, Down, or thumb drawable must be updated, they should also be overlaid.</li> <li>If any new resources are used in the RRO package that do not already exist, then these resources should also be defined in the RRO APK you create.</li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/hmi/car_ui/caruirecyclerview" class="_attribution-link">https://source.android.com/docs/automotive/hmi/car_ui/caruirecyclerview</a>
+  </p>
+</div>

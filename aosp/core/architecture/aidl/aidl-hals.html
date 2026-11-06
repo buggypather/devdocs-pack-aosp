@@ -1,0 +1,157 @@
+<h1>AIDL for HALs</h1>  <p>Android 11 introduces the ability to use AIDL for HALs in Android, making it possible to implement parts of Android without HIDL. Transition HALs to use AIDL exclusively where possible (when upstream HALs use HIDL, HIDL must be used).</p> <p>HALs using AIDL to communicate between framework components, such as those in <code translate="no" dir="ltr">system.img</code>, and hardware components, such as those in <code translate="no" dir="ltr">vendor.img</code>, must use stable AIDL. However, to communicate within a partition, for example, from one HAL to another, there's no restriction on the IPC mechanism to use.</p> <h2 id="motivation">Motivation</h2> <p>AIDL has been around longer than HIDL, and is used in many other places, such as between Android framework components or in apps. Now that AIDL has stability support, it's possible to implement an entire stack with a single IPC runtime. AIDL also has a better versioning system than HIDL. Here are some advantages of AIDL:</p> <ul> <li>Using a single IPC language means having only one thing to learn, debug, optimize, and secure.</li> <li>AIDL supports in-place versioning for the owners of an interface: <ul> <li>Owners can add methods to the end of interfaces, or fields to parcelables. This means it's easier to version code over the years, and also the year over year cost is smaller (types can be amended in place and there's no need for extra libraries for each interface version).</li> <li>Extension interfaces can be attached at run time rather than in the type system, so there's no need to rebase downstream extensions onto newer versions of interfaces.</li> </ul>
+</li> <li>An existing AIDL interface can be used directly when its owner chooses to stabilize it. Before, an entire copy of the interface would have to be created in HIDL.</li> </ul> <h2 id="choosing-runtime">Build against the AIDL runtime</h2> <aside class="warning"><strong>Warning:</strong><span> Only <code translate="no" dir="ltr">system/system_ext</code> can use <code translate="no" dir="ltr">libbinder</code> directly. Other partitions must use <code translate="no" dir="ltr">libbinder_ndk</code>, <code translate="no" dir="ltr">libbinder_rs</code>, or the Java backend to communicate stably.</span></aside><aside class="warning"><strong>Warning:</strong><span> The Java backend can't be used to communicate with the service manager on the <code translate="no" dir="ltr">vendor</code> partition, and no new system APIs can be used on the <code translate="no" dir="ltr">vendor</code> partition after API level 34.</span></aside> <p>AIDL has three different backends: Java, NDK, and CPP. To use stable AIDL, always use the system copy of <code translate="no" dir="ltr">libbinder</code> at <code translate="no" dir="ltr">system/lib*/libbinder.so</code> and talk on <code translate="no" dir="ltr">/dev/binder</code>. For code on the <code translate="no" dir="ltr">vendor</code> image, this means that <code translate="no" dir="ltr">libbinder</code> (from the VNDK) can't be used: this library has an unstable C++ API and unstable internals. Instead, native vendor code must use the NDK backend of AIDL, link against <code translate="no" dir="ltr">libbinder_ndk</code> (which is backed by system <code translate="no" dir="ltr">libbinder.so</code>), and link against the NDK libraries created by <code translate="no" dir="ltr">aidl_interface</code> entries. For the exact module names, see <a href="stable-aidl#module-naming-rules">Module naming rules</a>.</p> <h2 id="aidl-hal-interface">Write an AIDL HAL interface</h2> <p>For an AIDL interface to be used between system and vendor, the interface needs two changes:</p> <ul> <li>Every type definition must be annotated with <code translate="no" dir="ltr">@VintfStability</code>.</li> <li>The <code translate="no" dir="ltr">aidl_interface</code> declaration needs to include <code translate="no" dir="ltr">stability: "vintf",</code>.</li> </ul> <p>Only the owner of an interface can make these changes.</p> <p>When you make these changes, the interface must be in the <a href="#writing-server">VINTF manifest</a> in order to work. Test this (and related requirements, such as verifying that released interfaces are frozen) using the <a href="#vts-for-hals">Vendor Test Suite (VTS) test</a> <code translate="no" dir="ltr">vts_treble_vintf_vendor_test</code>. You can use a <code translate="no" dir="ltr">@VintfStability</code> interface without these requirements by calling either <code translate="no" dir="ltr">AIBinder_forceDowngradeToLocalStability</code> in the NDK backend, <code translate="no" dir="ltr">android::Stability::forceDowngradeToLocalStability</code> in the C++ backend, or <code translate="no" dir="ltr">android.os.Binder#forceDowngradeToSystemStability</code> in the Java backend on a binder object before it's sent to another process.</p> <aside class="note"><strong>Note:</strong><span> Downgrading a service to vendor stability isn't supported in Java because all apps run in a system context.</span></aside> <p>Additionally, for maximum code portability and to avoid potential problems such as unnecessary additional libraries, disable the CPP backend.</p> <p>The code shows how to disable the CPP backend:</p> 
+<pre>    aidl_interface: {
+        ...
+        backend: {
+            cpp: {
+                enabled: false,
+            },
+        },
+    }
+</pre> <h2 id="find-aidl-hals">Find AIDL HAL interfaces</h2> <p>AOSP stable AIDL interfaces for HALS are within <code translate="no" dir="ltr">aidl</code> folders in the same base directories as HIDL interfaces:</p> <ul> <li>
+<code translate="no" dir="ltr">hardware/interfaces</code> is for interfaces typically provided by hardware.</li> <li>
+<code translate="no" dir="ltr">frameworks/hardware/interfaces</code> is for high-level interfaces provided to hardware.</li> <li>
+<code translate="no" dir="ltr">system/hardware/interfaces</code> is for low-level interfaces provided to hardware.</li> </ul> <p>Put extension interfaces into other <code translate="no" dir="ltr">hardware/interfaces</code> subdirectories in <code translate="no" dir="ltr">vendor</code> or <code translate="no" dir="ltr">hardware</code>.</p> <h2 id="extension-interfaces">Extension interfaces</h2> <p>Android has a set of official AOSP interfaces with every release. When Android partners want to add capabilities to these interfaces, they shouldn't change these directly because this makes their Android runtime incompatible with the AOSP Android runtime. Avoid changing these interfaces so the GSI image can continue to work.</p> <p>Extensions can register in two different ways:</p> <ul> <li>At runtime; see <a href="#attached-extensions">Attached extension interfaces</a>
+</li> <li>As a standalone, registered globally and in VINTF</li> </ul> <p>However an extension is registered, when vendor-specific (meaning not a part of upstream AOSP) components use the interface, merge conflicts aren't possible However, when downstream modifications to upstream AOSP components are made, merge conflicts can result, and the following strategies are recommended:</p> <ul> <li>Upstream the interface additions to AOSP in the next release.</li> <li>Upstream interface additions that allow further flexibility (without merge conflicts) in the next release.</li> </ul> <h2 id="extension-parcelables">Extension parcelables: ParcelableHolder</h2> <p><code translate="no" dir="ltr">ParcelableHolder</code> is an instance of the <code translate="no" dir="ltr">Parcelable</code> interface that can contain another instance of <code translate="no" dir="ltr">Parcelable</code>.</p> <p>The main use case of <code translate="no" dir="ltr">ParcelableHolder</code> is to make <code translate="no" dir="ltr">Parcelable</code> extensible. For example, image that device implementers expect to be able to extend an AOSP-defined <code translate="no" dir="ltr">Parcelable</code>, <code translate="no" dir="ltr">AospDefinedParcelable</code>, to include their value-add features.</p> <p>Use the <code translate="no" dir="ltr">ParcelableHolder</code> interface to extend <code translate="no" dir="ltr">Parcelable</code> with your value-add features. The <code translate="no" dir="ltr">ParcelableHolder</code> interface contains an instance of <code translate="no" dir="ltr">Parcelable</code>. If you try to add fields to <code translate="no" dir="ltr">Parcelable</code> directly, it causes an error:</p> 
+<pre>parcelable AospDefinedParcelable {
+  int a;
+  String b;
+  String x; // ERROR: added by a device implementer
+  int[] y; // added by a device implementer
+}
+</pre> <p>As seen in the preceding code, this practice is broken because the fields added by the device implementer might have a conflict when <code translate="no" dir="ltr">Parcelable</code> is revised in the next releases of Android.</p> <p>Using <code translate="no" dir="ltr">ParcelableHolder</code>, the owner of a parcelable can define an extension point in an instance of <code translate="no" dir="ltr">Parcelable</code>:</p> 
+<pre>parcelable AospDefinedParcelable {
+  int a;
+  String b;
+  ParcelableHolder extension;
+}
+</pre> <p>Then the device implementers can define their own <code translate="no" dir="ltr">Parcelable</code> instance for their extension:</p> 
+<pre>parcelable OemDefinedParcelable {
+  String x;
+  int[] y;
+}
+</pre> <p>The new <code translate="no" dir="ltr">Parcelable</code> instance can be attached to the original <code translate="no" dir="ltr">Parcelable</code> with the <code translate="no" dir="ltr">ParcelableHolder</code> field:</p> 
+<pre>
+// Java
+AospDefinedParcelable ap = ...;
+OemDefinedParcelable op = new OemDefinedParcelable();
+op.x = ...;
+op.y = ...;
+
+ap.extension.setParcelable(op);
+
+...
+
+OemDefinedParcelable op = ap.extension.getParcelable(OemDefinedParcelable.class);
+
+// C++
+AospDefinedParcelable ap;
+OemDefinedParcelable op;
+std::shared_ptr&lt;OemDefinedParcelable&gt; op_ptr = make_shared&lt;OemDefinedParcelable&gt;();
+
+ap.extension.setParcelable(op);
+ap.extension.setParcelable(op_ptr);
+
+...
+
+std::shared_ptr&lt;OemDefinedParcelable&gt; op_ptr;
+
+ap.extension.getParcelable(&amp;op_ptr);
+
+// NDK
+AospDefinedParcelable ap;
+OemDefinedParcelable op;
+ap.extension.setParcelable(op);
+
+...
+
+std::optional&lt;OemDefinedParcelable&gt; op;
+ap.extension.getParcelable(&amp;op);
+
+// Rust
+let mut ap = AospDefinedParcelable { .. };
+let op = Rc::new(OemDefinedParcelable { .. });
+
+ap.extension.set_parcelable(Rc::clone(&amp;op));
+
+...
+
+let op = ap.extension.get_parcelable::&lt;OemDefinedParcelable&gt;();
+
+</pre> <h2 id="instance-names">AIDL HAL server instance names</h2> <p>By convention, AIDL HAL services have an instance name of the format <code translate="no" dir="ltr">$package.$type/$instance</code>. For example, an instance of the vibrator HAL is registered as <code translate="no" dir="ltr">android.hardware.vibrator.IVibrator/default</code>.</p> <h2 id="writing-server">Write an AIDL HAL server</h2> <p><code translate="no" dir="ltr">@VintfStability</code> AIDL servers must be declared in the VINTF manifest, for example:</p> 
+<pre>    &lt;hal format="aidl"&gt;
+        &lt;name&gt;android.hardware.vibrator&lt;/name&gt;
+        &lt;version&gt;1&lt;/version&gt;
+        &lt;fqname&gt;IVibrator/default&lt;/fqname&gt;
+    &lt;/hal&gt;
+</pre> <p>Otherwise, they should register an AIDL service normally. When running <a href="#vts-for-hals">VTS tests</a>, it's expected that all declared AIDL HALs are available.</p> <aside class="note"><strong>Note:</strong><span> On devices running Android 11 and lower, don't include <code translate="no" dir="ltr">&lt;version&gt;</code>.</span></aside> <h2 id="writing-client">Write an AIDL client</h2> <p>AIDL clients must declare themselves in the compatibility matrix, for example:</p> 
+<pre>    &lt;hal format="aidl" optional="true"&gt;
+        &lt;name&gt;android.hardware.vibrator&lt;/name&gt;
+        &lt;version&gt;1-2&lt;/version&gt;
+        &lt;interface&gt;
+            &lt;name&gt;IVibrator&lt;/name&gt;
+            &lt;instance&gt;default&lt;/instance&gt;
+        &lt;/interface&gt;
+    &lt;/hal&gt;
+</pre>
+<aside class="note"><strong>Note:</strong><span> On devices running Android 11 and lower, don't include <code translate="no" dir="ltr">&lt;version&gt;</code>.</span></aside> <h2 id="converting-to-aidl">Convert an existing HAL from HIDL to AIDL</h2> <p>Use the <code translate="no" dir="ltr">hidl2aidl</code> tool to convert a HIDL interface to AIDL.</p> <p><code translate="no" dir="ltr">hidl2aidl</code> features:</p> <ul> <li>Create AIDL (<code translate="no" dir="ltr">.aidl</code>) files based on the HAL (<code translate="no" dir="ltr">.hal</code>) files for the given package.</li> <li>Create build rules for the newly created AIDL package with all backends enabled.</li> <li>Create translate methods in the Java, CPP, and NDK backends for translating from the HIDL types to the AIDL types.</li> <li>Create build rules for translate libraries with required dependencies.</li> <li>Create static asserts to ensure that HIDL and AIDL enumerators have the same values in the CPP and NDK backends.</li> </ul> <p>Follow these steps to convert a package of HAL files to AIDL files:</p> <ol> <li>
+<p>Build the tool located in <code translate="no" dir="ltr">system/tools/hidl/hidl2aidl</code>.</p> <p>Building this tool from the latest source provides the most complete experience. You can use the latest version to convert interfaces on older branches from previous releases:</p> 
+<pre>m hidl2aidl</pre>
+</li> <li>
+<p>Execute the tool with an output directory followed by the package to be converted.</p> <p>Optionally, use the <code translate="no" dir="ltr">-l</code> argument to add the contents of a new license file to the top of all generated files. Be sure to use the correct license and date:</p> 
+<pre>hidl2aidl -o &lt;output directory&gt; -l &lt;file with license&gt; &lt;package&gt;</pre> <p>For example:</p> 
+<pre>hidl2aidl -o . -l my_license.txt android.hardware.nfc@1.2</pre>
+</li> <li>
+<p>Read through the generated files and fix any issues with the conversion:</p> <ul> <li>
+<code translate="no" dir="ltr">conversion.log</code> contains any unhandled issues to fix first.</li> <li>The generated AIDL files might have warnings and suggestions that need action. These comments begin with <code translate="no" dir="ltr">//</code>.</li> <li>Clean up and make improvements to the package.</li> <li>Check the <a href="aidl-annotations#javaderive"><code translate="no" dir="ltr">@JavaDerive</code></a> annotation for features that might be needed, such as <code translate="no" dir="ltr">toString</code> or <code translate="no" dir="ltr">equals</code>.</li> </ul>
+</li> <li>
+<p>Build only the targets you need:</p> <ul> <li>Disable backends that won't be used. Prefer the NDK backend over the CPP backend; see <a href="#choosing-runtime">Build against the AIDL runtime</a>.</li> <li>Remove translate libraries or any of their generated code that won't be used.</li> </ul>
+</li> <li>
+<p>See <a href="#compare-hidl-aidl">Major AIDL and HIDL differences</a>:</p> <ul> <li>Using AIDL's built-in <code translate="no" dir="ltr">Status</code> and exceptions typically improve the interface and remove the need for another interface-specific status type.</li> <li>AIDL interface arguments in methods aren't <code translate="no" dir="ltr">@nullable</code> by default like they were in HIDL.</li> </ul>
+</li> </ol> <h2 id="sepolicy">SEPolicy for AIDL HALs</h2> <p>An AIDL service type that's visible to vendor code must have the <code translate="no" dir="ltr">hal_service_type</code> attribute. Otherwise, the sepolicy configuration is the same as any other AIDL service (though there are special attributes for HALs). Here's an example definition of a HAL service context:</p> 
+<pre>    type hal_foo_service, service_manager_type, hal_service_type;
+</pre> <p>For most services defined by the platform, a service context with the correct type is added already (for example, <code translate="no" dir="ltr">android.hardware.foo.IFoo/default</code> is already marked as <code translate="no" dir="ltr">hal_foo_service</code>). However, if a framework client supports multiple instance names, additional instance names must be added in device-specific <code translate="no" dir="ltr">service_contexts</code> files:</p> 
+<pre>    android.hardware.foo.IFoo/custom_instance u:object_r:hal_foo_service:s0
+</pre> <p>When you create a new type of HAL, you must add HAL attributes. A specific HAL attribute might be associated with multiple service types (each of which can have multiple instances as just discussed). For a HAL, <code translate="no" dir="ltr">foo</code>, there is <code translate="no" dir="ltr">hal_attribute(foo)</code>. This macro defines attributes <code translate="no" dir="ltr">hal_foo_client</code> and <code translate="no" dir="ltr">hal_foo_server</code>. For a given domain, the <code translate="no" dir="ltr">hal_client_domain</code> and <code translate="no" dir="ltr">hal_server_domain</code> macros associate a domain with a given HAL attribute. For example, system server being a client of this HAL corresponds to the policy <code translate="no" dir="ltr">hal_client_domain(system_server, hal_foo)</code>. A HAL server similarly includes <code translate="no" dir="ltr">hal_server_domain(my_hal_domain, hal_foo)</code>.</p> <p>Typically, for a given HAL attribute, also create a domain like <code translate="no" dir="ltr">hal_foo_default</code> for reference or example HALs. However, some devices use these domains for their own servers. Distinguishing between domains for multiple servers matters only if there are multiple servers that serve the same interface and need a different permission set in their implementations. In all of these macros, <code translate="no" dir="ltr">hal_foo</code> isn't an sepolicy object. Instead, this token is used by these macros to refer to the group of attributes associated with a client server pair.</p> <p>However, so far, <code translate="no" dir="ltr">hal_foo_service</code> and <code translate="no" dir="ltr">hal_foo</code> (the attribute pair from <code translate="no" dir="ltr">hal_attribute(foo)</code>) aren't associated. A HAL attribute is associated with AIDL HAL services using the <code translate="no" dir="ltr">hal_attribute_service</code> macro (HIDL HALs use the <code translate="no" dir="ltr">hal_attribute_hwservice</code> macro), for example, <code translate="no" dir="ltr">hal_attribute_service(hal_foo, hal_foo_service)</code>. This means that <code translate="no" dir="ltr">hal_foo_client</code> processes can get ahold of the HAL, and <code translate="no" dir="ltr">hal_foo_server</code> processes can register the HAL. The enforcement of these registration rules is done by the context manager (<code translate="no" dir="ltr">servicemanager</code>).</p> <p>Service names might not always correspond to HAL attributes, for example, <code translate="no" dir="ltr">hal_attribute_service(hal_foo, hal_foo2_service)</code>. In general, because this implies the services are always used together, you can remove the <code translate="no" dir="ltr">hal_foo2_service</code> and use <code translate="no" dir="ltr">hal_foo_service</code> for all of service contexts. When HALs set multiple <code translate="no" dir="ltr">hal_attribute_service</code> instances, it's because the original HAL attribute name isn't general enough and can't be changed.</p> <p>Putting this all together, an example HAL looks like this:</p> 
+<pre>    public/attributes:
+    // define hal_foo, hal_foo_client, hal_foo_server
+    hal_attribute(foo)
+
+    public/service.te
+    // define hal_foo_service
+    type hal_foo_service, hal_service_type, protected_service, service_manager_type
+
+    public/hal_foo.te:
+    // allow binder connection from client to server
+    binder_call(hal_foo_client, hal_foo_server)
+    // allow client to find the service, allow server to register the service
+    hal_attribute_service(hal_foo, hal_foo_service)
+    // allow binder communication from server to service_manager
+    binder_use(hal_foo_server)
+
+    private/service_contexts:
+    // bind an AIDL service name to the selinux type
+    android.hardware.foo.IFooXxxx/default u:object_r:hal_foo_service:s0
+
+    private/&lt;some_domain&gt;.te:
+    // let this domain use the hal service
+    binder_use(some_domain)
+    hal_client_domain(some_domain, hal_foo)
+
+    vendor/&lt;some_hal_server_domain&gt;.te
+    // let this domain serve the hal service
+    hal_server_domain(some_hal_server_domain, hal_foo)
+</pre> <h2 id="attached-extensions">Attached extension interfaces</h2> <p>An extension can be attached to any binder interface, whether it's a top-level interface registered directly with service manager or it's a subinterface. When getting an extension, you must confirm the type of the extension is as expected. You can set extensions only from the process serving a binder.</p> <p>Use attached extensions whenever an extension modifies the functionality of an existing HAL. When entirely new capability is needed, this mechanism isn't necessary, and you can register an extension interface with the service manager directly. Attached extension interfaces make the most sense when they're attached to subinterfaces, because these hierarchies can be deep or multi-instanced. Using a global extension to mirror the binder interface hierarchy of another service requires extensive bookkeeping to provide equivalent capabilities to directly attached extensions.</p> <p>To set an extension on a binder, use the following APIs:</p> <ul> <li>NDK backend: <code translate="no" dir="ltr">AIBinder_setExtension</code>
+</li> <li>Java backend: <code translate="no" dir="ltr">android.os.Binder.setExtension</code>
+</li> <li>CPP backend: <code translate="no" dir="ltr">android::Binder::setExtension</code>
+</li> <li>Rust backend: <code translate="no" dir="ltr">binder::Binder::set_extension</code>
+</li> </ul> <p>To get an extension on a binder, use the following APIs:</p> <ul> <li>NDK backend: <code translate="no" dir="ltr">AIBinder_getExtension</code>
+</li> <li>Java backend: <code translate="no" dir="ltr">android.os.IBinder.getExtension</code>
+</li> <li>CPP backend: <code translate="no" dir="ltr">android::IBinder::getExtension</code>
+</li> <li>Rust backend: <code translate="no" dir="ltr">binder::Binder::get_extension</code>
+</li> </ul> <p>You can find more information for these APIs in the documentation of the <code translate="no" dir="ltr">getExtension</code> function in the corresponding backend. An example of how to use extensions is in <a href="https://android.googlesource.com/platform/hardware/interfaces/+/refs/heads/android17-release/tests/extension/vibrator/aidl"><code translate="no" dir="ltr">hardware/interfaces/tests/extension/vibrator</code></a>.</p> <h2 id="compare-hidl-aidl">Major AIDL and HIDL differences</h2> <p>When using AIDL HALs or using AIDL HAL interfaces, be aware of the differences compared to writing HIDL HALs.</p> <ul> <li>The AIDL language's syntax is closer to Java. HIDL syntax is similar to C++.</li> <li>All AIDL interfaces have built-in error statuses. Instead of creating custom status types, create constant status ints in interface files and use <code translate="no" dir="ltr">EX_SERVICE_SPECIFIC</code> in the CPP and NDK backends and <code translate="no" dir="ltr">ServiceSpecificException</code> in the Java backend. See <a href="aidl-backends#error_handling">Error handling</a>.</li> <li>AIDL doesn't automatically start thread pools when binder objects are sent. You must start them manually (see <a href="aidl-backends#thread-management">Thread management</a>).</li> <li>AIDL doesn't abort on unchecked transport errors (HIDL <code translate="no" dir="ltr">Return</code> aborts on unchecked errors).</li> <li>AIDL can declare only one type per file.</li> <li>AIDL arguments can be specified as <code translate="no" dir="ltr">in</code>, <code translate="no" dir="ltr">out</code>, or <code translate="no" dir="ltr">inout</code> in addition to the output parameter (there are no synchronous callbacks).</li> <li>AIDL uses <code translate="no" dir="ltr">fd</code> as the primitive type instead of <code translate="no" dir="ltr">handle</code>.</li> <li>HIDL uses major versions for incompatible changes and minor versions for compatible changes. In AIDL, backward-compatible changes are done in place. AIDL has no explicit concept of major versions; instead, this is incorporated into package names. For example, AIDL might use the package name <code translate="no" dir="ltr">bluetooth2</code>.</li> <li>AIDL doesn't inherit realtime priority by default. The <code translate="no" dir="ltr">setInheritRt</code> function must be used per binder to enable realtime priority inheritance.</li> </ul> <h2 id="vts-for-hals">Tests for HALs</h2> <p>This section describes best practices for testing HALs. These practices are valid even if the integration test for your HAL isn't in <a href="../../tests/vts">VTS</a>.</p> <p>Android relies on VTS to verify expected HAL implementations. VTS helps ensure Android can be backward compatible with old vendor implementations. Implementations failing VTS have known compatibility issues that could prevent them from working with future versions of the OS.</p> <p>There are two major parts of VTS for HALs.</p> <h4 id="verify-expected-hals">1. Verify HALs on the device are known and expected by Android</h4> <p>Android relies on having a static, accurate list of all installed HALs. This list is expressed in the <a href="../vintf">VINTF Manifest</a>. Special, platform-wide tests verify the integrity of the HAL layers in the entire system together. Before writing any HAL-specific tests, you should also run these tests, as they can tell if a HAL has inconsistent VINTF configurations.</p> <p>This set of tests can be found in <a href="https://android.googlesource.com/platform/test/vts-testcase/hal/+/refs/heads/android17-release/treble/vintf/"><code translate="no" dir="ltr">test/vts-testcase/hal/treble/vintf</code></a>. If you're working on a vendor HAL implementation, use <code translate="no" dir="ltr">vts_treble_vintf_vendor_test</code> to verify it. You can run this test with the command <code translate="no" dir="ltr">atest vts_treble_vintf_vendor_test</code>.</p> <p>These tests are responsible for verifying:</p> <ul> <li>Every <code translate="no" dir="ltr">@VintfStability</code> interface that is declared in a VINTF manifest is frozen at a known released version. This verifies both sides of the interface agree on the exact definition of that version of the interface. This is necessary for basic operation.</li> <li>All HALs that are declared in a VINTF manifest are available on that device. Any client with sufficient permissions to use a declared HAL service must be able to get and use those services at any time.</li> <li>All HALs that are declared in a VINTF manifest are serving the version of the interface that they declare in the manifest.</li> <li>There are no deprecated HALs being served on a device. Android drops support for lower versions of HAL interfaces as described in <a href="../vintf/fcm">FCM lifecycle</a>.</li> <li>Required HALs are present on the device. Some HALs are required for Android to work properly.</li> </ul> <h4 id="verify-hal-implementation">2. Verify the expected behavior of each HAL</h4> <p>Each HAL interface has its own VTS tests to verify the expected behavior from its clients. The test cases run against every instance of a declared HAL interface and enforce specific behavior based on the version of the interface that's implemented.</p> <p>In C++, you can get a list of every HAL installed on the system with the function <code translate="no" dir="ltr">android::getAidlHalInstanceNames</code> in <code translate="no" dir="ltr">libaidlvintf_gtest_helper</code>. In Rust, use <code translate="no" dir="ltr">binder::get_declared_instances</code>.</p> <p>These tests attempt to cover every aspect of the HAL implementation that the Android framework relies on, or might rely on in the future.</p> <p>These tests include verifying support of features, error handling, and any other behavior a client might expect from the service.</p> <h3 id="hal-vts-milestones">VTS milestones for HAL development</h3> <p>VTS tests (or any tests) are expected to be kept up to date when creating or modifying Android's HAL interfaces.</p> <p>VTS tests must be finished and ready to verify vendor implementations before they're frozen for Android Vendor API releases. They must be ready before the interfaces are frozen so developers can create their implementations, verify them, and provide feedback to the HAL interface developers.</p> <h3 id="hal-vts-cuttlefish">Test on Cuttlefish</h3> <p>When hardware isn't available, Android uses Cuttlefish as a development vehicle for HAL interfaces. This allows for scalable integration testing of Android.</p> <p><code translate="no" dir="ltr">hal_implementation_test</code> tests that Cuttlefish has implementations of the latest HAL interface versions to make sure Android is ready to handle the new interfaces and the VTS tests are ready to test the new vendor implementations as soon as new hardware and devices are available.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/aidl/aidl-hals" class="_attribution-link">https://source.android.com/docs/core/architecture/aidl/aidl-hals</a>
+  </p>
+</div>

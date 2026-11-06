@@ -1,0 +1,308 @@
+<h1>Android Rust patterns</h1>  <p>This page contains information about <a href="#android-logging">Android Logging</a>, provides a <a href="#rust-aidl-example">Rust AIDL example</a>, tells you how to <a href="#calling-rust-from-c">call Rust from C </a>, and provides instructions for <a href="#rust-cpp-interop-using-cxx">Rust/C++ Interop Using CXX</a>.</p> <h2 id="android-logging">Android logging</h2> <p>The following example shows how you can log messages to <code translate="no" dir="ltr">logcat</code> (on-device) or <code translate="no" dir="ltr">stdout</code> (on-host).</p> <p>In your <code translate="no" dir="ltr">Android.bp</code> module, add <code translate="no" dir="ltr">liblogger</code> and <code translate="no" dir="ltr">liblog_rust</code> as dependencies:</p> 
+<pre>rust_binary {
+    name: "logging_test",
+    srcs: ["src/main.rs"],
+    rustlibs: [
+        "liblogger",
+        "liblog_rust",
+    ],
+}
+</pre> <p>Next, in your Rust source add this code:</p> 
+<pre>use log::{debug, error, LevelFilter};
+
+fn main() {
+    let _init_success = logger::init(
+        logger::Config::default()
+            .with_tag_on_device("mytag")
+            .with_max_level(LevelFilter::Trace),
+    );
+    debug!("This is a debug message.");
+    error!("Something went wrong!");
+}
+</pre> <p>That is, add the two dependencies shown above (<code translate="no" dir="ltr">liblogger</code> and <code translate="no" dir="ltr">liblog_rust</code>), call the <code translate="no" dir="ltr">init</code> method once (you can call it more than once if necessary), and log messages using the provided macros. See the <a href="https://android.googlesource.com/platform/system/logging/+/da4d6df49d1d6c971be508dcde18e8b00bb74581/rust/logger.rs">logger crate</a> for a list of possible configuration options.</p> <p>The logger crate provides an API for defining what you want to log. Depending on whether the code is running on-device or on-host (such as part of a host-side test), messages are logged using either <a href="https://docs.rs/android_logger/0.10.1/android_logger/">android_logger</a> or <a href="https://docs.rs/env_logger/0.8.4/env_logger/">env_logger</a>.</p> <h2 id="rust-aidl-example">Rust AIDL example</h2> <p>This section provides a Hello World-style example of using AIDL with Rust.</p> <p>Using the Android Developer Guide <a href="https://developer.android.com/guide/components/aidl">AIDL Overview</a> section as a starting point, create <code translate="no" dir="ltr">external/rust/binder_example/aidl/com/example/android/IRemoteService.aidl</code> with the following contents in the <code translate="no" dir="ltr">IRemoteService.aidl</code> file:</p> 
+<pre>// IRemoteService.aidl
+package com.example.android;
+
+// Declare any non-default types here with import statements
+
+/** Example service interface */
+interface IRemoteService {
+    /** Request the process ID of this service, to do evil things with it. */
+    int getPid();
+
+    /**
+     * Demonstrates some basic types that you can use as parameters
+     * and return values in AIDL.
+     */
+    void basicTypes(int anInt, long aLong, boolean aBoolean, float aFloat,
+            double aDouble, String aString);
+}
+</pre> <p>Then, within the <code translate="no" dir="ltr">external/rust/binder_example/aidl/Android.bp</code> file, define the <code translate="no" dir="ltr">aidl_interface</code> module. You must <em>explicitly enable</em> the Rust backend because it isn't enabled by default.</p> <aside class="note"><strong>Note:</strong><span> Ensure that the <code translate="no" dir="ltr">Android.bp</code> file with <code translate="no" dir="ltr">aidl_interface</code> resides in the root path containing the AIDL definitions. In this case it must reside in <code translate="no" dir="ltr">external/rust/binder_example/aidl/</code>.</span></aside>
+<pre>aidl_interface {
+    name: "com.example.android.remoteservice",
+    srcs: [ "aidl/com/example/android/*.aidl", ],
+    unstable: true, // Add during development until the interface is stabilized.
+    backend: {
+        rust: {
+            // By default, the Rust backend is not enabled
+            enabled: true,
+        },
+    },
+}
+</pre> <p>The AIDL backend is a Rust source generator, so it operates like other Rust source generators and produces a Rust library. The produced Rust library module can be used by other Rust modules as a dependency. As an example of using the produced library as a dependency, a <code translate="no" dir="ltr">rust_library</code> can be defined as follows in <code translate="no" dir="ltr">external/rust/binder_example/Android.bp</code>:</p> 
+<pre>rust_library {
+    name: "libmyservice",
+    srcs: ["src/lib.rs"],
+    crate_name: "myservice",
+    rustlibs: [
+        "com.example.android.remoteservice-rust",
+        "libbinder_rs",
+    ],
+}
+</pre> <p>Note that the module name format for the AIDL-generated library used in <code translate="no" dir="ltr">rustlibs</code> is the <code translate="no" dir="ltr">aidl_interface</code> module name followed by <code translate="no" dir="ltr">-rust</code>; in this case, <code translate="no" dir="ltr">com.example.android.remoteservice-rust</code>.</p> <p>The AIDL interface can then be referenced in <code translate="no" dir="ltr">src/lib.rs</code> as follows:</p> 
+<pre>// Note carefully the AIDL crates structure:
+// * the AIDL module name: "com_example_android_remoteservice"
+// * next "::aidl"
+// * next the AIDL package name "::com::example::android"
+// * the interface: "::IRemoteService"
+// * finally, the 'BnRemoteService' and 'IRemoteService' submodules
+
+//! This module implements the IRemoteService AIDL interface
+use com_example_android_remoteservice::aidl::com::example::android::{
+  IRemoteService::{BnRemoteService, IRemoteService}
+};
+use binder::{
+    BinderFeatures, Interface, Result as BinderResult, Strong,
+};
+
+/// This struct is defined to implement IRemoteService AIDL interface.
+pub struct MyService;
+
+impl Interface for MyService {}
+
+impl IRemoteService for MyService {
+    fn getPid(&amp;self) -&gt; BinderResult&lt;i32&gt; {
+        Ok(42)
+    }
+
+    fn basicTypes(&amp;self, _: i32, _: i64, _: bool, _: f32, _: f64, _: &amp;str) -&gt; BinderResult&lt;()&gt; {
+        // Do something interesting...
+        Ok(())
+    }
+}
+</pre> <p>Finally, start the service in a Rust binary as shown below:</p> 
+<pre>use myservice::MyService;
+
+fn main() {
+    // [...]
+    let my_service = MyService;
+    let my_service_binder = BnRemoteService::new_binder(
+        my_service,
+        BinderFeatures::default(),
+    );
+    binder::add_service("myservice", my_service_binder.as_binder())
+        .expect("Failed to register service?");
+    // Does not return - spawn or perform any work you mean to do before this call.
+    binder::ProcessState::join_thread_pool()
+}
+</pre> <h2 id="async_rust-aidl-example">Async Rust AIDL example</h2> <p>This section provides a Hello World-style example of using AIDL with async Rust.</p> <p>Continuing on the <code translate="no" dir="ltr">RemoteService</code> example, the generated AIDL backend library includes async interfaces that can be used to implement an async server implementation for the AIDL interface <code translate="no" dir="ltr">RemoteService</code>.</p> <p>The generated async server interface <code translate="no" dir="ltr">IRemoteServiceAsyncServer</code> can be implemented as follows:</p> 
+<pre>use com_example_android_remoteservice::aidl::com::example::android::IRemoteService::{
+    BnRemoteService, IRemoteServiceAsyncServer,
+};
+use binder::{BinderFeatures, Interface, Result as BinderResult};
+
+/// This struct is defined to implement IRemoteServiceAsyncServer AIDL interface.
+pub struct MyAsyncService;
+
+impl Interface for MyAsyncService {}
+
+#[async_trait]
+impl IRemoteServiceAsyncServer for MyAsyncService {
+    async fn getPid(&amp;self) -&gt; BinderResult&lt;i32&gt; {
+        //Do something interesting...
+        Ok(42)
+    }
+
+    async fn basicTypes(&amp;self, _: i32, _: i64, _: bool, _: f32, _: f64,_: &amp;str,) -&gt; BinderResult&lt;()&gt; {
+        //Do something interesting...
+        Ok(())
+    }
+}
+
+</pre> <p>The async server implementation can be started as follows:</p> 
+<pre>#[tokio::main(flavor = "multi_thread", worker_threads = 2)]
+async fn main() {
+    binder::ProcessState::start_thread_pool();
+
+    let my_service = MyAsyncService;
+    let my_service_binder = BnRemoteService::new_async_binder(
+        my_service,
+        TokioRuntime(Handle::current()),
+        BinderFeatures::default(),
+    );
+
+    binder::add_service("myservice", my_service_binder.as_binder())
+        .expect("Failed to register service?");
+
+    task::block_in_place(move || {
+        binder::ProcessState::join_thread_pool();
+    });
+}
+
+</pre> <p>Note that the <a href="https://docs.rs/tokio/latest/tokio/task/fn.block_in_place.html">block_in_place</a> is needed to leave the async context which allows <code translate="no" dir="ltr">join_thread_pool</code> to use <a href="https://docs.rs/tokio/latest/tokio/runtime/struct.Handle.html#method.block_on">block_on</a> internally. This is because <code translate="no" dir="ltr">#[tokio::main]</code> wraps the code in a call to <code translate="no" dir="ltr">block_on</code>, and <code translate="no" dir="ltr">join_thread_pool</code> might call <code translate="no" dir="ltr">block_on</code> when handling an incoming transaction. Calling a <code translate="no" dir="ltr">block_on</code> from within a <code translate="no" dir="ltr">block_on</code> results in a panic. This could also be avoided by building the tokio runtime <a href="https://docs.rs/tokio/latest/tokio/runtime/struct.Builder.html">manually</a> instead of using <code translate="no" dir="ltr">#[tokio::main]</code> and then call <code translate="no" dir="ltr">join_thread_pool</code> outside of the <code translate="no" dir="ltr">block_on</code> method.</p> <p>Further, the rust backend generated library includes an interface that allows implementing an async client <code translate="no" dir="ltr">IRemoteServiceAsync</code> for <code translate="no" dir="ltr">RemoteService</code> which can be implemented as follows:</p> 
+<pre>use com_example_android_remoteservice::aidl::com::example::android::IRemoteService::IRemoteServiceAsync;
+use binder_tokio::Tokio;
+
+#[tokio::main(flavor = "current_thread")]
+async fn main() {
+    let binder_service = binder_tokio::wait_for_interface::&lt;dyn IRemoteServiceAsync&lt;Tokio&gt;&gt;("myservice");
+
+    let my_client = binder_service.await.expect("Cannot find Remote Service");
+
+    let result = my_client.getPid().await;
+
+    match result {
+        Err(err) =&gt; panic!("Cannot get the process id from Remote Service {:?}", err),
+        Ok(p_id) =&gt; println!("PID = {}", p_id),
+    }
+}
+</pre> <h2 id="calling-rust-from-c">Call Rust from C</h2> <p>This example shows how to call Rust from C.</p> <h3 id="example-rust-library">Example Rust library</h3> <p>Define the <code translate="no" dir="ltr">libsimple_printer</code> file in<code translate="no" dir="ltr">external/rust/simple_printer/libsimple_printer.rs</code> as follows:</p> 
+<pre>//! A simple hello world example that can be called from C
+
+#[no_mangle]
+/// Print "Hello Rust!"
+pub extern fn print_c_hello_rust() {
+    println!("Hello Rust!");
+}
+</pre> <p>The Rust library must define headers which the dependent C modules can pull in, so define the <code translate="no" dir="ltr">external/rust/simple_printer/simple_printer.h</code> header as follows:</p> 
+<pre>#ifndef SIMPLE_PRINTER_H
+#define SIMPLE_PRINTER_H
+
+void print_c_hello_rust();
+
+
+#endif
+</pre> <p>Define <code translate="no" dir="ltr">external/rust/simple_printer/Android.bp</code> as you see here:</p> 
+<pre>rust_ffi {
+    name: "libsimple_c_printer",
+    crate_name: "simple_c_printer",
+    srcs: ["libsimple_c_printer.rs"],
+
+    // Define export_include_dirs so cc_binary knows where the headers are.
+    export_include_dirs: ["."],
+}
+</pre> <h3 id="example-c-binary">Example C binary</h3> <p>Define <code translate="no" dir="ltr">external/rust/c_hello_rust/main.c</code> as follows:</p> 
+<pre>#include "simple_printer.h"
+
+int main() {
+  print_c_hello_rust();
+  return 0;
+}
+</pre> <p>Define <code translate="no" dir="ltr">external/rust/c_hello_rust/Android.bp</code> as follows:</p> 
+<pre>cc_binary {
+    name: "c_hello_rust",
+    srcs: ["main.c"],
+    shared_libs: ["libsimple_c_printer"],
+}
+</pre> <p>Finally, build by calling <code translate="no" dir="ltr">m c_hello_rust</code>.</p> <h2 id="rust-java-interop">Rust-Java interop</h2> <p>The <code translate="no" dir="ltr">jni</code> crate provides Rust interoperability with Java through the Java Native Interface (JNI). It defines the necessary type definitions for Rust to produce a Rust <code translate="no" dir="ltr">cdylib</code> library that plugs directly into Java’s JNI (<code translate="no" dir="ltr">JNIEnv</code>, <code translate="no" dir="ltr">JClass</code>, <code translate="no" dir="ltr">JString</code>, and so on). Unlike C++ bindings that perform codegen through <code translate="no" dir="ltr">cxx</code>, Java interoperability through the JNI doesn't require a code-generation step during a build. Therefore it doesn't need special build-system support. The Java code loads the Rust-provided <code translate="no" dir="ltr">cdylib</code> like any other native library.</p> <h3 id="usage">Usage</h3> <p>Usage in both Rust and Java code is covered in the <a href="https://docs.rs/jni"><code translate="no" dir="ltr">jni</code> crate documentation</a>. Please follow the <a href="https://docs.rs/jni/0.19.0/jni/#getting-started">Getting Started</a> example provided there. After you write <code translate="no" dir="ltr">src/lib.rs</code>, return to this page to learn how to build the library with Android's build system.</p> <h4 id="build-definition">Build definition</h4> <p>Java requires the Rust library to be provided as a <code translate="no" dir="ltr">cdylib</code> so that it can be loaded dynamically. The Rust library definition in Soong is the following:</p> 
+<pre>rust_ffi_shared {
+    name: "libhello_jni",
+    crate_name: "hello_jni",
+    srcs: ["src/lib.rs"],
+
+    // The jni crate is required
+    rustlibs: ["libjni"],
+}
+</pre> <p>The Java library lists the Rust library as a <code translate="no" dir="ltr">required</code> dependency; this ensures it's installed to the device alongside the Java library even though it's not a build-time dependency:</p> 
+<pre>java_library {
+        name: "libhelloworld",
+        [...]
+        required: ["libhellorust"]
+        [...]
+}
+</pre> <p>Alternatively, if you must include the Rust library in an <code translate="no" dir="ltr">AndroidManifest.xml</code> file, add the library to <code translate="no" dir="ltr">uses_libs</code> as follows:</p> 
+<pre>java_library {
+        name: "libhelloworld",
+        [...]
+        uses_libs: ["libhellorust"]
+        [...]
+}
+</pre> <h2 id="rust-cpp-interop-using-cxx">Rust–C++ interop using CXX</h2> <p>The <a href="https://github.com/dtolnay/cxx">CXX</a> crate provides safe FFI between Rust and a subset of C++. The <a href="https://cxx.rs/">CXX documentation</a> gives good examples of how it works in general and we suggest reading it first to become familiar with the library and the way it bridges C++ and Rust. The following example shows how to use it in Android.</p> <p>To have CXX generate the C++ code that Rust calls into, define a <code translate="no" dir="ltr">genrule</code> to invoke CXX and a <code translate="no" dir="ltr">cc_library_static</code> to bundle that into a library. If you plan to have C++ call Rust code, or use types shared between C++ and Rust, define a second genrule (to generate a C++ header containing the Rust bindings).</p> 
+<pre>cc_library_static {
+    name: "libcxx_test_cpp",
+    srcs: ["cxx_test.cpp"],
+    generated_headers: [
+        "cxx-bridge-header",
+        "libcxx_test_bridge_header"
+    ],
+    generated_sources: ["libcxx_test_bridge_code"],
+}
+
+// Generate the C++ code that Rust calls into.
+genrule {
+    name: "libcxx_test_bridge_code",
+    tools: ["cxxbridge"],
+    cmd: "$(location cxxbridge) $(in) &gt; $(out)",
+    srcs: ["lib.rs"],
+    out: ["libcxx_test_cxx_generated.cc"],
+}
+
+// Generate a C++ header containing the C++ bindings
+// to the Rust exported functions in lib.rs.
+genrule {
+    name: "libcxx_test_bridge_header",
+    tools: ["cxxbridge"],
+    cmd: "$(location cxxbridge) $(in) --header &gt; $(out)",
+    srcs: ["lib.rs"],
+    out: ["lib.rs.h"],
+}
+</pre> <p>The <a href="https://github.com/dtolnay/cxx#non-cargo-setup"><code translate="no" dir="ltr">cxxbridge</code> tool</a> is used above to generate the C++ side of the bridge. The <code translate="no" dir="ltr">libcxx_test_cpp</code> static library is used next as a dependency for our Rust executable:</p> 
+<pre>rust_binary {
+    name: "cxx_test",
+    srcs: ["lib.rs"],
+    rustlibs: ["libcxx"],
+    static_libs: ["libcxx_test_cpp"],
+}
+</pre> <p>In the <code translate="no" dir="ltr">.cpp</code> and <code translate="no" dir="ltr">.hpp</code> files, define the C++ functions as you wish, using the <a href="https://cxx.rs/bindings.html">CXX wrapper types</a> as desired. For example, a <code translate="no" dir="ltr">cxx_test.hpp</code> definition contains the following:</p> 
+<pre>#pragma once
+
+#include "rust/cxx.h"
+#include "lib.rs.h"
+
+int greet(rust::Str greetee);
+</pre> <p>While <code translate="no" dir="ltr">cxx_test.cpp</code>contains</p> 
+<pre>#include "cxx_test.hpp"
+#include "lib.rs.h"
+
+#include &lt;iostream&gt;
+
+int greet(rust::Str greetee) {
+  std::cout &lt;&lt; "Hello, " &lt;&lt; greetee &lt;&lt; std::endl;
+  return get_num();
+}
+</pre> <p>To use this from Rust, define a CXX bridge as below in <code translate="no" dir="ltr">lib.rs</code>:</p> 
+<pre>#[cxx::bridge]
+mod ffi {
+    unsafe extern "C++" {
+        include!("cxx_test.hpp");
+        fn greet(greetee: &amp;str) -&gt; i32;
+    }
+    extern "Rust" {
+        fn get_num() -&gt; i32;
+    }
+}
+
+fn main() {
+    let result = ffi::greet("world");
+    println!("C++ returned {}", result);
+}
+
+fn get_num() -&gt; i32 {
+    return 42;
+}
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/setup/build/rust/building-rust-modules/android-rust-patterns" class="_attribution-link">https://source.android.com/docs/setup/build/rust/building-rust-modules/android-rust-patterns</a>
+  </p>
+</div>

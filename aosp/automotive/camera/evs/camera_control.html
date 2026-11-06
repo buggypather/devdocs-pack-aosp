@@ -1,0 +1,150 @@
+<h1>Program camera control parameters</h1>  <p>In the previous Extended View System (EVS) 1.0 release, camera devices were considered read-only devices and, therefore, no method existed that would enable the app to change camera control parameters such as zoom or brightness.</p> <p>As this could constrain the capability of EVS apps, the new EVS 1.1 introduces new methods and enables the app to program several camera control parameters, all of which are defined in <code translate="no" dir="ltr">enum CameraParam</code>:</p> 
+<pre>/**
+ * EVS Camera Parameter
+ */
+enum CameraParam : uint32_t {
+    /**
+     * The brightness of image frames
+     */
+    BRIGHTNESS,
+    /**
+     * The contrast of image frames
+     */
+    CONTRAST,
+    /**
+     * Automatic gain/exposure control
+     */
+    AUTOGAIN,
+    /**
+     * Gain control
+     */
+    GAIN,
+    /**
+     * Automatic Whitebalance
+     */
+    AUTO_WHITE_BALANCE,
+    /**
+     * Manual white balance setting as a color temperature in Kelvin.
+     */
+    WHITE_BALANCE_TEMPERATURE,
+    /**
+     * Image sharpness adjustment
+     */
+    SHARPNESS,
+    /**
+     * Auto Exposure Control modes; auto, manual, shutter priority, or
+     * aperture priority.
+     */
+    AUTO_EXPOSURE,
+    /**
+     * Manual exposure time of the camera
+     */
+    ABSOLUTE_EXPOSURE,
+    /**
+     * Set the focal point of the camera to the specified position. This
+     * parameter may not be effective when auto focus is enabled.
+     */
+    ABSOLUTE_FOCUS,
+    /**
+     * Enables continuous automatic focus adjustments.
+     */
+    AUTO_FOCUS,
+    /**
+     * Specify the objective lens focal length as an absolute value.
+     */
+    ABSOLUTE_ZOOM,
+};</pre> <p>Methods are defined as:</p> 
+<pre>/**
+ * Requests to be a master client.
+ *
+ * When multiple clients subscribe to a single camera hardware and one of
+ * them adjusts a camera parameter such as the contrast, it may disturb
+ * other clients' operations. Therefore, the client must call this method
+ * to be a master client. When it becomes a master, it can
+ * change camera parameters until either it dies or explicitly gives up the
+ * role.
+ *
+ * @return result EvsResult::OK if a master role is granted.
+ *                EvsResult::OWNERSHIP_LOST if there is already a
+ *                master client.
+ */
+setMaster() generates (EvsResult result);
+
+/**
+ * Sets to be a master client forcibly.
+ *
+ * The client, which owns the display, has a high priority and can take over
+ * a master role from other clients without the display.
+ *
+ * @param  display IEvsDisplay handle. If this is valid, the calling client
+ *                 is considered as the high priority client and therefore
+ *                 it would take over a master role.
+ *
+ * @return result  EvsResult::OK if a master role is granted.
+ *                 EvsResult::OWNERSHIP_LOST if there is already a
+ *                 master client with the display.
+ */
+forceMaster(IEvsDisplay display) generates (EvsResult result);
+
+/**
+ * Retires from a master client role.
+ *
+ * @return result EvsResult::OK if this call is successful.
+ *                EvsResult::INVALID_ARG if the caller client is not a
+ *                master client.
+ */
+unsetMaster() generates (EvsResult result);
+
+/**
+ * Retrieves a list of parameters this camera supports.
+ *
+ * @return params A list of CameraParam that this camera supports.
+ */
+getParameterList() generates (vec&lt;CameraParam&gt; params);
+
+/**
+ * Requests a valid value range of a camera parameter
+ *
+ * @param  id    The identifier of camera parameter, CameraParam enum.
+ *
+ * @return min   The lower bound of the valid parameter value range.
+ * @return max   The upper bound of the valid parameter value range.
+ * @return step  The resolution of values in valid range.
+ */
+getIntParameterRange(CameraParam id)
+    generates (int32_t min, int32_t max, int32_t step);
+
+/**
+ * Requests to set a camera parameter.
+ *
+ * @param  id             The identifier of camera parameter,
+ *                        CameraParam enum.
+ *         value          A desired parameter value.
+ * @return result         EvsResult::OK if it succeeds to set a parameter.
+ *                        EvsResult::INVALID_ARG if either a requested
+ *                        parameter is not supported or a given value is out
+ *                        of bounds.
+ *         effectiveValue A programmed parameter value. This may differ
+ *                        from what the client gives if, for example, the
+ *                        driver does not support a target parameter.
+ */
+setIntParameter(CameraParam id, int32_t value)
+    generates (EvsResult result, int32_t effectiveValue);
+
+/**
+ * Retrieves a value of given camera parameter.
+ *
+ * @param  id     The identifier of camera parameter, CameraParam enum.
+ * @return result EvsResult::OK if it succeeds to read a parameter.
+ *                EvsResult::INVALID_ARG if either a requested parameter is
+ *                not supported.
+ *         value  A value of requested camera parameter.
+ */
+getIntParameter(CameraParam id) generates(EvsResult result, int32_t value);</pre> <p><code translate="no" dir="ltr">getParameterList()</code> returns a list of parameters (<code translate="no" dir="ltr">CameraParam</code> enum) a client can read and write (if the client is a master), and <code translate="no" dir="ltr">getIntParameterRange()</code> relays the valid value range and resolution. When a master client changes a camera parameter, all other clients on the same camera hardware are notified by getting a <code translate="no" dir="ltr">PARAMETER_CHANGED</code> event with a parameter ID and new value.</p> <p class="note"><strong>Note: </strong>The sensor driver may handle invalid parameter values differently. It may simply return an error code or clip the value in the valid range and apply. Therefore, the <code translate="no" dir="ltr">setIntParameter()</code> method returns an effective value and the client can use this value to confirm how the request was handled.</p> <h2 id="request-arbitration-between-multiple-camera-clients">
+Request arbitration between multiple camera clients</h2> <p>Because the previous EVS design allowed multiple apps to simultaneously subscribe to a single camera hardware, it is possible that one app can disturb the operations of other apps by changing a camera parameter. Also, multiple clients may want to adjust the same parameter differently and thereby cause unexpected behaviors in running camera services.</p> <p>To avoid such problems, the EVS manager allows that only <em>master</em> client to program a camera parameter. Before trying to adjust any camera parameter, the client <strong>MUST</strong> become a master client by calling the <code translate="no" dir="ltr">setMaster()</code> method. If this fails, then it means there is already an active master client on that camera hardware. Until the current master client dies, or explicitly gives up a master role through <code translate="no" dir="ltr">unsetMaster()</code>, no other client is permitted to change a camera parameter. When a master client returns its privilege, all other apps are notified by a <code translate="no" dir="ltr">MASTER_RELEASED</code> event.</p> <h3 id="clients-with-high-priority">
+Clients with high priority</h3> <p>The EVS manager handles the client that owns the display with the high priority and allows it to steal a master role from a current master. Because EVS display ownership is based on recency, the new client can even take over from the current client with the display.</p> <p>High priority clients must call <code translate="no" dir="ltr">IEvsCamera::forceMaster(sp&lt;IEvsDisplay&gt;&amp; display)</code> to attain a master role. The EVS manager examines the state of a given display handle and, if (<em>and only if</em>) its state is valid and neither <code translate="no" dir="ltr">DisplayState::NOT_OPEN</code> nor <code translate="no" dir="ltr">DisplayState::DEAD</code> replaces a master. The client, which just loses the master role, is notified by a <code translate="no" dir="ltr">MASTER_RELEASED</code> event and <strong>MUST</strong> handle this properly.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/camera/evs/camera_control" class="_attribution-link">https://source.android.com/docs/automotive/camera/evs/camera_control</a>
+  </p>
+</div>

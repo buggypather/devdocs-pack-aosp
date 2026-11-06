@@ -1,0 +1,120 @@
+<h1>Build your own cloud emulator</h1>  <p>This page describes how to run <em>AAOS Emulator</em> as a Web Service and run it in a web browser to make it remotely accessible to users. Doing so provides an end-to-end, minimally viable reference through the Google Cloud <a href="https://cloud.google.com/compute">Compute Engine</a>. That said, you can use this service on any public or private cloud platform of your choice.</p> <h2 id="purpose">Purpose</h2> <p>This centralized configuration and setup make AAOS Emulator accessible to an entire company, supplier, and work-from-home developers. Doing so makes it more efficient to manage and upgrade the AAOS Emulator to new versions and eliminates the time needed to set up and manage local machines for individual users. This solution optimizes the use of hardware resources and enables a lower cost app development environment. For example, for purposes of:</p> <ul> <li>User research, user experience review, customer support, and training.</li> <li>Demos to potential customers and in sales channels.</li> <li>Test, validate, and even debug apps (including daily OEM HMI builds) at scale. Consider the Emulator a substitute for the test benches use to develop apps.</li> <li>OEM customer call center agents have a uniform, easy-to-access HU UI.</li> </ul> <p>The benefits of using the AAOS Emulator are numerous:</p> <ul> <li>Use a setup script to create a customized and cloud-based AAOS Emulator (cloud emulator).</li> <li>Build a customized AAOS Cloud Emulator image for VM instances: <ul> <li>Ready set-up of a cloud-based emulator.</li> <li>Public AAOS AVD images available to the service creator to start an AAOS AVD with a command. For example, public OEM AVD images as samples for partners to adapt and apply. </li> </ul> </li> </ul> <h2 id="arch">Architecture</h2> <p>The architecture of the cloud emulator example is illustrated below. Your first minimally viable service will work by adding your own OEM AVD images.</p> <p><img src="https://source.android.com/static/docs/automotive/images/avd_cloud_01.png" class="android-image-dark-theme-background" alt text="Cloud AVD architecture"></p> <p><strong>Figure 1.</strong> Cloud AVD architecture.</p> <p>The key emulator building blocks are:</p> <table class="responsive"> <tr> <th>Item</th> <th>Purpose</th> </tr> <tr> <td>Android Emulator</td> <td>Emulator instance hosts AVD images</td> </tr> <tr> <td>Goldfish-webrtc bridge</td> <td>Linux app to provide communication between the react app and the AAOS Emulator</td> </tr> <tr> <td><a href="https://github.com/google/android-emulator-webrtc">android-emulator-webrtc</a></td> <td>
+<a href="https://reactjs.org/">React</a> app to display the Emulator UI in a web browser. React also captures user input events and sends them back to the server.</td> </tr> <tr> <td><a href="https://github.com/google/android-emulator-container-scripts">Android Emulator Container Scripts</a></td> <td>Python scripts to manage and create Docker images and containers for the above software modules.</td> </tr> <tr> <a href="https://github.com/google/android-emulator-container-scripts/blob/master/REGISTRY.MD">here</a>. <td>Generates tokens to manage the access permissions of the emulator.</td> </tr> <tr> <td>Turn server</td> <td>Establishes a WebRTC direct connection between the client and the server. Turn server is required only when the Emulator service is running behind firewalls or proxies.</td> </tr> <tr> <td><a href="https://www.envoyproxy.io/">Envoy</a></td> <td>
+<p>A proxy service to:</p> <ul> <li>Provide HTTPS using a self-signed certificate.</li> <li>Redirect traffic on port 80 (http) to port 443 (https).</li> <li>Act as a gRPC proxy for the emulator.</li> <li>Verify tokens to permit access to the emulator gRPC endpoint.</li> <li>Redirect other requests to the Nginx component, which hosts a React app.</li> </ul> </td> </tr> </table> <h2 id="setup-vm">Set up emulator on a cloud VM</h2> <p>To create a GCP project:</p> <ol> <li>Go to the Google Cloud Console and <a href="https://console.cloud.google.com/home/dashboard">Select a Project</a>.</li> <li>To confirm that billing is enabled for your Google Cloud project, see <a href="https://cloud.google.com/billing/docs/how-to/modify-project">Enable, disable, or change billing for a project </a>. </li> <li>
+<a href="https://console.cloud.google.com/apis/api/compute.googleapis.com/overview">Enable the API</a>.</li> </ol> <h2 id="linux-gce">Create a Linux VM in GCE</h2> <h3 id="nested-virtual">1. Enable nested virtualization</h3> <p>By default, nested virtualization is allowed at the project, folder, or organization level. Unless someone in your organization has <a href="https://cloud.google.com/compute/docs/instances/enable-nested-virtualization-vm-instances#enable_nested_virt_org">disabled nested virtualization</a>, you needn't do anything to enable it. </p>
+<ol> <li>Use the <a href="https://cloud.google.com/sdk/gcloud">gcloud command-line tool</a> to confirm that Nested Virtualization is allowed: 
+<pre>
+gcloud beta resource-manager org-policies describe   \
+  constraints/compute.disableNestedVirtualization  --effective --project=[PROJECT_ID]
+</pre> </li> </ol> <h3 id="ubuntu-disk">2. Create an Ubuntu-1804-lts bootable disk</h3> <ol> <li>Go to <a href="https://console.cloud.google.com/">Cloud Console</a>.</li> <li>Select the GCP project.</li> <li>Go to <strong>Navigation</strong> menu and select <strong>Compute Engine &gt; Disks &gt; Create Disk</strong>. <ol> <li>Provide a disk name. For example, <code translate="no" dir="ltr">ubuntu1804lts</code>
+</li> <li>Select a Region and Zone. To support Nested Virtualization, make sure the Region and Zone you select support Haswell (or later) processors. To learn more, see <a href="https://cloud.google.com/compute/docs/regions-zones">Regions and Zones</a>.</li> <li>Select the source image of <code translate="no" dir="ltr">ubuntu-1804-bionic-v20210211</code>
+</li> <li>Set an appropriate disk size (100GB or bigger is recommended).</li> </ol> </li> </ol> <p><img src="https://source.android.com/static/docs/automotive/images/avd_cloud_02.png" class="android-image-dark-theme-background" alt text="Create Ubuntu bootable disk"></p> <p><strong>Figure 2.</strong> Create Ubuntu bootable disk.</p> <h3 is="custom image" id="3.-create-a-custom-image-with-special-license-key-to-enable-vmx">3. Create a custom image with special license key to enable VMX</h3> <ol> <li>Go to the <a href="https://console.cloud.google.com/">Cloud Console</a>.</li> <li>Open a Cloud Shell and use the following command: 
+<pre>
+gcloud compute images create [IMAGE NAME] --source-disk-zone [DISK ZONE] --source-disk [DISK NAME] \
+  --licenses "https://www.googleapis.com/compute/v1/projects/vm-options/global/licenses/enable-vmx"
+</pre> <ul> <li>Enter an Image name. For example, <code translate="no" dir="ltr">aaos-emulator-image</code>
+</li> <li>Set Disk Zone to the zone in which you created the disk.</li> <li>Set the disk name to the name you used to create the disk.</li> </ul> <p>For example:</p> 
+<pre>
+gcloud compute images create aaos-emulator-image --source-disk-zone us-central1-a \
+    --source-disk ubuntu1804lts \
+    --licenses \
+    "https://www.googleapis.com/compute/v1/projects/vm-options/global/licenses/enable-vmx"
+</pre> </li> </ol> <p>For details, see <a href="https://cloud.google.com/compute/docs/instances/enable-nested-virtualization-vm-instances">Nested Virtualization VM Instance</a>. </p> <h3 id="vm-instance">4. Create a VM instance using the customized image</h3> <ol> <li>Go to <a href="https://console.cloud.google.com/">Cloud Console</a>.</li> <li>Select the GCP project.</li> <li>Go to Navigation Menu &gt; Compute Engine &gt; VM instance. <p><img src="https://source.android.com/static/docs/automotive/images/avd_cloud_03.png" class="android-image-dark-theme-background" alt text="Create a VM instance"></p> <p><strong>Figure 3.</strong> Create a VM instance.</p> </li> <li>Enter an instance name. For example, <code translate="no" dir="ltr">aaosemulator</code>
+</li> <li>Select the desired machine family and type. Make sure the machine contains four vCPUs and 16 GB of memory (or more).</li> <li>Select CPU platform to be Intel Cascade Lake (or later).</li> <li>Change the boot disk to the image created in the previous step.</li> <li>Enable Firewall for: <ul> <li>Allow HTTP traffic</li> <li>Allow HTTPS traffic</li> </ul> </li> </ol> <h3 id="firewall">5. Configure firewall to open port 80 and 443</h3> <ol> <li>Go to <a href="https://console.cloud.google.com/">Cloud Console</a>.</li> <li>select the GCP project.</li> <li>Go to Navigation Menu &gt; Compute Engine &gt; VM instance &gt; Set up firewall rule.</li> </ol> <h2 id="install-required-software-on-the-vm">Install required software on the VM</h2> <ol> <li>Install Python 3 and Python3-env: 
+<pre>
+sudo apt update
+sudo apt install python3
+sudo apt-get install python3-venv
+</pre> </li> <li>Install <a href="http://www.androiddocs.com/sdk/installing/index.html">Android SDK</a> and ADB available on the path. 
+<pre>
+sudo apt install android-sdk
+</pre> <p>To install Docker and Docker-compose, see <a href="https://docs.docker.com/v17.12/install/">Docker</a> and <a href="https://docs.docker.com/compose/install/">Docker-compose</a>. Make sure you can run these as the <a href="https://docs.docker.com/install/linux/linux-postinstall/">non-root user</a>. </p> </li> <li>To confirm the CPU supports hardware virtualization (the command should result in a non-zero number): 
+<pre>
+egrep -c '(vmx|svm)' /proc/cpuinfo
+</pre> </li> <li>Install the Kernel Virtual Machine (KVM). To install KVM, run: 
+<pre>
+sudo apt-get install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils
+</pre> </li> <li>To verify KVM is working: 
+<pre>
+sudo apt install cpu-checker
+kvm-ok
+</pre> The output should be: 
+<pre>INFO: /dev/kvm exists
+KVM acceleration can be used</pre> </li> <li>To install Node.js and Node Packet Manager (NPM): 
+<pre>
+sudo apt install nodejs npm
+</pre> </li> </ol> <h2 id="start-containers">Start the hosted containers</h2> <ol> <li>To verify the installation, run the hosted Android Emulator containers from the public repository. You can find details about the containers <a href="https://github.com/google/android-emulator-container-scripts/blob/master/REGISTRY.MD">here</a>. You can now run these containers without building them. For example: 
+<pre>
+docker run \
+  -e ADBKEY="$(cat ~/.android/adbkey)" \
+  --device /dev/kvm \
+  --publish 8554:8554/tcp \
+  --publish 5555:5555/tcp  \
+  us-docker.pkg.dev/android-emulator-268719/images/30-google-x64:30.1.2
+</pre> <p>This pulls down the container (if it's not locally available) and launches it.</p> </li> <li>When the container is launched, connect to the device by configuring ADB in the same way as connecting an AVD on a local host. For example: 
+<pre>
+adb connect localhost:5555
+adb devices
+</pre> The output should be: 
+<pre>List of devices attached
+localhost:5555 device</pre> </li> </ol> <h2 id="setup-emulator-service">Set up the AAOS Emulator service</h2> <p>To set up the Emulator service:</p> <ol> <li>Install the Android Emulator Docker container script: 
+<pre>
+git clone https://github.com/google/android-emulator-container-scripts.git
+</pre> 
+<pre>
+cd android-emulator-container-script
+source ./configure.sh
+</pre> </li> <li>This activates a virtual environment and makes the executable emu-docker available. To get detailed information about its use, launch it: 
+<pre>
+emu-docker -h
+</pre> </li> <li>To create the Docker containers, accept the license agreements.</li> <li>Build the AAOS Emulator Docker container.</li> <li>Download an emulator build later than version 7154743. For example: 
+<pre>
+sdk-repo-linux-emulator-7154743.zip
+</pre> </li> <li>Download the AAOS emulator system image. For example, <code translate="no" dir="ltr">sdk-repo-linux-system-images-7115454.zip</code>: 
+<pre>
+emu-docker create &lt;emulator-zip&gt; &lt;system-image-zip&gt;
+</pre> </li> <li>Create the Web Containers and set username and password for remote access. 
+<pre>
+./create_web_container.sh -p user1,passwd1
+</pre> </li> <li>Start the AAOS Emulator Web Service: 
+<pre>
+docker-compose -f js/docker/docker-compose-build.yaml -f js/docker/development.yaml up
+</pre> </li> </ol> <p>You've successfully started an AAOS Emulator Web Service! Use the following to access it on a web browser:</p> 
+<pre>
+https://&lt;VM_External__IP&gt;
+</pre> <h2 id="troubleshooting">Troubleshooting</h2> <p>If a connection error to the VM external IP occurs, make sure the VM is set up to allow both HTTP <strong>and</strong> HTTPS traffic. To validate this, see <a href="https://cloud.google.com/compute/docs/tutorials/basic-webserver-apache">Running a basic Apache web server</a>. </p> <h3 id="setup-turn-server">Set up the turn server</h3> <p>You can always use your own turn server. Provided below is an sample on a Google Cloud VM instance.</p> <p class="note"> <strong>Note:</strong> To make the turn server work on a Google Cloud VM instance, be sure to configure the VM firewall rule to allow traffic on TCP and UDP ports 3478 and 3479. </p>
+<ol> <li>Install the coturn server: 
+<pre>
+sudo apt install coturn
+systemctl stop coturn
+echo "TURNSERVER_ENABLED=1"|sudo tee -a /etc/default/coturn
+</pre> </li> <li>Modify <code translate="no" dir="ltr">/etc/turnserver.conf</code> by adding the following lines: 
+<pre>
+lt-cred-mech
+#set your realm name
+realm=test
+#coturn username and password
+user=test:test123
+# external-ip=&lt;VM-Public-IP&gt;/&lt;VM-Private-IP&gt;
+external-ip=34.193.52.134/10.128.0.2
+
+systemctl start coturn
+</pre> </li> <li>Modify the Docker Compose YAML file to include the TURN configuration: 
+<pre>
+cd android-emulator-container-script
+nano  js/docker/docker-compose-build.yaml
+</pre> </li> <li>Add the following two environment lines in the emulator section: 
+<pre>     shm_size: 128M
+     expose:
+       - "8554"
++    environment:
++       - TURN=printf $SNIPPET</pre> </li> <li>Restart the AAOS Emulator service with the turn configuration. Be sure to replace the turn server IP, username, and credential below with your own: 
+<pre>
+export SNIPPET="{\"iceServers\":[{\"urls\":\"turn:35.193.52.134:3478\",\"username\":\"test\",\"credential\":\"test123\"}]}"
+docker-compose -f js/docker/docker-compose-build.yaml up
+</pre> </li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/devices/automotive/start/avd/cloud_emulator" class="_attribution-link">https://source.android.com/docs/devices/automotive/start/avd/cloud_emulator</a>
+  </p>
+</div>

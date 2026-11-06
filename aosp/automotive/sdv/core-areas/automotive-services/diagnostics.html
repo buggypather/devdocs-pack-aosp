@@ -1,0 +1,246 @@
+<h1>Diagnostics</h1>  <p>The SDV platform provides a set of APIs to be used between the OEM-provided Diagnostics Manager and SDV service bundles, as well as utilities and general platform capabilities to support OEM's diagnostics use cases. Diagnostics are essential to the SDV efforts, automotive services, and technologies we provide to OEMs because the diagnostics stack is an essential component of any automotive operating system.</p> <p>OEMs deploy Diagnostics Manager instances (usually one per ECU or one per VM) to handle requests from diagnostics clients by communicating with the SDV service bundles on the system. To do so, SDV provides a set of standard diagnostics APIs, utilities, and overall platform support for OEM diagnostics use cases. Our goal is to:</p> <ul> <li>Enable OEMs to implement Diagnostics Manager according to the UDS standard.</li> <li>Allow Diagnostics Manager to delegate tester requests to SDV service bundles.</li> <li>Allow SDV service bundles to expose diagnostics data in a vehicle-agnostic way.</li> </ul> <p>To achieve this, SDV provides a set of APIs to standardize interactions between SDV service bundles (potentially provided by third parties) and the OEM's implementation of the diagnostics stack.</p> <p> <img src="https://source.android.com/static/docs/automotive/sdv/images/sdv-diagnostics-01.png" alt="Diagnostics stack" class="screenshot android-image-dark-theme-background"> <figcaption><strong>Figure 1.</strong> Diagnostics stack.</figcaption> </p> <p>SDV service bundles can expose diagnostics data and entities, implement diagnostics functionality, and report malfunctions to the Diagnostics Manager.</p> <p>By providing a standard SDV-wide diagnostics API, we simplify the implementation of SDV service bundles, avoiding the need to re-implement diagnostics to run on different vehicles from different OEMs.</p> <h2 id="diagnostics_services_api">Diagnostics Services API</h2> <p>SDV Diagnostics API defines the following services, which correspond to specific UDS (ISO 14229-1) services:</p> <ul> <li>
+<code translate="no" dir="ltr">service AuthenticationService</code>: 0x29 (Authentication). It provides a mechanism for the client to prove its identity to access restricted data or services.</li> <li>
+<code translate="no" dir="ltr">service DataItemService</code>: 0x22 (ReadDataByIdentifier) and 0x2E (WriteDataByIdentifier). It allows reading and writing data elements identified by DIDs.</li> <li>
+<code translate="no" dir="ltr">service EcuResetService</code>: 0x11 (ECUReset). It allows the tester to request a reset of the ECU.</li> <li>
+<code translate="no" dir="ltr">service FileTransferService</code>: 0x34 (RequestDownload), 0x35 (RequestUpload), 0x36 (TransferData), 0x37 (RequestTransferExit), and 0x38 (RequestFileTransfer). It handles the initiation and processing of file downloads and uploads.</li> <li>
+<code translate="no" dir="ltr">service IoControlService</code>: 0x2F (InputOutputControlByIdentifier). It allows external testers to control inputs and outputs of the system for testing purposes.</li> <li>
+<code translate="no" dir="ltr">service RoutineControlService</code>: 0x31 (RoutineControl). It allows the tester to start, stop, and request results for specific routines (functions) implemented by SDV services.</li> <li>
+<code translate="no" dir="ltr">service SecurityAccessService</code>: 0x27 (SecurityAccess). It manages the seed-and-key exchange required to unlock specific security levels.</li> </ul> <p><a href="https://www.autosar.org/fileadmin/standards/R20-11/CP/AUTOSAR_SWS_DiagnosticEventManager.pdf">SDV Diagnostics API</a> additionally defines <code translate="no" dir="ltr">service FaultListenerService</code> and <code translate="no" dir="ltr">message Event</code> based on AUTOSAR's Diagnostic Event Manager (<a href="https://www.autosar.org/fileadmin/standards/R20-11/CP/AUTOSAR_SWS_DiagnosticEventManager.pdf">AUTOSAR_SWS_DiagnosticEventManager</a>), which enables applications to report diagnostic events and malfunctions.</p> <p>Additionally, <code translate="no" dir="ltr">service DiagnosticsManagerService</code> defines an SDV platform service that lets other services to query the current diagnostics connection parameters (Source Address, Target Address) and the session type.</p> <h2 id="service_bundle_developer_guide">Service Bundle Developer Guide</h2> <p>As a service bundle developer, <code translate="no" dir="ltr">diagnostics_declaration</code> and the following servers can be defined in the corresponding <code translate="no" dir="ltr">.vsidl</code> file:</p> 
+<pre>service_bundle {
+    name: "&lt;BUNDLE-NAME&gt;"
+    ...
+    server {
+        service: "com.sdv.google.diagnostics.data_item.DataItemService"
+    }
+    server {
+        service: "com.sdv.google.diagnostics.routine_control.RoutineControlService"
+    }
+    server {
+        service: "com.sdv.google.diagnostics.io_control.IoControlService"
+    }
+    server {
+        service: "com.sdv.google.diagnostics.fault.FaultListenerService"
+    }
+    ...
+    diagnostics_declaration {
+        data_item {
+            ...
+        }
+
+        routine {
+            ...
+        }
+
+        event {
+            ...
+        }
+
+        io_control {
+            ...
+        }
+    }
+    ...
+}
+</pre> <p>The <code translate="no" dir="ltr">DiagnosticsDeclaration</code> message is defined as:</p> 
+<pre>package sdv.diagnostics.v1;
+
+message DiagnosticsDeclaration {
+  // Diagnostics data item declaration.
+  //
+  // See com.sdv.google.diagnostics.data_item.DataItemService service.
+  message DataItem {
+    // Required. Id of the data item.
+    string id = 1;
+
+    // Required. Fully qualified name of the message that defines a structure of
+    // the data item.
+    string message_name = 2;
+
+    // Flag that indicates whether the data item is writable by the Diagnostics
+    // Manager.
+    //
+    // Effectively, this indicates whether the call to DataItemService::Write,
+    // is supported for this data item id.
+    bool is_writable = 3;
+  }
+
+  // Declaration of diagnostics data for input/output control.
+  //
+  // See com.sdv.google.diagnostics.io_control.IoControl service.
+  message InputOutputControlData {
+    // Id of the input/output control data.
+    string id = 1;
+
+    // Fully qualified name of the message that defines a structure of the data.
+    string message_name = 2;
+  }
+
+  // Declaration of diagnostics routine.
+  //
+  // See com.sdv.google.diagnostics.routine_control.RoutineControl.
+  message Routine {
+    // Information about routine control method.
+    message Method {
+      // Fully qualified name of the request message.
+      string request = 1;
+
+      // Fully qualified name of the response message.
+      string response = 2;
+    }
+
+    // Id of the routine.
+    string id = 1;
+
+    // Information about routine start method.
+    //
+    // See com.sdv.google.diagnostics.routine_control.RoutineControl::Start.
+    Method start = 2;
+
+    // Information about routine stop method.
+    //
+    // See com.sdv.google.diagnostics.routine_control.RoutineControl::Stop.
+    Method stop = 3;
+
+    // Information about routine result method.
+    //
+    // See
+    // com.sdv.google.diagnostics.routine_control.RoutineControl::RequestResult.
+    Method result = 4;
+  }
+
+  // Declaration of diagnostics event and corresponding fault listener.
+  //
+  // See com.sdv.google.diagnostics.event.Event.
+  // See com.sdv.google.diagnostics.fault.FaultListener.
+  message Event {
+    // Id of the event.
+    string id = 1;
+
+    // Fully qualified message name of the event's extended data message.
+    string extended_data_message_name = 2;
+
+    // Fault status changes which service wants to be notified of.
+    //
+    // See com.sdv.google.diagnostics.fault.FaultListener.StatusMask.
+    uint32 fault_listener_mask = 3;
+
+    // User-defined service unit name of a corresponding event publisher.
+    string service_unit_name = 4;
+  }
+
+  // Diagnostic data items exposed by the service bundle.
+  repeated DataItem data_item = 1;
+
+  // Diagnostic data exposed for input/output control by the service bundle.
+  repeated InputOutputControlData io_control = 2;
+
+  // Diagnostic routines exposed by the service bundle.
+  repeated Routine routine = 3;
+
+  // Diagnostic events sent by the service bundle.
+  repeated Event event = 4;
+}
+</pre> <p>If the above (<code translate="no" dir="ltr">service_bundle</code> block containing <code translate="no" dir="ltr">diagnostics_declaration</code>) is defined in the catalogs, <code translate="no" dir="ltr">vsidl_rc_generator</code> generates the <code translate="no" dir="ltr">prebuilt_etc</code> targets for every service bundle that declares the above servers and diagnostics_declaration:</p> 
+<pre>prebuilt_etc {
+    name: "&lt;APEX-NAME&gt;.&lt;BUNDLE-NAME&gt;-diag-config.binpb",
+    filename: "DiagService-diag-config.binpb",
+    sub_dir: "vsidl_provider",
+    src: ":generate_vsidl_files_single_bundle_&lt;APEX-NAME&gt;.&lt;BUNDLE-NAME&gt;{diagnostics-config.binpb}",
+    installable: false,
+}
+</pre> <p>These targets MUST be added to the <code translate="no" dir="ltr">prebuilts</code> of the corresponding apex definition block as indicated by the corresponding auto-generated comment-block above the <code translate="no" dir="ltr">prebuilt_etc {}</code> block:</p> 
+<pre>apex {
+    name: "&lt;APEX-NAME&gt;",
+    ...
+    prebuilts: [
+        ...
+        "&lt;APEX-NAME&gt;.&lt;BUNDLE-NAME&gt;-diag-config.binpb",
+        ...
+    ],
+    ...
+}
+</pre> <p>You must also add these targets in the <code translate="no" dir="ltr">diagnostics_config_path</code> field of the bundle's <code translate="no" dir="ltr">sdv_service_bundle_metadata</code> entry of the corresponding <code translate="no" dir="ltr">sdv_service_bundles_manifest.textproto</code> file. Additionally, you must specify authorization policies to enable RPC communication between the service bundle and the diagnostics manager service:</p> 
+<pre>sdv_service_bundle_metadata {
+  name: "&lt;BUNDLE-NAME&gt;"
+  ...
+  diagnostics_config_path: "etc/vsidl_provider/&lt;BUNDLE-NAME&gt;-diag-config.binpb"
+  authorization_policy_path: "etc/authz/permissions.textproto"
+  ...
+}
+</pre> <p>The permissions in the <code translate="no" dir="ltr">permissions.textproto</code> file should define the client or server roles. For example, if the service bundle implements a diagnostics data item:</p> 
+<pre>server {
+    service: "com.sdv.google.diagnostics.data_item.DataItemService"
+    allow_all_channels: true
+}
+</pre> <h2 id="platform_developer_guide">Platform Developer Guide</h2> <p>As a platform developer, OEMs MUST implement a Diagnostics Manager Agent <code translate="no" dir="ltr">rust_binary</code> target:</p> 
+<pre>rust_binary {
+    name: "&lt;DIAGNOSTICS-AGENT-BINARY-EXECUTABLE-NAME&gt;",
+    ...
+    product_specific: true,
+    ...
+}
+</pre> <p>Additionally, in the build files, the following variable must be set/overwritten: <code translate="no" dir="ltr">SDV_DIAGNOSTICS_AGENT_MODULE := &lt;DIAGNOSTICS-AGENT-BINARY-EXECUTABLE-NAME&gt;</code></p> <p>For convenience, the <code translate="no" dir="ltr">libsdv_uds_serde_v1</code> library can be used for Proto ↔ UDS translation, and the <a href="../vsidl/vsidl-provider-for-reflection">VSIDL Provider Library</a> for reflection.</p> <p>The diagnostics agent <code translate="no" dir="ltr">.vsidl</code> file should have following content:</p> 
+<pre>package: "com.sdv.oem.diagnostics"
+
+service_bundle {
+    name: "DiagnosticsAgent"
+
+    server {
+        service: "com.sdv.google.diagnostics.DiagnosticsManagerService"
+    }
+
+    client {
+        service: "com.sdv.google.diagnostics.data_item.DataItemService"
+    }
+
+    client {
+        service: "com.sdv.google.diagnostics.routine_control.RoutineControlService"
+    }
+
+    client {
+        service: "com.sdv.google.diagnostics.io_control.IoControlService"
+    }
+
+    client {
+        service: "com.sdv.google.diagnostics.fault.FaultListenerService"
+    }
+
+    client {
+        service: "com.sdv.google.diagnostics.ecu_reset.EcuResetService"
+    }
+
+    client {
+        service: "com.sdv.google.diagnostics.security_access.SecurityAccessService"
+    }
+
+    client {
+        service: "com.sdv.google.diagnostics.authentication.AuthenticationService"
+    }
+
+    client {
+        service: "com.sdv.google.diagnostics.file_transfer.FileTransferService"
+    }
+}
+</pre> <p>Since the Diagnostics Manager Agent is a binary executable, the bundle's <a href="../../workstreams/core/service-bundle-metadata"><code translate="no" dir="ltr">sdv_service_bundle_metadata</code></a> is defined as a config-only declaration:</p> 
+<pre>sdv_service_bundle_metadata {
+    # This name must match the agent's Bundle Name
+    name: "DiagnosticsAgent"
+    version_number: 1
+    version_name: "1"
+
+    # Reference the manifest itself to mark this as a config-only declaration.
+    native_library_path: "etc/sdv_service_bundles_manifest.textproto"
+
+    authorization_policy_path: "etc/authz/permissions.textproto"
+}
+</pre> <p>The diagnostics agent authorization policy should define the permissions for the services it interacts with. For example, if it calls the File Transfer service:</p> 
+<pre>client {
+    service: "com.sdv.google.diagnostics.file_transfer.FileTransferService"
+    allow_all_channels: true
+}
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/core-areas/automotive-services/diagnostics" class="_attribution-link">https://source.android.com/docs/automotive/sdv/core-areas/automotive-services/diagnostics</a>
+  </p>
+</div>

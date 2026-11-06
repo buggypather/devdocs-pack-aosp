@@ -1,0 +1,189 @@
+<h1>QVM sample configuration for SDV Media</h1>  <aside class="warning"><strong>Warning:</strong><span> This sample configuration isn't intended for production use.</span></aside>
+<pre># Copyright (C) 2026 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# QVM config file for sdv_media running as a secondary VM.
+
+system sdv-2
+
+debug
+logger debug,info,error slog
+
+cpu sched 10 runmask 4,5,6,7
+cpu sched 10 runmask 4,5,6,7
+cpu sched 10 runmask 4,5,6,7
+cpu sched 10 runmask 4,5,6,7
+
+rom 0xc0000,0x40000
+ram 4096M,2048M
+
+unsupported register ignore
+
+load /guests/android/sdv-media-2/kernel
+load /guests/android/sdv-media-2/sdv.dtb
+initrd load /guests/android/sdv-media-2/vramdisk
+
+# Allocate 4K RAM to the guest at an arbitrary address (chosen by a fair dice roll) for storing the
+# test DICE chain. This memory region is referred in the Device Tree by a reserved-memory node
+# tagged by "google,open-dice", so the open-dice driver can pick it up and expose it to user space.
+ram 0xD1C30000,4K
+# Load the test DICE chain to the reserved guest memory.
+# Warning: This MUST NOT be used in a production system.
+data load 0xD1C30000,/guests/android/sdv-media-2/test_dice_handover
+
+cmdline "printk.devkmsg=on \
+firmware_class.path=/vendor/etc/ \
+init=/init \
+kfence.sample_interval=500 \
+loop.max_part=7 \
+androidboot.hardware=sdv \
+kernel.mac80211_hwsim.radios=0 \
+kernel.snd-hda-intel.enable=0 \
+kernel.vmw_vsock_virtio_transport_common.virtio_transport_max_vsock_pkt_buf_size=16384 \
+androidboot.cpuvulkan.version=0 androidboot.hardware=cutf_cvm \
+androidboot.hardware.gralloc=minigbm androidboot.hardware.gltransport=virtio-gpu-asg \
+androidboot.hardware.egl=mesa \
+androidboot.hardware.hwcomposer.mode= androidboot.hardware.hwcomposer.display_finder_mode=drm \
+androidboot.hardware.vulkan=pastel \
+androidboot.fstab_suffix=sdv \
+buildvariant=userdebug \
+console=ttyAMA0 \
+panic=-1 \
+quiet \
+pci=noacpi \
+reboot=k \
+audit=1 \
+v4l2loopback.devices=1 \
+v4l2loopback.video_nr=10 \
+androidboot.init_rc=/system/etc/init/hw/init.sdv_media.rc \
+androidboot.boot_devices=vdevs/1c1f1000.virtio_blk \
+androidboot.serialno=SDV2 \
+androidboot.setupwizard_mode=OPTIONAL \
+androidboot.verifiedbootstate=orange \
+androidboot.slot_suffix=_a \
+androidboot.force_normal_boot=1 \
+androidboot.microdroid.debuggable=1 \
+androidboot.virt.address=5 \
+androidboot.sdv.instance_name=instance3 \
+androidboot.sdv.keymint.rpc.hbk=c1e9daeff3917170e81ea6fe9157ebbc95982462b6c7e622082c22db71972e83 \
+androidboot.sdv.boot_mode=locked \
+androidboot.sdv.preprovisioned_vvmtruststore=img \
+androidboot.sdv.vvmfactorytrust=c779a73d0595a6814ba0414a419e99ad4026ad0feb603f2ad80ee6a9e4d1adb7 \
+androidboot.sdv.ignore_avb_state=true \
+androidboot.vbmeta.digest=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff \
+androidboot.sdv.rpc.interface=eth0 \
+stack_depot_disable=on \
+cgroup_disable=pressure \
+cma=0 \
+enforcing=0"
+
+vdev pl011
+   loc 0x1c190000
+   intr gic:37
+   # Tip: comment out all hostdev entries to get an interactive shell
+   hostdev &gt;/var/log/guest/guest-2.out
+   hostdev &lt;/dev/ptyp7
+   name vdev_pl011
+
+vdev shmem
+   name vdev_shmem
+
+vdev virtio-entropy
+   intr gic:38
+   loc 0x1c1a0000
+
+vdev virtio-net
+   loc 0x1c1c1000
+   intr gic:40
+   peer /dev/vdevpeers/vp2
+   mac 02:00:AB:CD:EF:02
+   peerfeats 0x0382
+   name p2p_0
+
+vdev virtio-blk
+   loc 0x1c1f1000
+   intr gic:41
+   hostdev /guests/android/sdv-media-2/disk.img
+   name virtio-blk_qvmdisk0
+
+# /dev/hvc2 (logcat)
+vdev virtio-console
+    loc 0x1c1f2000
+    intr gic:58
+    hostdev &gt;/var/run/guestlogcat/hvc2_fifo
+
+# /dev/hvc1 (androidboot.console)
+vdev virtio-console
+    loc 0x1c1f3000
+    intr gic:59
+    hostdev &gt;/dev/null
+
+# /dev/hvc0 (kernel dmesg)
+vdev virtio-console
+    loc 0x1c1f4000
+    intr gic:60
+    hostdev &gt;/dev/null
+
+vdev virtio-vsock
+   guest_cid 5
+   loc 0x1c1f6000
+   intr gic:46
+
+vdev virtio-gpu
+   loc 0x1c160000
+   intr gic:63
+   vdisp -bsize=1920x1080,-disp_id=2:-size=1920x720,-class_name=qtcluster_native,-disp_id=1
+   vram_loc 0x700000000
+   redblue_swap 0
+   virgl
+
+vdev virtio-snd
+   loc 0x20120000
+   intr gic:47
+   stream playback
+        nid 0
+        hostdev hw:CARD=qc,DEV=0
+        associated_control PCM
+   stream capture
+        nid 0
+        hostdev plughw:CARD=qc,DEV=0
+        rates 48000
+        formats s16
+   chmap capture
+        nid 0
+        channels 2
+
+vdev virtio-video-camera
+    loc 0x1c1f8000
+    intr gic:49
+    num_cameras 2
+    sensor_unit SENSOR_UNIT_1,SENSOR_UNIT_2
+    dynamic_configuration false
+    blit_enabled true
+    camera_format CBYCRY
+    guest_format RGB8888
+    guest_num_buffers 4
+
+vdev virtio-video-decoder
+    loc 0x1c1fc000
+    intr gic:48
+    # Adjust logging level: ERROR=3, WARNING=4, INFO=5 (default), DEBUG1=6, ..., DEBUG6=10
+    # Debug log gets saved to /tmp/omx_decoder_${QVM_PROCESS_PID}
+    #log_level 7
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/hardware/qvm/sdv-media-config" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/hardware/qvm/sdv-media-config</a>
+  </p>
+</div>

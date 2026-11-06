@@ -1,0 +1,38 @@
+<h1>Troubleshoot and fix sync issues</h1>  <p>This page explains how to troubleshoot and fix issues related to the <code translate="no" dir="ltr">repo sync</code> command.</p> <h2 id="fix-network">Fix network issues</h2> <p>This section provides several suggestions for fixing network issues that can cause unsuccessful syncs.</p> <aside class="tip"><strong>Tip:</strong><span> Resyncing after an error can often fix a sync issue.</span></aside> <h3 id="fix-quota-barriers">Use authentication to avoid quota barriers</h3> <p>To protect the servers against excessive use, each IP address that's used to access source is associated with a quota.</p> <p>When sharing an IP address with other users, such as when accessing the source repositories from beyond a NAT firewall, quotas can trigger for normal patterns. For example, a quota can trigger when several users sync new clients from the same IP address, within a short period.</p> <p>To avoid triggering quotas, you can use authenticated access, which uses a separate quota for each user, regardless of the IP address.</p> <p>To enable authenticated access:</p> <ol> <li><p>Create a password with <a href="https://android.googlesource.com/new-password">the password generator</a>.</p></li> <li>
+<p>Run the following command to convert your client to use automatic authentication (without changing branch):</p> 
+<pre>$ repo init -u https://android.googlesource.com/a/platform/manifest
+</pre> <p>Note that the <code translate="no" dir="ltr">/a/</code> directory prefix triggers automatic authentication.</p>
+</li> </ol> <h3 id="configure-proxy-use">Configure for proxy use</h3> <p>If you're downloading source from behind a proxy, as is common in some corporate environments, make sure that you explicitly specify a proxy for Repo to use by running these commands:</p> 
+<pre>$ export HTTP_PROXY=http://proxy_user_id:proxy_password@proxy_server:proxy_port
+$ export HTTPS_PROXY=http://proxy_user_id:proxy_password@proxy_server:proxy_port
+</pre> <h3 id="adjust-tcpip">Adjust TCP/IP settings to avoid connectivity issues</h3> <p>While it's rare, Linux clients can experience connectivity issues, such as getting stuck in the middle of downloads while receiving objects. To improve this issue, adjust the settings of the TCP/IP stack or use nonparallel connections. You must have root access to modify the TCP setting. To modify the setting, issue the following commands:</p> 
+<pre>$ sudo sysctl -w net.ipv4.tcp_window_scaling=0
+$ repo sync -j1
+</pre> <h3 id="use-mirror">Use a local mirror to avoid network latency</h3> <p>When using several clients, you can create a local mirror of the entire server content and sync clients from that mirror without accessing the network. Follow these instructions to create a local mirror in at <code translate="no" dir="ltr">~/aosp-mirror/</code> and sync clients against that mirror:</p> <ol> <li>
+<p>Create and sync the mirror:</p> 
+<pre>$ mkdir -p /usr/local/aosp/mirror
+$ cd /usr/local/aosp/mirror
+$ repo init -u https://android.googlesource.com/mirror/manifest --mirror
+</pre> <p>These commands create a local mirror in <code translate="no" dir="ltr">/user/local/aosp/mirror</code> and initialize the mirror using the <code translate="no" dir="ltr">--mirror</code> flag with the <code translate="no" dir="ltr">repo init</code> command.</p>
+</li> <li>
+<p>Sync the clients from the mirror:</p> 
+<pre>$ mkdir -p /usr/local/aosp/main
+$ cd /usr/local/aosp/main
+$ repo init -u /usr/local/aosp/mirror/platform/manifest.git -b android-latest-release
+$ repo sync
+</pre>
+</li> <li>
+<p>Sync the mirror against the server and sync the clients against the mirror:</p> 
+<pre>$ cd /usr/local/aosp/mirror
+$ repo sync
+$ cd /usr/local/aosp/android-latest-release
+$ repo sync
+</pre>
+</li> </ol> <p>It's possible to store the mirror on a LAN server and to access it over NFS, SSH, or Git. It's also possible to store it on a removable drive and to pass that drive among users or machines.</p> <h3 id="use-partial-clone">Use a partial clone</h3> <p>If you're using Git version 2.19 or later, specify <code translate="no" dir="ltr">--partial-clone</code> when performing <code translate="no" dir="ltr">repo init</code> to overcome any low-latency network issues:</p> 
+<pre>  $ repo init -u https://android.googlesource.com/platform/manifest -b android-latest-release --partial-clone --clone-filter=blob:limit=10M
+</pre> <p>Instead of initializing Repo to download everything, this command downloads Git objects as they are needed.</p> <h2 id="difficulties-syncing-the-source-code-proxy-issues">Troubleshoot 403 or 500 errors (proxy issues)</h2> <p>The <code translate="no" dir="ltr">repo init</code> or <code translate="no" dir="ltr">repo sync</code> commands might fail with either a 403 or 500 error. Most often these errors are related to HTTP proxies struggling to handle the large data transfers.</p> <p>While there isn't a specific fix to these errors, using the most recent Python version and explicitly using <code translate="no" dir="ltr">repo sync -j1</code> can sometimes help.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/setup/download/troubleshoot-sync" class="_attribution-link">https://source.android.com/docs/setup/download/troubleshoot-sync</a>
+  </p>
+</div>

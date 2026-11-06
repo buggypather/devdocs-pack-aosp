@@ -1,0 +1,132 @@
+<h1>Sound dose</h1>  <p>Android 14 provides support for sound dose in the audio framework and Audio HAL by continuously monitoring sound dose measurements and issuing warnings to users about damaging exposure levels.</p> <p><em>Sound dose</em> is a measurement of sound pressure levels over a period of time. By monitoring sound dose, we can help protect users from the damaging effects of excessive or prolonged sound exposure, thus offering better hearing protection when using headphones on portable Android devices and minimizing the chance of a hearing impairment.</p> <p>The new standards for safe listening devices conform to the regulatory requirements for hearing protection in <a href="https://documents.iec.ch/ords/f">IEC62368-1 3rd edition</a> (requires login) and <a href="https://standards.iteh.ai/catalog/standards/clc/fad90f53-4172-4cad-955a-bb31ed05546e/en-50332-3-2017">EN50332-3</a> (access limited to subscribers), which introduce the concept of sound dose.</p> <p>The sound dose function lets OEMs follow the new hearing safety regulations. To support sound dose, OEMs must follow interface specifications and regulations for all customizations and certifications. A customized OEM implementation can bypass or modify the AOSP default implementation of sound dose. However, using the AOSP implementation is highly recommended.</p> <h2 id="sound-dose-calc">Sound dose calculation</h2> <p>The standards in IEC62368-1 3rd edition and EN50332-3 increase the accuracy of measuring sound exposure by computing the calculated sound dose (CSD). CSD is computed by integrating momentary exposure levels (MEL) over time. A seven-day continuously rolling window of accumulated CSD values is maintained for the sound dose computation.</p> <p>In accordance with section 10.6.3.2 of IEC62368-1 3rd edition, if the CSD value reaches the 100% limit, the system alerts the user about the sound levels on each increase of 100%. If the user doesn't acknowledge the warning, the volume lowers to the predefined radiation energy source class 1 (RS1) value of Table 39 of IEC62368-1.</p> <p>As mentioned in section 10.6.3.3 of IEC62368-1 3rd edition, along with the sound dose warnings the system must initiate an exposure-based warning every time the MEL value exceeds the radiation energy source class 2 (RS2) value of Table 39 of IEC62368-1.</p> <p>For certification with these regulations and to make the CSD values more relevant, the system must use accurate output values as perceived by the users (such as the media playback output). It's important for the CSD computation to use values that are close to the actual sound pressure levels to which the user is exposed.</p> <h2 id="sound-dose-arch">Architecture</h2> <p>Depending on where the frames are captured, hardware characteristics and effects of the transducers can influence the power level of the rendered frames. To have a precise output sound pressure level measurement, we extended the HAL to get the MEL values directly from the underlying hardware and account for possible effects that are applied by the digital signal processor (DSP) or speaker properties, such as impedance, sensitivity, and frequency response.</p> <p>If the HAL can't provide MEL values, as a fallback mechanism, the audio framework analyzes and computes CSD. This computation in the audio framework is based on the information about the rendered output reported from HAL, and frames that are sent to the audio DSP.</p> <p>Sound dose introduces two components, <code translate="no" dir="ltr">SoundDoseHelper</code> and <code translate="no" dir="ltr">SoundDoseManager,</code> as shown in Figure 1:</p> <p><img src="https://source.android.com/static/docs/core/audio/images/sound_dose_arch.jpg" alt="sound_dose_arch" title="sound_dose_arch"></p> <p><strong>Figure 1.</strong> Architectural components of the sound dose feature.</p> <h3 id="sound-dose-helper">SoundDoseHelper</h3> <p>The <a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/services/core/java/com/android/server/audio/SoundDoseHelper.java"><code translate="no" dir="ltr">SoundDoseHelper</code></a> class, which lives in the <code translate="no" dir="ltr">systemserver</code> process, is the main collection point for all relevant sound dosing data. The <a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/services/core/java/com/android/server/audio/AudioService.java"><code translate="no" dir="ltr">AudioService</code></a> class manages the <code translate="no" dir="ltr">SoundDoseHelper</code> class.</p> <p>The <code translate="no" dir="ltr">SoundDoseHelper</code> class is responsible for the following:</p> <ul> <li>Handling new dosage information</li> <li>Persisting sound dose values</li> <li>Recovering state in case of <code translate="no" dir="ltr">audioserver</code> crash</li> <li>Triggering System UI notifications</li> <li>Lowering volume</li> </ul> <h3 id="sound-dose-mgr">SoundDoseManager</h3> <p>The <a href="https://android.googlesource.com/platform/frameworks/av/+/refs/heads/android17-release/services/audioflinger/sounddose/SoundDoseManager.cpp"><code translate="no" dir="ltr">SoundDoseManager</code></a> class, which lives in the <code translate="no" dir="ltr">audioserver</code> process and is part of the <a href="https://android.googlesource.com/platform/frameworks/av/+/refs/heads/android17-release/services/audioflinger/AudioFlinger.cpp"><code translate="no" dir="ltr">AudioFlinger</code></a> class, collects the sound dose data from the HAL or computes it internally, as a fallback, from the frames sent to the HAL. The <code translate="no" dir="ltr">SoundDoseManager</code> class sends the sound dose data to the <code translate="no" dir="ltr">SoundDoseHelper</code> class.</p> <h3 id="sound-dose-mel">MelProcessor and MelAggregator</h3> <p>If the HAL can't provide MEL values, the <a href="https://android.googlesource.com/platform/system/media/+/refs/heads/android17-release/audio_utils/MelProcessor.cpp"><code translate="no" dir="ltr">MelProcessor</code></a> and <a href="https://android.googlesource.com/platform/system/media/+/refs/heads/android17-release/audio_utils/MelAggregator.cpp"><code translate="no" dir="ltr">MelAggregator</code></a> utilities in <a href="https://android.googlesource.com/platform/system/media/+/refs/heads/android17-release/audio_utils/Android.bp"><code translate="no" dir="ltr">libaudioutils</code></a> are used for the internal sound dose computation.</p> <p>In the <code translate="no" dir="ltr">MelProcessor</code> class, the main computation is performed on a buffer with audio samples by calling <code translate="no" dir="ltr">MelProcessor::process(const void* buffer, size_t bytes)</code>. OEMs can use <code translate="no" dir="ltr">MelProcessor</code> in their HAL implementation if needed.</p> <p>The <code translate="no" dir="ltr">MelAggregator</code> class receives the MEL values from different audio ports and calculates the CSD value with a rolling window of seven days. The method <code translate="no" dir="ltr">MelAggregator::aggregateAndAddNewMelRecord_l(MelRecord mel)</code> executes the logic. The results are sent to the <code translate="no" dir="ltr">SoundDoseManager</code> class for communication with <code translate="no" dir="ltr">AudioService</code>.</p> <h2 id="sound-dose-impl">Implementation</h2> <p>HIDL interface extensions are deprecated starting with Android 14, so the new HAL interface for retrieving computed MEL values and issuing exposure warnings, named <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/interfaces/audio/aidl/android/hardware/audio/core/sounddose/ISoundDose.aidl"><code translate="no" dir="ltr">ISoundDose</code></a>, is defined as part of the <a href="implement">AIDL Audio HAL</a>. However, for implementers that need more time to integrate the AIDL Audio HAL, we have a <a href="#sound-dose-aidl-standalone">standalone sound dose AIDL HAL</a>, which offers the <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/interfaces/audio/aidl/sounddose/aidl_api/android.hardware.audio.sounddose/current/android/hardware/audio/sounddose/ISoundDoseFactory.aidl"><code translate="no" dir="ltr">ISoundDoseFactory</code></a> interface. This will be deprecated in the future.</p> <p>The HAL methods for sound dose support are shown in the following code sample:</p> 
+<pre>/**
+ * This interface provides functions related to sound exposure control required for compliance to
+ * EN/IEC 62368-1 3rd edition. Implementing this interface is mandatory for devices for which
+ * compliance to this standard is mandated and implementing audio offload decoding or other direct
+ * playback paths where volume control happens below the audio HAL.
+ */
+@VintfStability
+interface ISoundDose {
+    /**
+     * Max value in dBA used for momentary exposure warnings as defined by IEC62368-1
+     * 3rd edition. This value represents the default RS2 upper bound.
+     */
+    const int DEFAULT_MAX_RS2 = 100;
+    /** Min value of the RS2 threshold in dBA as defined by IEC62368-1 3rd edition. */
+    const int MIN_RS2 = 80;
+
+    /**
+     * Sets the RS2 upper bound used for momentary exposure warnings. Default value is
+     * DEFAULT_MAX_RS2 as specified in IEC62368-1 3rd edition.
+     *
+     * @param rs2ValueDbA custom RS2 upper bound to use
+     * @throws EX_ILLEGAL_ARGUMENT if rs2ValueDbA is greater than DEFAULT_MAX_RS2 or lower
+     *                             than MIN_RS2
+     */
+    void setOutputRs2UpperBound(float rs2ValueDbA);
+
+    /**
+     * Gets the RS2 upper bound used for momentary exposure warnings.
+     *
+     * @return the RS2 upper bound in dBA
+     */
+    float getOutputRs2UpperBound();
+
+    /**
+     * Registers the HAL callback for sound dose computation. If sound dose is supported
+     * the MEL values and exposure notifications will be received through this callback
+     * only. The internal framework MEL computation will be disabled.
+     * It is not possible to unregister the callback. The HAL is responsible to provide
+     * the MEL values throughout its lifecycle.
+     *
+     * @param callback to use when new updates are available for sound dose
+     */
+    void registerSoundDoseCallback(in IHalSoundDoseCallback callback);
+
+    @VintfStability
+    oneway interface IHalSoundDoseCallback {
+        /**
+         * Called whenever the current MEL value exceeds the set RS2 upper bound.
+         *
+         * @param currentDbA the current MEL value which exceeds the RS2 upper bound
+         * @param audioDevice the audio device where the MEL exposure warning was recorded
+         */
+        void onMomentaryExposureWarning(float currentDbA, in AudioDevice audioDevice);
+
+        @VintfStability
+        parcelable MelRecord {
+            /**
+             * Array of continuously recorded MEL values &gt;= MIN_RS2 (1 per second).
+             * First value in the array was recorded at 'timestamp'.
+             */
+            float[] melValues;
+            /**
+             * Corresponds to the time in seconds, as reported by CLOCK_MONOTONIC, when
+             * the first MEL entry in melValues was recorded. The timestamp values have
+             * to be consistent throughout all audio ports, equal timestamp values will
+             * be aggregated.
+             */
+            long timestamp;
+        }
+
+        /**
+         * Provides a MelRecord containing continuous MEL values sorted by timestamp.
+         * Note that all the MEL values originate from the audio device specified by audioDevice.
+         * In case values from multiple devices need to be reported, the caller should execute
+         * this callback once for every device.
+         *
+         * @param melRecord contains the MEL values used for CSD
+         * @param audioDevice the audio device where the MEL values were recorded
+         */
+        void onNewMelValues(in MelRecord melRecord, in AudioDevice audioDevice);
+    }
+}
+</pre> <p>The new HAL interface implements <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/interfaces/audio/aidl/android/hardware/audio/core/sounddose/ISoundDose.aidl;l=69">callbacks</a> that inform the framework about momentary exposure and provides MEL values whenever the output level exceeds RS1. When these interfaces are implemented, the framework uses them for CSD reporting. Without this callback implementation, a fallback implementation on <a href="https://android.googlesource.com/platform/frameworks/av/+/refs/heads/android17-release/services/audioflinger/AudioFlinger.cpp"><code translate="no" dir="ltr">AudioFlinger</code></a> is used to calculate estimates of CSD values.</p> <aside class="note"><strong>Note:</strong><span> Offloading compressed audio decoding optimizes battery usage by streaming compressed audio data directly to the DSP without waking up the host app processor. In case of such hardware offload decoding, the framework has access only to compressed audio data and can't estimate MEL values. In this situation, when using the AOSP sound dose implementation, the only way a device can comply with the EN50332-3/IEC62368-1 regulations is by providing MEL values through the HAL interface.</span></aside> <h3 id="sound-dose-aidl-standalone">Sound dose standalone AIDL support</h3> <p>Until OEMs can integrate sound dose in the AIDL audio HAL, they can use the standalone AIDL API <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/interfaces/audio/aidl/sounddose/aidl_api/android.hardware.audio.sounddose/current/android/hardware/audio/sounddose/ISoundDoseFactory.aidl"><code translate="no" dir="ltr">ISoundDoseFactory</code></a> as a workaround. <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/interfaces/audio/aidl/sounddose/aidl_api/android.hardware.audio.sounddose/current/android/hardware/audio/sounddose/ISoundDoseFactory.aidl"><code translate="no" dir="ltr">ISoundDoseFactory</code></a> uses the <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/interfaces/audio/aidl/android/hardware/audio/core/sounddose/ISoundDose.aidl"><code translate="no" dir="ltr">ISoundDose</code></a> interface, as shown in the following code sample:</p> 
+<pre>@VintfStability
+interface ISoundDoseFactory {
+    /**
+     * Retrieve the sound dose interface for a given audio HAL module name.
+     *
+     * If a device must comply to IEC62368-1 3rd edition audio safety requirements and is
+     * implementing audio offload decoding or other direct playback paths where volume control
+     * happens below the audio HAL, it must return an instance of the ISoundDose interface.
+     * The same instance must be returned during the lifetime of the HAL module.
+     * If the HAL module does not support sound dose, null must be returned, without throwing
+     * any errors.
+     *
+     * @param module for which we trigger sound dose updates.
+     * @return An instance of the ISoundDose interface implementation.
+     * @throws EX_ILLEGAL_STATE If there was an error creating an instance.
+     */
+    @nullable ISoundDose getSoundDose(in @utf8InCpp String module);
+}
+
+</pre> <h3 id="sound-dose-aidl-hal">Sound dose AIDL Audio HAL support</h3> <p>The sound dose interface is supported long term as part of the AIDL Audio HAL by extending the <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/interfaces/audio/aidl/aidl_api/android.hardware.audio.core/current/android/hardware/audio/core/IModule.aidl"><code translate="no" dir="ltr">IModule</code></a> interface, as shown in the following code sample:</p> 
+<pre>@VintfStability
+interface IModule {
+…
+    /**
+     * Retrieve the sound dose interface.
+     *
+     * If a device must comply to IEC62368-1 3rd edition audio safety requirements and is
+     * implementing audio offload decoding or other direct playback paths where volume control
+     * happens below the audio HAL, it must return an instance of the ISoundDose interface.
+     * The same instance must be returned during the lifetime of the HAL module.
+     * If the HAL module does not support sound dose, null must be returned, without throwing
+     * any errors.
+     *
+     * @return An instance of the ISoundDose interface implementation.
+     * @throws EX_ILLEGAL_STATE If there was an error creating an instance.
+     */
+    @nullable ISoundDose getSoundDose();
+}
+</pre> <p>This feature is an implementation of a new regulation described in IEC62368-1 3rd edition and EN50332-3, so there are no external-facing APIs.</p> <p>OEMs can certify their devices by implementing the new HAL interfaces and providing accurate MEL data for CSD to the audio framework (recommended), or by providing a custom sound dose implementation.</p> <h2 id="sound-dose-enable">Enable the calculation of sound dose</h2> <p>By default, AOSP supports the hearing safety logic that ensures certification with the existing EN50332-2 and IEC62368-1 10.6.5 standards.</p> <p><strong>In Android 14, calculation of sound dose is disabled by default.</strong></p> <aside class="caution"><strong>Caution:</strong><span> Don't enable the calculation of sound dose for the Android 14 release. The logic to support calculation of sound dose is implemented <strong>ONLY starting with Android 14 QPR1</strong>. This logic for enabling CSD isn't fully functional on Android 14 and can cause CSD inaccuracies with Bluetooth devices.</span></aside> <p>Use the following guidelines to enable the calculation of sound dose <strong>starting with Android 14 QPR1.</strong></p> <ul> <li>
+<p>If the sound dose regulations are enforced in your country, check if <code translate="no" dir="ltr">config_safe_media_volume_enabled</code> in <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/core/res/res/values/config.xml"><code translate="no" dir="ltr">config.xml</code></a> is set to <code translate="no" dir="ltr">true</code>.</p> <aside class="note"><strong>Note:</strong><span> In countries where the regulations aren't enforced, OEMs can enable or disable CSD through SysUI, such as a toggle in the <strong>Settings</strong> page, or an app setting.</span></aside>
+</li> <li>
+<p>To be compliant with EN50332-3 and IEC62368-1 10.6.3, vendors must overlay the <code translate="no" dir="ltr">config_safe_sound_dosage_enabled</code> flag in <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/core/res/res/values/config.xml"><code translate="no" dir="ltr">config.xml</code></a> to <code translate="no" dir="ltr">true</code>. For devices that support offload decoding and don't implement the <a href="#sound-dose-impl">sound dose HAL interfaces</a>, <code translate="no" dir="ltr">config_safe_sound_dosage_enabled</code> mustn't be set to <code translate="no" dir="ltr">true</code>. In such cases, setting <code translate="no" dir="ltr">config_safe_sound_dosage_enabled</code> to <code translate="no" dir="ltr">true</code> can lead to inaccurate CSD values and certification issues for safety hearing standards.</p> <aside class="note"><strong>Note:</strong><span> OEMs can set the <code translate="no" dir="ltr">config_safe_sound_dose_enabled</code> flag for specific countries by overriding the flag in <code translate="no" dir="ltr">frameworks/base/core/res/res/values-mcc${XX}/config.xml</code> where <code translate="no" dir="ltr">XX</code> represents the mobile country code (MCC) of the country.</span></aside>
+</li> </ul> <p>The following decision graph describes the logic that determines if, based on the country restrictions and values of flags, either the CSD or the legacy hearing safety levels (implemented prior to Android 14) are calculated.</p> <p><img src="https://source.android.com/static/docs/core/audio/images/enable_csd.jpg" alt="enable_csd" title="enable_csd"></p> <p><strong>Figure 2.</strong> Enable the calculation of sound dose (the logic is added in Android 14 QPR1).</p> <h2 id="sound-dose-valid">Validation</h2> <p>When implementing the HAL interface for sound dose, OEMs must validate against the VTS test cases defined by <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/interfaces/audio/aidl/vts/Android.bp;l=43;drc=e4064cebba408f64c972a64fcce35e0a5f801282"><code translate="no" dir="ltr">VtsHalAudioCoreTargetTest</code></a> for the IModule AIDL Audio HAL implementation, or by <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/interfaces/audio/aidl/sounddose/vts/VtsHalSoundDoseFactoryTargetTest.cpp"><code translate="no" dir="ltr">VtsHalSoundDoseFactoryTargetTest</code></a> for the standalone sound dose AIDL HAL implementation.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/audio/sound-dose" class="_attribution-link">https://source.android.com/docs/core/audio/sound-dose</a>
+  </p>
+</div>

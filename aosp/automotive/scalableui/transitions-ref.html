@@ -1,0 +1,33 @@
+<h1>Configure a transition</h1>  <p>Use a <em>transition</em> to define changes between panels. You can define a transition to describe how and when to make a change between two variants of a panel. You can define a list of transitions for each panel.</p> <p>Use the <code translate="no" dir="ltr">&lt;Transitions&gt;</code> XML tag as a container for one or more <code translate="no" dir="ltr">&lt;Transition&gt;</code> definitions in the configuration of a single <code translate="no" dir="ltr">&lt;TaskPanel&gt;</code> or <code translate="no" dir="ltr">&lt;DecorPanel&gt;</code>. You can use this tag to define a set of animation rules to govern when and how a panel should change the visual state from one distinct variant to another.</p> <h2 id="xml_attributes">XML attributes</h2> <p>The <code translate="no" dir="ltr">&lt;Transitions&gt;</code> tag can define default values for these child <code translate="no" dir="ltr">&lt;Transition&gt;</code> elements:</p> <table> <thead> <th width="25%">Attribute</th> <th width="15%">Status</th> <th>Description</th> </thead> <tbody> <tr> <td><code translate="no" dir="ltr">&lt;defaultDuration&gt;</code></td> <td>Optional</td> <td>
+<p>Specifies a default duration in milliseconds to be applied to all child <code translate="no" dir="ltr"><p>&lt;Transition&gt;</p></code> elements that don't explicitly set a duration attribute.</p> <p>The system's <code translate="no" dir="ltr">DEFAULT_DURATION</code> constant, typically 300 milliseconds, is used when this attribute is not specified.</p> </td> </tr> <tr> <td><code translate="no" dir="ltr">defaultInterpolator</code></td> <td>Optional</td> <td>
+<p>References an Android Interpolator XML resource ID. For example, <code translate="no" dir="ltr">@android:anim/accelerate_decelerate_interpolator</code>. The interpolator is used as the default for all child <code translate="no" dir="ltr">&lt;Transition&gt;</code> elements that don't explicitly set an interpolator attribute.</p> <p>If no default interpolator is specified, the system typically defaults to an <code translate="no" dir="ltr">AccelerateDecelerateInterpolator</code>.</p> </td> </tr> </tbody> </table> <h2 id="xml_child_elements">XML child elements</h2> <p>The child element of <code translate="no" dir="ltr">&lt;Transitions&gt;</code> is <code translate="no" dir="ltr">&lt;Transition&gt;</code>, the core element used to define a specific animation path between <code translate="no" dir="ltr">PanelState</code> variants. Multiple <code translate="no" dir="ltr">&lt;Transition&gt;</code> elements can be nested within a single <code translate="no" dir="ltr">&lt;Transitions&gt;</code> block.</p> <h2 id="sample_code">Sample code</h2> <p>In this sample, <code translate="no" dir="ltr">fromVariant</code> is optional. When not defined, the current variant is used. If <code translate="no" dir="ltr">fromVariant</code> is defined, the transition is used only when all parameters match. Parameters are specified in the Event and <code translate="no" dir="ltr">fromVariant</code>.</p> 
+<pre>&lt;Transitions defaultDuration="400"
+         defaultInterpolator="@android:anim/linear_interpolator"&gt;
+  &lt;Transition fromVariant="closed_app"
+              toVariant="opened_app"&gt;
+    &lt;Event id="app_opened" panel="application_panel" /&gt;
+  &lt;/Transition&gt;
+&lt;/Transitions&gt;
+</pre> <h2 id="transition">Transition</h2> <p>A transition describes how to animate a change in visual state between two variants of a panel. A transition outlines the path from a variant to a variant. To do so, the transition specifies details such as the animation to apply and the event needed to trigger the animation.</p> <p>For a panel, transitions can define animations for properties such as bounds, visibility, and alpha. If a custom animator is not specified, a default animator is used.</p> <h3 id="xml_attributes_2">XML attributes</h3> <p>The <code translate="no" dir="ltr">&lt;Transition&gt;</code> tag uses several attributes to define the characteristics of the animation and the conditions under which it is to occur.</p> <h3 id="xml_child_elements_2">XML child elements</h3> <p><code translate="no" dir="ltr">&lt;Event&gt;</code> defines the properties of the event that can trigger the transition.</p> <table> <thead> <th width="20%">Attribute</th> <th width="15%">Status</th> <th>Description</th> </thead> <tbody> <tr> <td><code translate="no" dir="ltr">&lt;id&gt;</code></td> <td>Mandatory</td> <td>Unique identifier of the event to activate the trigger.</td> </tr> <tr> <td><code translate="no" dir="ltr">&lt;panelId&gt;</code></td> <td>Optional</td> <td>Unique identifier of the panel associated with the event.</td> </tr> <tr>Unique identifier of the panel associated with this event. <td><code translate="no" dir="ltr">componentName</code></td> <td>Optional</td> <td>Component name associated with this event.</td> </tr> <tr> <td><code translate="no" dir="ltr">packageName</code></td> <td>Optional</td> <td>Package name associated with the event.</td> </tr> </tbody> </table> <h2 id="sample_code_2">Sample code</h2> 
+<pre>&lt;Transitions defaultDuration="400"
+        defaultInterpolator="@android:anim/accelerate_interpolator"&gt;
+  &lt;!-- A transition from 'closed_app' to 'opened_app' variant, triggered by 'open_app_event' --&gt;
+  &lt;Transition fromVariant="closed_app"
+              toVariant="opened_app"&gt;
+    &lt;Event id="app_opened" panel="application_panel" /&gt;
+  &lt;Transition&gt;
+
+  &lt;!-- A transition from 'opened_app' to 'closed_app' variant, using a custom animator --&gt;
+  &lt;Transition fromVariant="opened_app"
+              toVariant="closed_app"
+              animator="@animator/close_app"&gt;
+    &lt;Event id="_System_PanelEmptyEvent"
+           panelId="application_panel" /&gt;
+  &lt;Transition&gt;
+&lt;/Transitions&gt;
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/scalableui/transitions-ref" class="_attribution-link">https://source.android.com/docs/automotive/scalableui/transitions-ref</a>
+  </p>
+</div>

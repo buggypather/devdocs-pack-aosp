@@ -1,0 +1,197 @@
+<h1>ART Service configuration</h1>  <p>Before you begin, see a high-level overview of the <a href="https://android.googlesource.com/platform/art/+/android17-release/libartservice/service/README.md">ART Service</a>.</p> <aside class="note"><strong>Note:</strong><span> ART Service isn't available on Android 13 and lower.</span></aside> <p>Starting with Android 14, on-device AOT compilation for apps (a.k.a. dexopt) is handled by ART Service. ART Service is a part of the ART module, and you can customize it through system properties and APIs.</p> <h2 id="system_properties">System properties</h2> <p>ART Service supports all the relevant <a href="../configure#dex2oat_options">dex2oat options</a>.</p> <p>Additionally, ART Service supports the following system properties:</p> <h3 id="pmdexoptreason">pm.dexopt.&lt;reason&gt;</h3> <p>This is a set of system properties that determine the default compiler filters for all predefined <em>compilation reasons</em> described in <a href="https://android.googlesource.com/platform/art/+/android17-release/libartservice/service/README.md#dexopt-scenarios">Dexopt scenarios</a>.</p> <p>For more information, see <a href="../configure#compiler_filters">Compiler filters</a>.</p> <p>The standard default values are:</p> 
+<pre>pm.dexopt.first-boot=verify
+pm.dexopt.boot-after-ota=verify
+pm.dexopt.boot-after-mainline-update=verify
+pm.dexopt.bg-dexopt=speed-profile
+pm.dexopt.inactive=verify
+pm.dexopt.cmdline=verify
+</pre> <h3 id="pmdexoptshared_default_speed">pm.dexopt.shared (default: speed)</h3> <p>This is the fallback compiler filter for apps used by other apps.</p> <p>In principle, ART Service does profile-guided compilation (<code translate="no" dir="ltr">speed-profile</code>) for all apps when possible, typically during background dexopt. However, there are some apps that are used by other apps (either through <code translate="no" dir="ltr">&lt;uses-library&gt;</code> or loaded dynamically using <a href="https://developer.android.com/reference/android/content/Context#createPackageContext(java.lang.String,%20int)"><code translate="no" dir="ltr">Context#createPackageContext</code></a> with <a href="https://developer.android.com/reference/android/content/Context#CONTEXT_INCLUDE_CODE"><code translate="no" dir="ltr">CONTEXT_INCLUDE_CODE</code></a>). Such apps cannot use local profiles due to privacy reasons.</p> <p>For such an app, if profile-guided compilation is requested, ART Service first tries to use a cloud profile. If a cloud profile doesn't exist, ART Service falls back to use the compiler filter specified by <code translate="no" dir="ltr">pm.dexopt.shared</code>.</p> <p>If the requested compilation is not profile-guided, this property has no effect.</p> <h3 id="pmdexoptreasonconcurrency_default_1">pm.dexopt.&lt;reason&gt;.concurrency (default: 1)</h3> <p>This is the number of dex2oat invocations for certain predefined compilation reasons (<code translate="no" dir="ltr">first-boot</code>, <code translate="no" dir="ltr">boot-after-ota</code>, <code translate="no" dir="ltr">boot-after-mainline-update</code>, and <code translate="no" dir="ltr">bg-dexopt</code>).</p> <p>Note that the effect of this option is combined with <a href="../configure#dex2oat_resource_usage_options">dex2oat resource usage options</a> (<code translate="no" dir="ltr">dalvik.vm.*dex2oat-threads</code>, <code translate="no" dir="ltr">dalvik.vm.*dex2oat-cpu-set</code>, and the task profiles):</p> <ul> <li>
+<code translate="no" dir="ltr">dalvik.vm.*dex2oat-threads</code> controls the number of threads for each dex2oat invocation, while <code translate="no" dir="ltr">pm.dexopt.&lt;reason&gt;.concurrency</code> controls the number of dex2oat invocations. That is, the maximum number of concurrent threads is the product of the two system properties.</li> <li>
+<code translate="no" dir="ltr">dalvik.vm.*dex2oat-cpu-set</code> and the task profiles always bound the CPU core usage, regardless of the maximum number of concurrent threads (discussed above).</li> </ul> <p>A single dex2oat invocation may not fully utilize all the CPU cores, regardless of <code translate="no" dir="ltr">dalvik.vm.*dex2oat-threads</code>. Therefore, increasing the number of dex2oat invocations (<code translate="no" dir="ltr">pm.dexopt.&lt;reason&gt;.concurrency</code>) can utilize CPU cores better, to speed up the overall progress of dexopt. This is particularly useful during boot.</p> <p>However, having too many dex2oat invocations may cause the device to run out of memory, even though this can be mitigated by setting <code translate="no" dir="ltr">dalvik.vm.dex2oat-swap</code> to <code translate="no" dir="ltr">true</code> to allow using a swap file. Too many invocations might also cause unnecessary context switching. Therefore, this number should be carefully tuned on a product-by-product basis.</p> <h3 id="pmdexoptdowngrade_after_inactive_days_default_not_set">pm.dexopt.downgrade_after_inactive_days (default: not set)</h3> <p>If this option is set, ART Service only dexopts apps used within the last given number of days.</p> <p>In addition, If the storage is nearly low, during background dexopt, ART Service downgrades the compiler filter of apps that are not used within the last given number of days, to free up space. The compiler reason for this is <code translate="no" dir="ltr">inactive</code>, and the compiler filter is determined by <code translate="no" dir="ltr">pm.dexopt.inactive</code>. The space threshold to trigger this feature is the Storage Manager's low space threshold (configurable through the global settings <code translate="no" dir="ltr">sys_storage_threshold_percentage</code> and <code translate="no" dir="ltr">sys_storage_threshold_max_bytes</code>, default: 500MB) plus 500MB.</p> <p>If you customize the list of packages through <code translate="no" dir="ltr">ArtManagerLocal#setBatchDexoptStartCallback</code>, the packages in the list provided by <code translate="no" dir="ltr">BatchDexoptStartCallback</code> for <code translate="no" dir="ltr">bg-dexopt</code> are never downgraded.</p> <h3 id="pmdexoptdisable_bg_dexopt_default_false">pm.dexopt.disable_bg_dexopt (default: false)</h3> <p>This is for testing only. It prevents ART Service from scheduling the background dexopt job.</p> <p>If the background dexopt job is already scheduled but has not run yet, this option has no effect. That is, the job will still run.</p> <p>A recommended sequence of commands to prevent the background dexopt job from running is:</p> 
+<pre>setprop pm.dexopt.disable_bg_dexopt true
+pm bg-dexopt-job --disable
+</pre> <p>The first line prevents the background dexopt job from being scheduled, if it's not scheduled yet. The second line unschedules the background dexopt job, if it's already scheduled, and it cancels the background dexopt job immediately, if it's running.</p> <h2 id="art_service_apis">ART Service APIs</h2> <p>ART Service exposes Java APIs for customization. The APIs are defined in <code translate="no" dir="ltr">ArtManagerLocal</code>. See the Javadoc in <code translate="no" dir="ltr">art/libartservice/service/java/com/android/server/art/ArtManagerLocal.java</code> for usages (<a href="https://cs.android.com/android/platform/superproject/+/android14-release:art/libartservice/service/java/com/android/server/art/ArtManagerLocal.java">Android 14 source</a>, <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:art/libartservice/service/java/com/android/server/art/ArtManagerLocal.java">unreleased development source</a>).</p> <p><code translate="no" dir="ltr">ArtManagerLocal</code> is a singleton held by <code translate="no" dir="ltr">LocalManagerRegistry</code>. A helper function <code translate="no" dir="ltr">com.android.server.pm.DexOptHelper#getArtManagerLocal</code> helps you obtain it.</p> 
+<pre>import static com.android.server.pm.DexOptHelper.getArtManagerLocal;
+</pre> <p>Most of the APIs require an instance of <code translate="no" dir="ltr">PackageManagerLocal.FilteredSnapshot</code>, which holds the information of all apps. You can get it by calling <code translate="no" dir="ltr">PackageManagerLocal#withFilteredSnapshot</code>, where <code translate="no" dir="ltr">PackageManagerLocal</code> is also a singleton held by <code translate="no" dir="ltr">LocalManagerRegistry</code> and can be obtained from <code translate="no" dir="ltr">com.android.server.pm.PackageManagerServiceUtils#getPackageManagerLocal</code>.</p> 
+<pre>import static com.android.server.pm.PackageManagerServiceUtils.getPackageManagerLocal;
+</pre> <p>The following are some typical use cases of the APIs.</p> <h3 id="trigger_dexopt_for_an_app">Trigger dexopt for an app</h3> <p>You can trigger dexopt for any app at any time by calling <code translate="no" dir="ltr">ArtManagerLocal#dexoptPackage</code>.</p> 
+<pre>try (var snapshot = getPackageManagerLocal().withFilteredSnapshot()) {
+  getArtManagerLocal().dexoptPackage(
+      snapshot,
+      "com.google.android.calculator",
+      new DexoptParams.Builder(ReasonMapping.REASON_INSTALL).build());
+}
+</pre> <p>You can also pass your own dexopt reason. If you do that, the priority class and the compiler filter must be explicitly set.</p> 
+<pre>try (var snapshot = getPackageManagerLocal().withFilteredSnapshot()) {
+  getArtManagerLocal().dexoptPackage(
+      snapshot,
+      "com.google.android.calculator",
+      new DexoptParams.Builder("my-reason")
+          .setCompilerFilter("speed-profile")
+          .setPriorityClass(ArtFlags.PRIORITY_BACKGROUND)
+          .build());
+}
+</pre>
+<aside class="note"><strong>Note:</strong><span> If you have registered a callback through <code translate="no" dir="ltr">setAdjustCompilerFilterCallback</code>, the compiler filter returned by the callback takes precedence over the compiler filter that you pass to <code translate="no" dir="ltr">dexoptPackage</code>.</span></aside> <h3 id="cancel_dexopt">Cancel dexopt</h3> <p>If an operation is initiated by a <code translate="no" dir="ltr">dexoptPackage</code> call, you can pass a cancellation signal, which lets you cancel the operation at some point. This can be useful when you run dexopt asynchronously.</p> 
+<pre>Executor executor = ...;  // Your asynchronous executor here.
+var cancellationSignal = new CancellationSignal();
+executor.execute(() -&gt; {
+  try (var snapshot = getPackageManagerLocal().withFilteredSnapshot()) {
+    getArtManagerLocal().dexoptPackage(
+        snapshot,
+        "com.google.android.calculator",
+        new DexoptParams.Builder(ReasonMapping.REASON_INSTALL).build(),
+        cancellationSignal);
+  }
+});
+
+// When you want to cancel the operation.
+cancellationSignal.cancel();
+</pre> <p>You can also cancel background dexopt, which is initiated by ART Service.</p> 
+<pre>getArtManagerLocal().cancelBackgroundDexoptJob();
+</pre> <h3 id="get_dexopt_results">Get dexopt results</h3> <p>If an operation is initiated by a <code translate="no" dir="ltr">dexoptPackage</code> call, you can get the result from the return value.</p> 
+<pre>DexoptResult result;
+try (var snapshot = getPackageManagerLocal().withFilteredSnapshot()) {
+  result = getArtManagerLocal().dexoptPackage(...);
+}
+
+// Process the result here.
+...
+</pre> <p>ART Service also initiates dexopt operations itself in many scenarios, such as background dexopt. To listen to all dexopt results, whether the operation is initiated by a <code translate="no" dir="ltr">dexoptPackage</code> call or by ART Service, use <code translate="no" dir="ltr">ArtManagerLocal#addDexoptDoneCallback</code>.</p> 
+<pre>getArtManagerLocal().addDexoptDoneCallback(
+    false /* onlyIncludeUpdates */,
+    Runnable::run,
+    (result) -&gt; {
+      // Process the result here.
+      ...
+    });
+</pre> <p>The first argument determines whether to only include updates in the result. If you only want to listen to packages that are updated by dexopt, set it to true.</p> <p>The second argument is the executor of the callback. To execute the callback on the same thread that performs dexopt, use <code translate="no" dir="ltr">Runnable::run</code>. If you don't want the callback to block dexopt, use an asynchronous executor.</p> <p>You can add multiple callbacks, and ART Service will execute all of them sequentially. All the callbacks will remain active for all future calls unless you remove them.</p> <p>If you want to remove a callback, keep the reference of the callback when you add it, and use <code translate="no" dir="ltr">ArtManagerLocal#removeDexoptDoneCallback</code>.</p> 
+<pre>DexoptDoneCallback callback = (result) -&gt; {
+  // Process the result here.
+  ...
+};
+
+getArtManagerLocal().addDexoptDoneCallback(
+    false /* onlyIncludeUpdates */, Runnable::run, callback);
+
+// When you want to remove it.
+getArtManagerLocal().removeDexoptDoneCallback(callback);
+</pre> <h3 id="customize_the_package_list_and_dexopt_parameters">Customize the package list and dexopt parameters</h3> <p>ART Service initiates dexopt operations itself during boot and background dexopt. To customize the package list or dexopt parameters for those operations, use <code translate="no" dir="ltr">ArtManagerLocal#setBatchDexoptStartCallback</code>.</p> 
+<pre>getArtManagerLocal().setBatchDexoptStartCallback(
+    Runnable::run,
+    (snapshot, reason, defaultPackages, builder, cancellationSignal) -&gt; {
+      switch (reason) {
+        case ReasonMapping.REASON_BG_DEXOPT:
+          var myPackages = new ArrayList&lt;String&gt;(defaultPackages);
+          myPackages.add(...);
+          myPackages.remove(...);
+          myPackages.sort(...);
+          builder.setPackages(myPackages);
+          break;
+        default:
+          // Ignore unknown reasons.
+      }
+    });
+</pre> <p>You can add items to the package list, remove items from it, sort it, or even use a completely different list.</p> <aside class="warning"><strong>Warning:</strong><span> The items in the package list must exist in the <code translate="no" dir="ltr">snapshot</code> that is passed to the callback and must satisfy <code translate="no" dir="ltr">PackageStateModulesUtils#isDexoptable</code>. Otherwise, you might get a <code translate="no" dir="ltr">RuntimeException</code> error during dexopt.</span></aside> <p>Your callback must ignore unknown reasons because more reasons may be added in the future.</p> <p>You can set at most one <code translate="no" dir="ltr">BatchDexoptStartCallback</code>. The callback will remain active for all future calls unless you clear it.</p> <p>If you want to clear the callback, use <code translate="no" dir="ltr">ArtManagerLocal#clearBatchDexoptStartCallback</code>.</p> 
+<pre>getArtManagerLocal().clearBatchDexoptStartCallback();
+</pre>
+<aside class="note"><strong>Note:</strong><span> If you have registered a <code translate="no" dir="ltr">AdjustCompilerFilterCallback</code> through <code translate="no" dir="ltr">setAdjustCompilerFilterCallback</code>, the compiler filter returned by that callback will take precedence over the compiler filter that you set in <code translate="no" dir="ltr">BatchDexoptStartCallback</code>.</span></aside> <h3 id="customize_the_parameters_of_the_background_dexopt_job">Customize the parameters of the background dexopt job</h3> <p>By default, the background dexopt job runs once a day when the device is idle and charging. This can be changed using <code translate="no" dir="ltr">ArtManagerLocal#setScheduleBackgroundDexoptJobCallback</code>.</p> 
+<pre>getArtManagerLocal().setScheduleBackgroundDexoptJobCallback(
+    Runnable::run,
+    builder -&gt; {
+      builder.setPeriodic(TimeUnit.DAYS.toMillis(2));
+    });
+</pre>
+<aside class="warning"><strong>Warning:</strong><span> Do <strong>not</strong> call <code translate="no" dir="ltr">setBackoffCriteria</code> in the callback. Doing so causes ART Service to encounter an exception when scheduling the job, as stated in the <a href="https://developer.android.com/reference/android/app/job/JobInfo.Builder#setBackoffCriteria(long,%20int)"><code translate="no" dir="ltr">setBackoffCriteria</code> documentation</a>. A cancelled job is retried with the default retry policy (30 seconds, exponential, capped at 5 hours). Unfortunately, due to the limitation of the job scheduler API, this retry policy can't be changed.</span></aside> <p>You can set at most one <code translate="no" dir="ltr">ScheduleBackgroundDexoptJobCallback</code>. The callback will remain active for all future calls unless you clear it.</p> <p>If you want to clear the callback, use <code translate="no" dir="ltr">ArtManagerLocal#clearScheduleBackgroundDexoptJobCallback</code>.</p> 
+<pre>getArtManagerLocal().clearScheduleBackgroundDexoptJobCallback();
+</pre> <h3 id="temporarily_disable_dexopt">Temporarily disable dexopt</h3> <aside class="note"><strong>Note:</strong><span> You <strong>don't</strong> need to disable dexopt when the device is being used. The background dexopt job <strong>only</strong> runs when the device is idle, and it is cancelled immediately if the device is no longer idle. In previous Android releases, dexopt was handled by the package manager, which had a post-boot job that sometimes competed for resources with the foreground application and caused performance problems, but ART Service doesn't have the post-boot job.</span></aside> <p>Any dexopt operation that is initiated by ART Service triggers a <code translate="no" dir="ltr">BatchDexoptStartCallback</code>. You can keep cancelling the operations to effectively disable dexopt.</p> <p>If the operation that you cancel is background dexopt, it follows the default retry policy (30 seconds, exponential, capped at 5 hours).</p> 
+<pre>// Good example.
+
+var shouldDisableDexopt = new AtomicBoolean(false);
+
+getArtManagerLocal().setBatchDexoptStartCallback(
+    Runnable::run,
+    (snapshot, reason, defaultPackages, builder, cancellationSignal) -&gt; {
+      if (shouldDisableDexopt.get()) {
+        cancellationSignal.cancel();
+      }
+    });
+
+// Disable dexopt.
+shouldDisableDexopt.set(true);
+getArtManagerLocal().cancelBackgroundDexoptJob();
+
+// Re-enable dexopt.
+shouldDisableDexopt.set(false);
+</pre> <p>You can have at most one <code translate="no" dir="ltr">BatchDexoptStartCallback</code>. If you also want to use <code translate="no" dir="ltr">BatchDexoptStartCallback</code> to customize the package list or dexopt parameters, you must combine the code into one callback.</p> <aside class="caution"><strong>Caution:</strong><span> Do <strong>not</strong> use <code translate="no" dir="ltr">ArtManagerLocal#unscheduleBackgroundDexoptJob</code> and <code translate="no" dir="ltr">ArtManagerLocal#scheduleBackgroundDexoptJob</code> to disable dexopt. Doing so will put the background dexopt job at the end of the job queue and cause job to be delayed in the next 24 hours.</span></aside>
+<pre>// Bad example.
+
+// Disable dexopt.
+getArtManagerLocal().unscheduleBackgroundDexoptJob();
+
+// Re-enable dexopt.
+getArtManagerLocal().scheduleBackgroundDexoptJob();
+</pre> <p>The dexopt operation performed on app install is <strong>not</strong> initiated by ART Service. Instead, it is initiated by the package manager through a <code translate="no" dir="ltr">dexoptPackage</code> call. Therefore, it does <strong>not</strong> trigger <code translate="no" dir="ltr">BatchDexoptStartCallback</code>. To disable dexopt on app install, prevent the package manager from calling <code translate="no" dir="ltr">dexoptPackage</code>.</p> <h3 id="override-compiler-filter">Override the compiler filter for certain packages (Android 15+)</h3> <p>You can override the compiler filter for certain packages by registering a callback through <code translate="no" dir="ltr">setAdjustCompilerFilterCallback</code>. The callback is called whenever a package is going to be dexopted, no matter the dexopt is initiated by ART Service during boot and background dexopt or by a <code translate="no" dir="ltr">dexoptPackage</code> API call.</p> <p>If a package doesn't need adjustment, the callback must return <code translate="no" dir="ltr">originalCompilerFilter</code>.</p> 
+<pre>getArtManagerLocal().setAdjustCompilerFilterCallback(
+    Runnable::run,
+    (packageName, originalCompilerFilter, reason) -&gt; {
+      if (isVeryImportantPackage(packageName)) {
+        return "speed-profile";
+      }
+      return originalCompilerFilter;
+    });
+</pre> <p>You can set only one <code translate="no" dir="ltr">AdjustCompilerFilterCallback</code>. If you want to use <code translate="no" dir="ltr">AdjustCompilerFilterCallback</code> to override the compiler filter for multiple packages, you must combine the code into one callback. The callback remains active for all future calls unless you clear it.</p> <p>If you want to clear the callback, use <code translate="no" dir="ltr">ArtManagerLocal#clearAdjustCompilerFilterCallback</code>.</p> 
+<pre>getArtManagerLocal().clearAdjustCompilerFilterCallback();
+</pre> <h2 id="other_customizations">Other customizations</h2> <p>ART Service also supports some other customizations.</p> <h3 id="set_the_thermal_threshold_for_background_dexopt">Set the thermal threshold for background dexopt</h3> <p>The thermal control of the background dexopt job is performed by Job Scheduler. The job is cancelled immediately when the temperature reaches <a href="https://developer.android.com/reference/android/os/PowerManager#THERMAL_STATUS_MODERATE"><code translate="no" dir="ltr">THERMAL_STATUS_MODERATE</code></a>. The threshold of <code translate="no" dir="ltr">THERMAL_STATUS_MODERATE</code> is tunable.</p> <h3 id="determine_whether_background_dexopt_is_running">Determine whether background dexopt is running</h3> <p>The background dexopt job is managed by Job Scheduler, and its job ID is <code translate="no" dir="ltr">27873780</code>. To determine whether the job is running, use Job Scheduler APIs.</p> 
+<pre>// Good example.
+
+var jobScheduler =
+    Objects.requireNonNull(mContext.getSystemService(JobScheduler.class));
+int reason = jobScheduler.getPendingJobReason(27873780);
+
+if (reason == PENDING_JOB_REASON_EXECUTING) {
+  // Do something when the job is running.
+  ...
+}
+</pre>
+<aside class="caution"><strong>Caution:</strong><span> Do <strong>not</strong> rely on <code translate="no" dir="ltr">ArtManagerLocal#setBatchDexoptStartCallback</code> and <code translate="no" dir="ltr">ArtManagerLocal#addDexoptDoneCallback</code> for the job state. There is no guarantee that these two callbacks correspond to each other. For example, if <code translate="no" dir="ltr">pm.dexopt.downgrade_after_inactive_days</code> is set, and the storage is nearly low, ART Services calls <code translate="no" dir="ltr">BatchDexoptStartCallback</code> once, but calls <code translate="no" dir="ltr">DexoptDoneCallback</code> twice (once for downgrading and once for dexopt).</span></aside>
+<pre>// Bad example.
+
+var backgroundDexoptRunning = new AtomicBoolean(false);
+
+getArtManagerLocal().setBatchDexoptStartCallback(
+    Runnable::run,
+    (snapshot, reason, defaultPackages, builder, cancellationSignal) -&gt; {
+      if (reason.equals(ReasonMapping.REASON_BG_DEXOPT)) {
+        backgroundDexoptRunning.set(true);
+      }
+    });
+
+getArtManagerLocal().addDexoptDoneCallback(
+    false /* onlyIncludeUpdates */,
+    Runnable::run,
+    (result) -&gt; {
+      if (result.getReason().equals(ReasonMapping.REASON_BG_DEXOPT)) {
+        backgroundDexoptRunning.set(false);
+      }
+    });
+
+if (backgroundDexoptRunning.get()) {
+  // Do something when the job is running.
+  ...
+}
+</pre> <h3 id="provide_a_profile_for_dexopt">Provide a profile for dexopt</h3> <p>To use a profile to guide dexopt, put a <code translate="no" dir="ltr">.prof</code> file or a <code translate="no" dir="ltr">.dm</code> file next to the APK.</p> <p>The <code translate="no" dir="ltr">.prof</code> file must be a binary-format profile file, and the filename must be the filename of the APK + <code translate="no" dir="ltr">.prof</code>. For example,</p> 
+<pre>base.apk.prof
+</pre> <p>The filename of the <code translate="no" dir="ltr">.dm</code> file must be the filename of the APK with the extension replaced by <code translate="no" dir="ltr">.dm</code>. For example,</p> 
+<pre>base.dm
+</pre> <p>To verify that the profile is being used for dexopt, run dexopt with <code translate="no" dir="ltr">speed-profile</code> and check the result.</p> 
+<pre>pm art clear-app-profiles &lt;package-name&gt;
+pm compile -m speed-profile -f -v &lt;package-name&gt;
+</pre> <p>The first line clears all profiles produced by the runtime (i.e., those in <code translate="no" dir="ltr">/data/misc/profiles</code>), if any, to make sure that the profile next to the APK is the only profile that ART Service can possibly use. The second line runs dexopt with <code translate="no" dir="ltr">speed-profile</code>, and it passes <code translate="no" dir="ltr">-v</code> to print the verbose result.</p> <p>If the profile is being used, you see <code translate="no" dir="ltr">actualCompilerFilter=speed-profile</code> in the result. Otherwise, you see <code translate="no" dir="ltr">actualCompilerFilter=verify</code>. For example,</p> 
+<pre>DexContainerFileDexoptResult{dexContainerFile=/data/app/~~QR0fTV0UbDbIP1Su7XzyPg==/com.google.android.gms-LvusF2uARKOtBbcaPHdUtQ==/base.apk, primaryAbi=true, abi=x86_64, actualCompilerFilter=speed-profile, status=PERFORMED, dex2oatWallTimeMillis=4549, dex2oatCpuTimeMillis=14550, sizeBytes=3715344, sizeBeforeBytes=3715344}
+</pre> <p>Typical reasons why ART Service doesn't use the profile include the following:</p> <ul> <li>The profile has a wrong filename or it's not next to the APK.</li> <li>The profile is in the wrong format.</li> <li>The profile does not match the APK. (The checksums in the profile don't match the checksums of the <code translate="no" dir="ltr">.dex</code> files in the APK.)</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/runtime/configure/art-service" class="_attribution-link">https://source.android.com/docs/core/runtime/configure/art-service</a>
+  </p>
+</div>

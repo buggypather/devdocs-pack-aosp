@@ -1,0 +1,41 @@
+<h1>Use Android Emulator virtual devices</h1>  <p>You can use Android Emulator to create emulations of Android devices that run your own custom Android system images. In addition, you can add multi-display support to Android Emulator emulations.</p> <h2 id="architecture">Android Emulator architecture</h2> <p>Android Emulator runs the Android operating system in a virtual machine called an Android Virtual Device (AVD). Each AVD contains the full <a href="../../core/architecture">Android software stack</a>, and it runs as if it were on a physical device. Figure 1 illustrates Android Emulator's high-level architecture. For more information about the emulator, see <a href="https://developer.android.com/studio/run/emulator">Run apps on the Android Emulator</a>.</p> <p><img src="https://source.android.com/static/docs/setup/images/emulator-design.png" alt="Android Emulator architecture." class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> Android Emulator architecture.</p> <h2 id="build">Build AVD images</h2> <p>Each AVD includes an Android system image, which runs in that AVD. The AVD Manager includes some system images. And you can build custom AVD system images from your source code and create device emulations to run them.</p> <aside class="note"><strong>Note:</strong><span> You need to <a href="../start/initializing">establish a build environment</a> before building AVD system images.</span></aside> <p>To build and run an AVD system image:</p> <ol> <li>
+<p>Download the Android source:</p> 
+<pre>mkdir aosp-android-latest-release; cd aosp-android-latest-release
+repo init -u
+repo sync -j24</pre>
+</li> </ol> <p>If you want to build other Android versions, you can find their branch names in the <a href="https://android.googlesource.com/platform/manifest/+refs">public Android repository</a>. They map to <a href="https://source.android.com/docs/setup/reference/build-numbers#source-code-tags-and-builds">Android Codenames, Tags, and Build Numbers</a>.</p> <ol> <li>
+<p>Build an AVD system image. This is the same process as <a href="../build/building">building an Android</a> device system image. For example, to build a x86 64-bit AVD:</p> 
+<pre>source ./build/envsetup.sh
+lunch sdk_phone_x86_64
+make -j32</pre>
+</li> <li>
+<p>Run the AVD system image in the Android Emulator:</p> 
+<pre>emulator</pre>
+</li> </ol> <p>See <a href="https://developer.android.com/studio/run/emulator-commandline#startup-options">Command-line startup options</a> for more details about running the emulator. Figure 2 shows an example of the Android Emulator running an AVD:</p> <p><img src="https://source.android.com/static/docs/setup/images/emulator-run-ui.png" alt="Android Emulator running an AVD." class="android-image-dark-theme-background"> </p> <p><strong>Figure 2.</strong> Android Emulator running an AVD.</p> <h2 id="share">Share AVD system images for others to use with Android Studio</h2> <p>Follow these instructions to share your AVD system images with others. They can use your AVD system images with <a href="https://developer.android.com/studio">Android Studio</a> to develop and test apps.</p> <ol> <li>
+<p>Make additional <code translate="no" dir="ltr">sdk</code> and <code translate="no" dir="ltr">sdk_repo</code> packages:</p> <p>For Android 13 and higher, use the <code translate="no" dir="ltr">emu_img_zip</code> command:</p> 
+<pre>$ make emu_img_zip
+</pre> <p>This generates an <code translate="no" dir="ltr">sdk-repo-linux-system-images-eng.[username]].zip</code> file.</p> <p>For Android 12 and lower, use the <code translate="no" dir="ltr">sdk_repo</code> command:</p> 
+<pre>$ make -j32 sdk sdk_repo
+</pre> <p>The <code translate="no" dir="ltr">make sdk sdk_repo</code> command creates two files under <code translate="no" dir="ltr">aosp-android-latest-release/out/host/linux-x86/sdk/sdk_phone_x86</code>:</p> <ul> <li><code translate="no" dir="ltr">sdk-repo-linux-system-images-eng.[username].zip</code></li> <li><code translate="no" dir="ltr">repo-sys-img.xml</code></li> </ul>
+</li> <li><p>Host the file <code translate="no" dir="ltr">sdk-repo-linux-system-images-eng.[username].zip</code> somewhere accessible to your users, and get its URL to use as the <strong>AVD System Image URL</strong>.</p></li> <li>
+<p>For Android 12 and lower, edit <code translate="no" dir="ltr">repo-sys-img.xml</code> accordingly:</p> <ul> <li>Update <code translate="no" dir="ltr">&lt;sdk:url&gt;</code> to your <strong>AVD System Image URL</strong>.</li> <li>See <a href="https://android.googlesource.com/platform/prebuilts/devtools/+/refs/heads/android17-release/repository/sdk-sys-img-03.xsd">sdk-sys-img-03.xsd</a> to learn about other updates to the file.</li> <li>Host <code translate="no" dir="ltr">repo-sys-img.xml</code> somewhere accessible to your users, and get its URL to use as the <strong>Custom Update Site URL</strong>.</li> </ul>
+</li> </ol> <p>To use a custom AVD image, do the following in the SDK Manager:</p> <ol> <li>
+<p>Add the <strong>Custom Update Site URL</strong> as an <a href="https://developer.android.com/studio/intro/update#adding-sites">SDK Update Site</a>.</p> <p>This adds your custom AVD system image to the System Images page.</p>
+</li> <li><p><a href="https://developer.android.com/studio/run/managing-avds#createavd">Create an AVD</a> by downloading and selecting the custom AVD system image.</p></li> </ol> <h2 id="multi-display">Add multi-display support</h2> <p>Android 10 <a href="../../core/display/multi_display">enhances multi-display</a> to better support more use cases, such as auto and desktop mode. Android Emulator also supports multi-display emulation. So you can create a specific multi-display environment without setting up the real hardware.</p> <p>You can add multi-display support to an AVD by making the following changes, or by cherry picking from <a href="https://android-review.googlesource.com/q/topic:%22AVD+Multi-display%22+(status:open%20OR%20status:merged)">these CLs</a>.</p> <ul> <li>
+<p>Add the multi-display provider to the build by adding these lines to file <code translate="no" dir="ltr">build/target/product/sdk_phone_x86.mk</code>:</p> 
+<pre>PRODUCT_ARTIFACT_PATH_REQUIREMENT_WHITELIST := \
+    system/lib/libemulator_multidisplay_jni.so \
+    system/lib64/libemulator_multidisplay_jni.so \
+    system/priv-app/MultiDisplayProvider/MultiDisplayProvider.apk \
+PRODUCT_PACKAGES += MultiDisplayProvider
+</pre>
+</li> <li>
+<p>Enable the Multi-Display feature flag by adding this line to file <code translate="no" dir="ltr">device/generic/goldfish/data/etc/advancedFeatures.ini</code>:</p> 
+<pre>MultiDisplay = on
+</pre>
+</li> </ul> <p>You can find the latest emulator features and release information from the following sources:</p> <ul> <li><a href="https://developer.android.com/studio/run/emulator">Run apps on Android Emulator</a></li> <li><a href="https://developer.android.com/studio/releases/emulator">Android Emulator release notes</a></li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/setup/create/avd" class="_attribution-link">https://source.android.com/docs/setup/create/avd</a>
+  </p>
+</div>

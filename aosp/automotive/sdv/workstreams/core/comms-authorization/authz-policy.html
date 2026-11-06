@@ -1,0 +1,126 @@
+<h1>Authorization policy</h1>  <p>The authorization policy file is a single source of truth for the Software-Defined Vehicle (SDV) communications stack authorization configuration for an SDV service bundle.</p> <p>The authorization policy file contains the permissions list for this service bundle, which specifies what the bundle can do.</p> <h2 id="proto-schema">Proto schema</h2> <p>The authorization policy file uses the textproto format for encoding relevant information.</p> <p>The proto schema of the authorization policy is as follows:</p> 
+<pre>message AuthzPolicy {
+  // Optional. List of permissions to publish Data Tunnel publications.
+  repeated Publisher publisher = 4;
+
+  // Optional. List of permissions to discover and subscribe to Data Tunnel
+  // publications.
+  repeated Subscriber subscriber = 5;
+
+  // Optional. List of permissions to serve an RPC server.
+  repeated Server server = 6;
+
+  // Optional. List of permissions to discover and call methods of an RPC
+  // server.
+  repeated Client client = 7;
+
+  // Optional. Allow blanket "read" permission.
+  //
+  // Gives permission to discover and call all methods of all RPC servers,
+  // as well as discover and subscribe to all publications.
+  //
+  // WARNING: This flag grants elevated permissions and should be used with a
+  // good reason and for privileged agents only (e.g. Telemetry).
+  bool allow_read_all = 8;
+}
+
+// Defines a permission to publish Data Tunnel publications.
+message Publisher {
+  // Required. Publication's protobuf message name.
+  string message = 1;
+
+  // Topic(s) to which this permission allows to publish to.
+  //
+  // Setting this field or setting 'allow_all_topics == true' is required.
+  repeated string topic = 2;
+
+  // Flag indicates that Service Bundle is allowed to register publication
+  // of the 'message' type with any 'topic'
+  //
+  // Should only be set to 'true' if the 'topic' field is not set.
+  bool allow_all_topics = 3;
+}
+
+// Defines a permission to discover and subscribe to Data Tunnel publications.
+message Subscriber {
+  // Required. Publication's protobuf message name.
+  string message = 1;
+
+  // Topic(s) to which this permission allows to subscribe to.
+  //
+  // Setting this field or setting 'allow_all_topics == true' is required.
+  repeated string topic = 2;
+
+  // Flag indicates that Service Bundle is allowed to discover and subscribe to
+  // all publications of the 'message' type.
+  //
+  // Should only be set to 'true' if the 'topic' field is not set.
+  bool allow_all_topics = 3;
+}
+
+// Defines a permission to serve an RPC server.
+message Server {
+  // Required. Server's protobuf service name.
+  string service = 1;
+
+  // Channel(s) which this permission allows to register.
+  //
+  // Setting this field or setting 'allow_all_channels == true' is required.
+  repeated string channel = 2;
+
+  // Flag indicates that Service Bundle is allowed to register RPC servers
+  // of the 'service' type with any 'channel'
+  //
+  // Should only be set to 'true' if the 'channel' field is not set.
+  bool allow_all_channels = 3;
+}
+
+// Defines a permission to discover and call methods of an RPC server.
+message Client {
+  // Required. Server's protobuf service name.
+  string service = 1;
+
+  // Channel(s) which this permission allows to discover and call methods on.
+  //
+  // Setting this field or setting 'allow_all_channels == true' is required.
+  repeated string channel = 2;
+
+  // Flag indicates that Service Bundle is allowed to discover and call all RPC
+  // servers of the 'service' type.
+  //
+  // Should only be set to 'true' if the 'channel' field is not set.
+  bool allow_all_channels = 3;
+}
+</pre> <h4 id="proto-schema-example">Example</h4> 
+<pre># Allows this SB to register publication of TireStatus type with "left_tire" topic only.
+publisher {
+  message: "com.sdv.TireStatus"
+  topic: "left_tire"
+}
+
+# Allows this SB to subscribe to publication of TireStatus type with "left_tire" topic only.
+subscriber {
+  message: "com.sdv.TireStatus"
+  topic: "left_tire"
+}
+
+# Allows this SB to implement and serve UserPreferencesManager service on any channel.
+server {
+  service: "com.sdv.UserPreferencesManager"
+  allow_all_channels: true
+}
+
+# Allows this SB to discover and call UserPreferencesManager service on any channel.
+client {
+  service: "com.sdv.UserPreferencesManager"
+  allow_all_channels: true
+}
+</pre> <h4 id="privileged-read-all-example">Privileged read-all example</h4> 
+<pre># Blanket read permission for privileged agents (e.g. Telemetry).
+allow_read_all: true
+</pre> <h2 id="authorization-decision">Authorization decision</h2> <p>The system can make the following authorization decisions:</p> <dl> <dt>Permitted</dt> <dd>The subject's <code translate="no" dir="ltr">AuthzPolicy</code> contains the required permission rule.</dd> <dt>Explicitly denied</dt> <dd>The subject's <code translate="no" dir="ltr">AuthzPolicy</code> or the VM's <code translate="no" dir="ltr">AuthzPolicy</code> does not contain the required permission rule. A clear error message is returned indicating the missing permission.</dd> <dt>Implicitly denied</dt> <dd>System error or invalid data, such as a missing policy file, a failure to parse a name, or a missing unit definition.</dd> </dl> <h3 id="example_decision_logic">Example decision logic</h3> <p>The following steps occur when a service bundle tries to call <code translate="no" dir="ltr">com.sdv.UserPreferencesManager</code> on channel <code translate="no" dir="ltr">default</code>:</p> <ol> <li>The communications stack checks the service bundle's <code translate="no" dir="ltr">AuthzPolicy</code> for the <code translate="no" dir="ltr">client</code> permission. If the permission is missing, the request is <strong>Explicitly denied</strong>, indicating that the subject lacks permission.</li> <li>For cross-VM communication over the mesh network, the host VM's permission is checked during the Service Discovery (SD) mesh information exchange, rather than only during the access attempt. The communications stack checks the host VM's <code translate="no" dir="ltr">VmAuthzPolicy</code> to determine if the VM is allowed to interact with the service.</li> <li>If both the subject policy and the VM-level policy allow the interaction, the request is <strong>Permitted</strong>. Otherwise, it is <strong>Explicitly denied</strong>, indicating that the VM lacks permission.</li> </ol> <p>For more information about policies enforced between VMs, see <a href="vm-authz-policy">VM-level permissions</a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/core/comms-authorization/authz-policy" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/core/comms-authorization/authz-policy</a>
+  </p>
+</div>

@@ -1,0 +1,82 @@
+<h1>SDV on QNX</h1>  <p>We internally test SDV on hardware. We use QVM on QNX for virtualization. We share all targets, documentation, and configurations as samples.</p> <h2 id="prerequisites">Prerequisites</h2> <p>This page assumes a preconfigured QNX, and doesn't include steps to build, configure, or flash QNX on hardware.</p> <p>This page assumes that you're running QNX on arm64 hardware, and building and using the <code translate="no" dir="ltr">_arm64</code> targets of SDV.</p> <h2 id="required-files">Required components</h2> <ul> <li>A device tree blob (DTB) to define the virtual hardware</li> <li>A Linux kernel to use</li> <li>A combined ramdisk that includes all ramdisk boot properties</li> <li>A handoff of a <a href="../core/vm-attestation/dice-handover">DICE chain</a> for SDV VM authentication</li> <li>All disk partitions of the system</li> <li>A QVM configuration of the VM</li> </ul> <aside class="note"><strong>Note:</strong><span> This page is intended to help with getting started on SDV, so it focuses on enablement and doesn't provide details to build a fully secure system.</span></aside> <h3 id="device-tree-dtb">Device tree blob (DTB)</h3> <p>QVM generates most of the device tree blob (DTB) based on its configuration. Therefore, the DTB can be minimal:</p> 
+<pre>/*
+ * Copyright (C) 2026 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/dts-v1/;
+
+/ {
+    model = "Virtual Machine";
+    #address-cells = &lt;2&gt;;
+    #size-cells = &lt;2&gt;;
+
+    // This reserved-memory node specifies for the open-dice driver which memory region(s) to
+    // expose as /dev/open-dice&lt;n&gt; device(s)
+    reserved-memory {
+        // The number of u32 cells to represent the address of a memory region
+        #address-cells = &lt;2&gt;;
+        // The number of u32 cells to represent the size of a memory region
+        #size-cells = &lt;2&gt;;
+        ranges;
+        // The unit address (after the @) must match the address in the reg property
+        dice@D1C30000 {
+            // The open-dice driver receives this device tree node based on this
+            // property.
+            compatible = "google,open-dice";
+            no-map;
+            // The address and the size of the memory region that is passed to the
+            // open-dice driver.
+            // First two hex numbers (cells) represent the address of the memory region,
+            // the last two represent its size (4K, in this case).
+            reg = &lt;0x0 0xD1C30000 0x0 0x1000&gt;;
+        };
+    };
+};
+</pre>
+<aside class="note"><strong>Note:</strong><span> Use the device tree compiler <code translate="no" dir="ltr">dtc</code> to convert between device tree formats.</span></aside> <h3 id="kernel">Kernel</h3> <p>SDV uses the Generic Kernel Image (GKI), and you can use the output from a build directly.</p> <h3 id="ramdisk">Ramdisk</h3> <p>The ramdisk information should include the different ramdisks that Android generates and the boot properties. Because QNX doesn't support a bootloader by default, you must generate a ramdisk with the <a href="../../../../core/architecture/bootloader/implementing-bootconfig#bootloader-changes">expected data format</a>.</p> <p>You can do this with the following Python script, which concatenates multiple ramdisks and adds the bootconfig (which is the <code translate="no" dir="ltr">vendor-bootconfig.img</code> file) in the expected format:</p> 
+<pre>def create_qnx_ramdisk(output: io.BytesIO,
+                       ramdisks: Sequence[io.BytesIO],
+                       bootconfig: Optional[io.BytesIO]):
+  BUFFER_SIZE = 4096
+
+  for ramdisk in ramdisks:
+    while buf := ramdisk.read(BUFFER_SIZE):
+      output.write(buf)
+
+  # Kernel looks for bootconfig at the end of ramdisk.
+
+  if bootconfig:
+    bootconfig_checksum = 0
+    bootconfig_size = 0
+    while buf := bootconfig.read(BUFFER_SIZE):
+      bootconfig_checksum = (bootconfig_checksum + sum(buf)) &amp; 0xFFFFFFFF
+      bootconfig_size += len(buf)
+      output.write(buf)
+
+    output.write(struct.pack('II', bootconfig_size, bootconfig_checksum))
+    output.write(b'#BOOTCONFIG\n')
+</pre> <h3 id="dice-chain">DICE chain</h3> <aside class="note"><strong>Note:</strong><span> For testing purposes, there is also a file-based implementation that skips the DICE chain and doesn't require the DICE entry in the DTB. This implementation is in <code translate="no" dir="ltr">device/google/sdv/sdv_base/init_open_dice/init_open_dice_from_file.mk</code>. The target <code translate="no" dir="ltr">sdv_core_cf</code> has an example of how to use it in <code translate="no" dir="ltr">device/google/sdv/sdv_core_cf/sdv_core_cf.mk</code>.</span></aside> <p>In a production system, the host system and bootloader construct the DICE chain dynamically during the boot process and provide a DICE chain to the guest to verify that the image can be trusted. Because this requirement can make testing and development flows complicated, you load a DICE chain snapshot instead.</p> <p>To generate the <code translate="no" dir="ltr">dice_handover_instance*</code> files, use any SDV Cuttlefish build. For example:</p> 
+<pre>lunch sdv_core_cf-aosp_current-userdebug
+m
+cp $OUT/product/etc/dice_handover_instance* &lt;GUEST&gt;/test_dice_handover
+</pre> <h3 id="disk">Disk</h3> <p>QVM supports multiple formats for a virtual disk; our reference configuration uses a disk image file that contains all partitions. <a href="https://android.googlesource.com/platform/system/tools/bpt/+/e2c77aebf72d56beb50329e9ce873ea834e02164/bpttool">bpttool</a> can generate those disks, but isn't actively developed within Android.</p> <h3 id="qvm-configuration">QVM configuration</h3> <p>The QVM configuration sets the configuration, and points to the different files. We provide the following sample configurations:</p> <ul> <li>
+<a href="qvm/sdv-core-config">SDV Core</a> VM configuration</li> <li>
+<a href="qvm/sdv-media-config">SDV Media</a> VM configuration</li> <li>
+<a href="qvm/sdv-ivi-config">IVI</a> VM with SDV integration</li> </ul> <h2 id="faq">Frequently asked questions</h2> <p><strong>Q: adb can't connect to my VM. What can I do?</strong></p> <p>A: In this setup, adb uses Ethernet to connect to your VM. You need a port forwarding configuration on QNX that forwards requests to guests on port 5555. You need to connect to the host system. As an alternative, you can also configure a bridge to the VM, and connect to it directly.</p> <p><strong>Q: The system log shows that IServiceRegistrationAgent is missing. Why?</strong></p> <p>A: Service discovery relies on a fully working trust and binder setup. Verify that OpenDICE was loaded successfully, and HwBinder isn't showing errors during startup. If those aren't working, you need to fix them first.</p> <p><strong>Q: <code translate="no" dir="ltr">init_open_dice</code> fails. What happened?</strong></p> <p>A: The startup scripts load the trust information during startup, and wipe the memory location. Verify in your QVM config that the cmdline configuration and shared data in the memory location fit together. Also verify that the memory location in the driver, QVM config, and DTB match, and the memory location is writable.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/hardware/sdv-on-qnx" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/hardware/sdv-on-qnx</a>
+  </p>
+</div>

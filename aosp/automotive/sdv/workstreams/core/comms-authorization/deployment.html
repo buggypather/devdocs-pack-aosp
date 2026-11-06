@@ -1,0 +1,40 @@
+<h1>Deployment</h1>  <p>Authorization policy file deployment defines the designated storage location for the policy file specific to each software-defined vehicle (SDV) service. The deployment mechanism varies between SDV core and SDV IVI platforms.</p> <h2 id="sdv-core-platform">SDV core platform</h2> <p>The SDV core platform uses APEX files for packaging service bundles and service bundles configuration. The service bundles registry component retrieves the authorization policy for SDV service bundles stored in APEXes.</p> <p>APEX is a signed package with a unique name called a <em>package name</em>. Each APEX can contain multiple service bundles. Each service bundle has its metadata declared in the manifest file in the APEX.</p> <p>Service bundle metadata has a path to the authorization policy file, which should be located within the same APEX.</p> <p>Deploy the authorization policy for the SDV service with the identity <code translate="no" dir="ltr">{sdv-vm-name}:{package.name}.{ServiceBundle}.{instance-name}</code> on SDV as follows:</p> <aside class="note"><strong>Note:</strong><span> The same authorization policy is applied to all instances of the SDV service, so is independent of <code translate="no" dir="ltr">instance-name</code>.</span></aside> <ol> <li>Put the authorization policy file in the <code translate="no" dir="ltr">package.name</code> APEX.</li> <li>Update the <code translate="no" dir="ltr">ServiceBundle</code> entry in the service bundles manifest file in the <code translate="no" dir="ltr">package.name</code> APEX by adding the corresponding authorization policy path into the <code translate="no" dir="ltr">authorization_policy_path</code> field.</li> <li>Deploy the <code translate="no" dir="ltr">package.name</code> APEX into the <code translate="no" dir="ltr">sdv-vm-name</code> VM.</li> </ol> <h4 id="sdv-core-platform-example">Example</h4> <p><code translate="no" dir="ltr">(apex_root) sdv_service_bundles_manifest.textproto</code></p> 
+<pre>sdv_service_bundle_metadata {
+  name: "SampleRpcServer"
+  version_number: 0
+  version_name: "0.1 Alpha"
+  native_library_path: "lib64/libsdv_sample_rpc.so"
+  # Path to the authorization policy file.
+  # Warning: Must be a relative path to the APEX root directory.
+  authorization_policy_path: "etc/authz/sample_rpc/permissions.textproto"
+}
+</pre> <p>Place the authorization policy file in <code translate="no" dir="ltr">etc/authz/sample_rpc/permissions.textproto</code> within the same APEX where <code translate="no" dir="ltr">sdv_service_bundles_manifest.textproto</code> is located.</p> <h2 id="sdv-ivi-platform">SDV IVI platform</h2> <p>There are certain differences between the SDV IVI platform and the SDV core implementations. In the SDV IVI platform:</p> <ul> <li>There is no service bundle registry.</li> <li>Apps are Java based and they are delivered in APKs.</li> <li>Agents aren't in APEXes.</li> </ul> <p>Because of these factors, deployment on the SDV platform is different.</p> <p>Deploy the authorization policy for the SDV service with the identity <code translate="no" dir="ltr">{ivi-vm-name}:{package.name}.{ServiceBundle}/{instance-name}</code> on SDV IVI as follows:</p> <aside class="note"><strong>Note:</strong><span> The same authorization policy applies to all instances of the SDV service, so it is independent of <code translate="no" dir="ltr">instance-name</code>.</span></aside> <ol> <li>Define the authorization policy path according to the <code translate="no" dir="ltr">{policy-dir}/{package.name}/{ServiceBundle}.textproto</code> pattern. <ul> <li>Where <code translate="no" dir="ltr">policy-dir</code> is one of the following: <ul> <li><code translate="no" dir="ltr">/product/etc/sdv_authz_policies</code></li> <li><code translate="no" dir="ltr">/system/etc/sdv_authz_policies</code></li> <li><code translate="no" dir="ltr">/system_ext/etc/sdv_authz_policies</code></li> <li><code translate="no" dir="ltr">/vendor/etc/sdv_authz_policies</code></li> </ul>
+</li> <li>For example, <code translate="no" dir="ltr">/vendor/etc/sdv_authz_policies/com.sdv.pkg/WindowManager.textproto</code> is a valid authorization policy path.</li> </ul>
+</li> <li>Put the authorization policy in the authorization policy path on the <code translate="no" dir="ltr">ivi-vm-name</code> VM.</li> </ol> <h2 id="agents-and-test-support">Agents and test support</h2> <p>SDV agents have the same authorization policy deployment on both SDV core and SDV IVI. If an agent doesn't have an APEX, its corresponding authorization policy must be located in a companion config-only APEX.</p> <h4 id="example_2">Example</h4> <p><code translate="no" dir="ltr">(apex_root) sdv_service_bundles_manifest.textproto</code></p> 
+<pre>sdv_service_bundle_metadata {
+   # Should match the bundle name in the FQIN registered by the SOME/IP broker agent
+   name: "SomeIpBroker"
+   # Version number of the config APEX
+   version_number: 1
+   # Version name of the config APEX
+   version_name: "1"
+
+   # Reference the manifest itself to mark the metadata as a config-only
+   # declaration.
+   native_library_path: "etc/sdv_service_bundles_manifest.textproto"
+
+   # Path to the authorization policy file for SOME/IP broker.
+   authorization_policy_path: "etc/config/access_control/someip_authz_policy.textproto"
+}
+</pre> <h2 id="vm-level-authz-policy">VM-level authorization policy</h2> <p>Put VM-level policies in the APEX with package name <code translate="no" dir="ltr">com.oem.sdv.authz</code>. Use a dedicated file with the corresponding <code translate="no" dir="ltr">&lt;vm_name&gt;.textproto</code> name.</p> <p>If the corresponding <code translate="no" dir="ltr">&lt;vm_name&gt;.textproto</code> doesn't exist, the authorization framework also looks for a <code translate="no" dir="ltr">.default.textproto</code> file in the same APEX.</p> <h3 id="rationale">Rationale</h3> <p>The <code translate="no" dir="ltr">.default.textproto</code> is introduced for two reasons:</p> <ul> <li>
+<strong>Simplified setup</strong>: For some OEMs, it might be sufficient to set <code translate="no" dir="ltr">default.textproto</code> for all SDV VMs, and only provide a special <code translate="no" dir="ltr">&lt;vm-name&gt;.textproto</code> for the IVI VM.</li> <li>
+<strong>Updatability</strong>: If a new VM appears after a vehicle update, a reasonable <code translate="no" dir="ltr">default.textproto</code> might be sufficient to avoid updating all VMs.</li> </ul> <h3 id="resolution-logic">Resolution logic</h3> <p>When checking permissions for a subject from a VM called <code translate="no" dir="ltr">&lt;vm-name&gt;</code>, the authorization framework looks for policies in the following order:</p> <ol> <li>
+<code translate="no" dir="ltr">&lt;vm-name&gt;.textproto</code>: If it exists, perform the check based on it. If it doesn't exist, fall back to the default file.</li> <li>
+<code translate="no" dir="ltr">.default.textproto</code>: If it exists, perform the check based on it. If it doesn't exist, deny access.</li> </ol> <h3 id="define-soong-module">Define the Soong module with VM-level permissions</h3> <p>The module must be an APEX with package name <code translate="no" dir="ltr">com.oem.sdv.authz</code>.</p> <p>Add the value to the <code translate="no" dir="ltr">.mk</code> file:</p> 
+<pre>SDV_VM_LEVEL_PERMISSIONS_MODULE := {soong.module.name}
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/core/comms-authorization/deployment" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/core/comms-authorization/deployment</a>
+  </p>
+</div>

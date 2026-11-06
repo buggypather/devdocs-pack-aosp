@@ -1,0 +1,704 @@
+<h1>Configure the Orchestrator</h1>  <p>The <em>Orchestrator</em> is a local SDV agent that runs on each virtual machine (VM) and provides a mechanism to control when service bundles should be created, started, stopped, or destroyed. This is done through an orchestration configuration, in which you define a set of rules that determine when and how actions are performed on service bundle instances. These rules are based on vehicle, power, and custom modes.</p> <p>You can configure the Orchestrator in <a href="#apex-config">configuration APEXes</a> or through <a href="#vm-config">per VM configurations</a>. This distributed configuration system lets parts of each service bundle be updated independently through the Service Bundle Registry, as illustrated here.</p> <p><img src="https://source.android.com/static/docs/automotive/sdv/images/sdv-orch-01.svg" alt="Orchestrator distributed configuration diagram" width="700" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> Orchestrator configuration diagram.</p> <p>Vehicle-independent configurations don't change depending on OEM or vehicle. The configuration remains the same on all vehicles of each OEM. Vehicle-specific configurations can differ on different vehicles by different OEMs though configuration could be the same for all vehicles made by a specific OEM.</p> <h2 id="apex-config">Configuration APEXes</h2> <p>At run time, the Orchestrator goes to the service bundle registry to fetch an SDV orchestration for each service bundle, loading and parsing each configuration. To learn more, refer to <a href="../workstreams/core/service-bundle-metadata#orchestration-metadata">Orchestration metadata</a>.</p> <h2 id="vm-config">Per VM configuration</h2> <p>When the Orchestrator starts, it loads and parses the VM configuration (if present). The absolute path to this configuration file is specified through the system properties <code translate="no" dir="ltr">persist.sdv.orchestrator_config_path</code> and <code translate="no" dir="ltr">ro.boot.sdv.orchestrator_config_path</code>.</p> <p>The system determines the VM configuration file path at boot based on the following hierarchy:</p> <ol> <li><p>The system checks the <code translate="no" dir="ltr">persist.sdv.orchestrator_config_path</code> property. If it has a value, that path is used. This value is persisted across reboots or set at run time.</p></li> <li><p>If <code translate="no" dir="ltr">persist.sdv.orchestrator_config_path</code> is empty, the system then checks the <code translate="no" dir="ltr">ro.boot.sdv.orchestrator_config_path</code> property. If the <code translate="no" dir="ltr">ro.boot.sdv</code> property has a value, that path is copied to the persist property and used for the current boot and all future boots (unless it's overridden).</p></li> </ol> <aside class="note"><strong>Note:</strong><span> The <code translate="no" dir="ltr">persist.sdv.orchestrator_config_path</code> property always takes precedence. After the persist property has been set, either by the <code translate="no" dir="ltr">ro.boot</code> property on the first boot or by a manual command, it's used on all subsequent reboots. The value of <code translate="no" dir="ltr">ro.boot.sdv.orchestrator_config_path</code> is used only to initialize the persist property when it's empty. Therefore, if you set the <code translate="no" dir="ltr">ro.boot</code> property and then later change the persist property at run time, the new persist value is maintained even after a reboot, effectively overriding the <code translate="no" dir="ltr">ro.boot</code> value.</span></aside> <h3 id="persist-vm-config">persist.sdv.orchestrator_config_path</h3> <p><code translate="no" dir="ltr">persist.sdv.orchestrator_config_path</code> is the primary property used by the SDV Orchestrator agent to get the path to its configuration file. This is a persistent property, meaning its value is saved across device reboots. You can change the value at run time, which is useful for testing or specific scenarios (for example, end-to-end tests).</p> <p>You can set the value at run time using the <code translate="no" dir="ltr">setprop</code> command, and at build time using a makefile (with the extension <code translate="no" dir="ltr">.mk</code>) or a resource script file, with the extension <code translate="no" dir="ltr">.rc</code>.</p> <h4 id="persist-vm-config-run-time">Set the property at run time</h4> <p>Setting the property at run time is useful for testing or making temporary changes, as the value is saved across reboots:</p> 
+<pre>adb root
+adb shell setprop persist.sdv.orchestrator_config_path {$path_to_file}.textproto
+</pre>
+<aside class="note"><strong>Note:</strong><span> Changes take effect only after rebooting the device through <code translate="no" dir="ltr">adb reboot</code>.</span></aside> <h4 id="persist-vm-config-build-time">Set the property at build time</h4> <p>To set this property as part of your device's build configuration, add a line to your product's or board's makefile. This is ideal for setting a default value for a new device image.</p> 
+<pre># Add this line to a product's or device's .mk file
+PRODUCT_PROPERTY_OVERRIDES += persist.sdv.orchestrator_config_path={$path_to_file}.textproto
+</pre> <p>You can also set this property within a resource script file:</p> 
+<pre># Add this line to an .rc file
+on {$property}
+    setprop persist.sdv.orchestrator_config_path {$path_to_file}.textproto
+</pre> <h3 id="boot-vm-config">ro.boot.sdv.orchestrator_config_path</h3> <p><code translate="no" dir="ltr">ro.boot.sdv.orchestrator_config_path</code> is a boot-time read-only property used to provide an initial value for the <code translate="no" dir="ltr">persist.sdv.orchestrator_config_path</code> property. If <code translate="no" dir="ltr">persist.sdv.orchestrator_config_path</code> is empty when the system boots, the value of <code translate="no" dir="ltr">ro.boot.sdv.orchestrator_config_path</code> is copied to it. Once <code translate="no" dir="ltr">persist.sdv.orchestrator_config_path</code> has been set, it won't be overwritten by this property on subsequent boots.</p> <p>You can set <code translate="no" dir="ltr">ro.boot.sdv.orchestrator_config_path</code> using the bootconfig or the kernel cmdline.</p> <h2 id="file-format">File format</h2> <p>Define the orchestration configuration in a <code translate="no" dir="ltr">.textproto</code> format (for example, in structured text) so that new configurations can be loaded at run time.</p> <h2 id="syntax">Configuration syntax</h2> <p>This section describes the configuration syntax.</p> <h3 id="service-bundles">Service bundles</h3> <p>Each service bundle must be defined with the Service bundle configuration, which identifies the bundle within the Orchestrator and is used to handle the lifecycle of the bundle instance. The service bundle configuration defines:</p> <ul> <li><p><code translate="no" dir="ltr">InstanceToGroupMapping</code> lets you include an instance of the service bundle in a group to establish dependencies between instances of the same service bundle.</p></li> <li><p><code translate="no" dir="ltr">InstancesStates</code> defines the different states for the service bundle instance.</p></li> <li><p><code translate="no" dir="ltr">InstancesStateConfiguration</code> defines the state (from <code translate="no" dir="ltr">InstancesStates</code>) that a service bundle instance must be set to if the condition evaluates to <code translate="no" dir="ltr">true</code>.</p></li> <li><p><code translate="no" dir="ltr">ServiceBundleConfig</code> contains information about the specific service bundle and its instances. It contains, for the bundle, the respective <code translate="no" dir="ltr">InstanceToGroupMapping</code> and <code translate="no" dir="ltr">InstancesStateConfiguration</code>.</p></li> <li><p><code translate="no" dir="ltr">CustomModes</code> defines a list of custom modes the bundle is allowed to publish. <code translate="no" dir="ltr">CustomModes</code> is used to prevent an unauthorized bundle from modifying the value of a custom mode. This field is optional, as the service bundle might not publish to any custom mode. To learn more, see <a href="#custom-modes">Custom modes</a>.</p></li> </ul> <h4 id="req-config-bundle">Required bundle configuration</h4> <p>At a minimum, the bundle configuration provides these attributes:</p> 
+<pre>service_bundle_config {
+    package_name: "package_name"
+    service_bundle_name: "service_bundle_name"
+
+    instance: "instance_1"
+    instance: "instance_n"
+}
+</pre> <p>This declaration defines <code translate="no" dir="ltr">n</code> service bundle instances with the respective FQINs:</p> 
+<pre>vm_name.package_name.service_bundle_name.instance_1
+…
+vm_name.package_name.service_bundle_name.instance_n
+</pre> <p>The VM name isn't explicitly declared in the configuration. Since the configuration is defined per VM, the VM name is always the name of the VM to which the configuration file is deployed and is already known to the orchestration agent.</p> <aside class="note"><strong>Note:</strong><span> The service bundle instance is a run time instance of a service bundle library, which maps to a Linux process in the Lifecycle Manager agent. To learn more, see <a href="../workstreams/core/service-bundle-development">Service Bundle Development</a>.</span></aside> <h4 id="config-instances">Configure instances</h4> <p>Declaring service bundle instances has no effect. To be executed by the Orchestrator, instances must be configured. For example, the Orchestrator must be informed of which conditions (or state of the VM or vehicle) an instance should run. To configure instances, configuration states should be defined through:</p> <ul> <li><p><code translate="no" dir="ltr">condition</code> is an expression on the VM or vehicle state that should be evaluated.</p></li> <li><p><code translate="no" dir="ltr">instances_states</code> is a set of states per instance that should be applied if the condition evaluates to <code translate="no" dir="ltr">true</code>.</p></li> </ul> <p>To learn more, see <a href="#conditions">Conditions</a>.</p> 
+<pre>service_bundle_config {
+    package_name: "oem.package"
+    service_bundle_name: "OemApplication"
+
+    instance: "adaptive_light"
+    instance: "reserve_light"
+
+    state {
+        condition {
+            power_state: "ON"
+        }
+
+        instances_states {
+            started: "adaptive_light"
+            created: "reserve_light"
+        }
+    }
+}
+</pre> <h4 id="instance-group-mapping">Instance to group mapping</h4> <p>You can also configure service instances by including them in service groups. At a service bundle config level, you can add instances to groups. You can then configure groups at a VM config level. To learn more, see the next section and <a href="#service-bundles">Service bundles</a>.</p> 
+<pre>service_bundle_config {
+    package_name: "oem.package"
+    service_bundle_name: "OemApplication"
+
+    instance: "fog_front_light"
+    instance: "fog_rear_light"
+    instance: "turn_signal_light"
+    instance: "light_flasher_display"
+
+    # Declare that fog_light contains fog_front_light and fog_rear_light.
+    group_mapping {
+        group: "fog_light"
+        instance: "fog_front_light"
+        instance: "fog_rear_light"
+    }
+
+    # Declare that flasher_light contains turn_signal_light and light_flasher_display.
+    group_mapping {
+        group: "flasher_light"
+        instance: "turn_signal_light"
+        instance: "light_flasher_display"
+    }
+}
+</pre> <h4 id="proto-schema-sample">Proto schema</h4> <p>Here's a proto scheme sample:</p> 
+<pre>// Service bundle configuration.
+//
+// Defines service bundle data, its instances and configuration for instances
+// states depending on the state of the system
+message ServiceBundleConfig {
+  // Required. Name of the service bundle.
+  string service_bundle_name = 1;
+
+  // Required. Package name of the service bundle.
+  string package_name = 2;
+
+  // Required. Service instances.
+  repeated string instance = 3;
+
+  // Configuration for instances states depending on the state of the system.
+  repeated InstancesStateConfiguration state = 4;
+
+  // Mapping of groups to their member service instances.
+  repeated InstanceToGroupMapping group_mapping = 5;
+
+  // Custom modes that this service bundle is allowed to set.
+  repeated string custom_mode = 6;
+
+  // Defines the retry policies for specific instances.
+  // If multiple mappings target the same instance, the one with the highest `max_retries`
+  // value takes precedence. This applies across all configuration files.
+  repeated InstanceToRetryMapping retry_mapping = 7;
+}
+
+// Mapping of instances to their retry configuration.
+message InstanceToRetryMapping {
+  // Required.
+  //
+  // Name of the instances for which the given retry configuration is applied.
+  repeated string instance = 1;
+
+  // Required.
+  //
+  // The configuration that defines the restart and retry strategy for the instances.
+  RetryConfiguration retry_config = 2;
+
+  // Configuration for retry and restart.
+  // This configuration is applied after a failure on a transition or after the bundle instance
+  // has crashed. Upon a successful operation, the retry counter are reset to max_retries. This
+  // configuration can be applied to any service bundle, not only the monitored ones. If the
+  // configuration is not provided or none of the optional fields are filled, the default behavior
+  // stated is applied (the value from `ro.boot.sdv.orchestrator.recovery.max_retries`
+  // or zero if not set).
+  message RetryConfiguration {
+    // The number of times a retry/restart operation can be performed.
+    // Defines the number of times the Orchestrator retries a transition
+    // after a transient failure or after a bundle crash notification.
+    // This applies to creating, starting and destroying operations.
+    // The retry count resets to max_retries after a successful operation.
+    // If not set, the default configured value in the
+    // `ro.boot.sdv.orchestrator.recovery.max_retries` is used, or-if not set-
+    // it fallbacks to zero.
+    optional uint32 max_retries = 1;
+  }
+}
+
+// Mapping of groups to their member service instances.
+message InstanceToGroupMapping {
+  // Required. Names of groups to which members are added.
+  //
+  // Group behavior is defined in VM configuration.
+  repeated string group = 1;
+
+  // Required. Names of instances to be included in the groups.
+  //
+  // Can reference only instance defined in the same config file.
+  repeated string instance = 2;
+}
+
+// Describes the state the service instances should be in after the state is executed.
+//
+// If there is no valid configuration for the instance in the specific system state, such instance is transitioned to the "destroyed" state.
+//
+// For the GroupsStates definition to be useful, at least one item should be present in any of the fields.
+message InstancesStates {
+  // Names of the instances that must be in a "created" state.
+  repeated string created = 1;
+
+  // Names of the instances that must be in a "started" state, overrides "created" state.
+  repeated string started = 2;
+
+  // Names of the instances that must not run, overrides all other states.
+  repeated string destroyed = 3;
+}
+
+// Configuration for instances states depending on the state of the system.
+message InstancesStateConfiguration {
+  // Condition for the system state under which the related instances states should be executed by Orchestrator.
+  //
+  // If omitted, the related instances states are always executed.
+  Condition condition = 1;
+
+  // Required. States of service bundle instances to be executed by Orchestrator if the condition is true.
+  InstancesStates instances_states = 2;
+}
+</pre> <h3 id="vm-config">VM-level config</h3> <p>The VM configuration enables the definition of group mappings and the configuration for groups. It's used to model dependencies between service bundles at a VM level, thereby giving flexibility to modify the state of multiple service bundles at the same time. All instances of a group are brought to the specified state.</p> <p>The Orchestrator doesn't guarantee the order in which the state change is executed. The Orchestrator promotes each instance to be at the given state.</p> <p>Groups are declared implicitly by using the <code translate="no" dir="ltr">group</code> name in any of the configuration parts. For example, instance to group mapping, group to group mapping, and group configuration states.</p> <h4 id="group-to-group-mapping">Group to group mapping</h4> <p>Groups can contain other groups. By declaring that <var label="group 1" translate="no">group_1</var> contains <var label="subgroup 2" translate="no">subgroup_2</var>, we effectively add all service instances from <var label="subgroup 2" translate="no">subgroup_2</var> to <var label="group 1" translate="no">group_1</var>.</p> <p>For example:</p> 
+<pre># Declare that body contains fog_light and flasher_light.
+group_mapping {
+    group: "body"
+    subgroup: "fog_light"
+    subgroup: "flasher_light"
+}
+</pre> <h4 id="configure-group">Configure a group</h4> <p>Declaring a group has no effect. To be executed by the Orchestrator, groups must be configured. For example, the Orchestrator must be informed under which conditions or state of the VM or vehicle the groups should run.</p> <p>You can configure groups in a similar way to service instances, that is, by using configuration states. The only difference is the use of <code translate="no" dir="ltr">groups_states</code> instead of <code translate="no" dir="ltr">instances_states</code> in the syntax:</p> 
+<pre>state {
+    condition {
+        power_state: "ON"
+    }
+
+    groups_states {
+        started: "Body"
+        started: "Adas"
+    }
+}
+</pre> <h4 id="proto-schema">Proto schema</h4> <p>Here's a sample proto schema:</p> 
+<pre>// VM configuration.
+//
+// Defines group-to-group mappings and configuration for groups
+// states depending on the state of the system.
+//
+// Configurations of service bundles can also be defined in VM configuration (as well as in a separate configuration file).
+message VmConfig {
+  // Group to member groups mapping.
+  repeated GroupToGroupMapping group_mapping = 1;
+
+  // Configuration of group states.
+  repeated GroupsStateConfiguration state = 2;
+
+  // Required. We also allow to configure individual service bundles in the VM config, to simplify development and migration from the monolithic configuration.
+  repeated ServiceBundleConfig service_bundle_config = 3;
+}
+
+// Mapping of groups to their member groups.
+message GroupToGroupMapping {
+  // Required. Names of groups to which members are added.
+  repeated string group = 1;
+
+  // Required. Names of member groups to be included in the groups.
+  repeated string subgroup = 2;
+}
+
+// Describes the state the service instance groups should be in after the state is executed.
+//
+// If group configuration is valid in a specific system state, the configured state is applied to
+// all group members. After that, the normal service instance configuration rules still apply:
+// - "destroyed" &gt; "started" &gt; "created" precedence
+// - not configured means the instance should be moved to the default state
+//
+// For the GroupsStates definition to be useful, at least one item should be present in any of the fields.
+message GroupsStates {
+  // Names of the groups that must be in a "created" state.
+  repeated string created = 1;
+
+  // Names of the groups that must be in a "started" state, overrides "created" state.
+  repeated string started = 2;
+
+  // Names of the groups that must not run, overrides all other states.
+  repeated string destroyed = 3;
+}
+
+// Configuration for group states depending on the state of the system.
+message GroupsStateConfiguration {
+  // Condition for the system state under which the related group states should be executed by  Orchestrator.
+  //
+  // If omitted, the related groups states are always executed.
+  Condition condition = 1;
+
+  // Required. States of service bundle groups to be executed by Orchestrator if the condition  is true.
+  GroupsStates groups_states = 2;
+}
+</pre> <h3 id="config-states">Configuration states</h3> <p>Configuration states (states) define when a service instance or group is started, stopped, or destroyed and consists of <code translate="no" dir="ltr">conditions</code> and <code translate="no" dir="ltr">instances_states</code> (bundle config) and <code translate="no" dir="ltr">groups_states</code> (VM config).</p> <h4 id="conditions">Conditions</h4> <p>Conditions allow the model a boolean condition under which, when evaluated to <code translate="no" dir="ltr">true</code>, the defined instance state is applied. A condition has these characteristics:</p> <ul> <li><p>Arbitrarily complex boolean expression (formed with <code translate="no" dir="ltr">and</code> or <code translate="no" dir="ltr">not</code> expressions) based on supported signals such as power, vehicle, and custom mode.</p></li> <li><p><em>(Optional)</em> Config state without a <em>condition</em> is always active, meaning it evaluates to <code translate="no" dir="ltr">true</code></p></li> </ul> <h4 id="instance-group-states">Instance states and group states</h4> <p><code translate="no" dir="ltr">instances_states</code> and <code translate="no" dir="ltr">groups_states</code> have these characteristics.</p> <ul> <li><p>Dictate which states are needed by the orchestration agent to apply to the given instances or groups, given that the state is <code translate="no" dir="ltr">active</code></p></li> <li><p>When applying a state to the group, the state applies to each service bundle instance in the group. No order is applied as to when instances are brought to the state.</p></li> </ul> <p>Supported states include:</p> <ul> <li><p><code translate="no" dir="ltr">started</code> after <code translate="no" dir="ltr">Service::on_start</code> is called.</p></li> <li>
+<p><code translate="no" dir="ltr">created</code></p> <ul> <li>
+<p>after <code translate="no" dir="ltr">Service::new</code> is called, but before <code translate="no" dir="ltr">Service::on_start</code> is called.</p> <p>OR</p>
+</li> <li><p>after <code translate="no" dir="ltr">Service::on_stop</code> is called, but before <code translate="no" dir="ltr">Service::drop</code> is called.</p></li> </ul>
+</li> <li><p><code translate="no" dir="ltr">destroyed</code> after <code translate="no" dir="ltr">Service::drop</code> is called.</p></li> </ul> <h4 id="ruleset">Ruleset</h4> <p>A configuration state can be either <em>active</em> or <em>inactive</em>, depending on the condition. Multiple states can be active at any time. When an orchestration agent receives a signal update, <strong>all</strong> configuration states are evaluated before modifying the lifecycle of service bundles. Service instance states are evaluated according to these rules:</p> <ul> <li><p>When <strong>none</strong> of the active states apply to the service instance, it's destroyed.</p></li> <li>
+<p>When <strong>one or more</strong> active states apply, this precedence applies:</p> <ol> <li>
+<code translate="no" dir="ltr">destroyed</code> has absolute precedence.</li> <li>
+<code translate="no" dir="ltr">started</code> has precedence before <code translate="no" dir="ltr">created</code>.</li> </ol>
+</li> </ul> <h4 id="proto-schema">Proto schema</h4> <p>Here's a sample proto schema:</p> 
+<pre>// A root boolean condition.
+message Condition {
+  // Required.
+  oneof root {
+    // VPM power state condition.
+    string power_state = 1;
+    // VPM vehicle state condition.
+    string vehicle_state = 2;
+    // Custom mode state condition.
+    CustomState custom_state = 3;
+    // Negation of a nested condition.
+    Condition not = 4;
+    // Logical 'and' between conditions grouped in expression.
+    Expression and = 5;
+    // Logical 'or' between conditions grouped in expression.
+    Expression or = 6;
+  }
+}
+
+// Representation of Custom state condition.
+//
+// Custom mode(s) are defined by the OEM and are not standardized by the platform, in contrast with
+// VPM modes (i.e. power and vehicle mode).
+message CustomState {
+  // Custom mode being checked.
+  string mode = 1;
+  // State of the custom mode.
+  string state = 2;
+}
+
+// A set of conditions united under an 'and' or 'or' expression.
+//
+// Evaluation type ('and' or 'or') depends on the field in [Condition]/[Expression], where the
+// expression is being used.
+//
+// At least one value in at least one of the fields is required.
+message Expression {
+  // VPM power state condition.
+  repeated string power_state = 1;
+  // VPM vehicle state condition.
+  repeated string vehicle_state = 2;
+  // Custom mode state condition.
+  repeated CustomState custom_state = 3;
+  // Negation of a nested condition.
+  repeated Condition not = 4;
+  // Logical 'and' between conditions grouped in expression.
+  repeated Expression and = 5;
+  // Logical 'or' between conditions grouped in expression.
+  repeated Expression or = 6;
+}
+</pre> <h2 id="recovery">Crash recovery and restart strategy</h2> <p>The Orchestrator provides a robust mechanism for handling service bundle crashes and lifecycle transition failures. Because the Orchestrator has a holistic view of the service states and manages mode transitions, it's the most suitable component to execute the restart and retry strategy. The Lifecycle Manager (LM) reports service bundle crashes to the Orchestrator through binder death notifications. To avoid unnecessary binder calls to the LM, the Orchestrator caches the last state of each bundle (whether successful or not) and doesn't reapply transitions if the last known state is the same as the new requested one.</p> <h3 id="retry-config">Retry configuration</h3> <p>You can define the restart and retry strategy per-instance in your Orchestrator configuration using <code translate="no" dir="ltr">retry_mapping</code>. If <code translate="no" dir="ltr">max_retries</code> isn't set in the configuration, the default value is taken from the <code translate="no" dir="ltr">ro.boot.sdv.orchestrator.recovery.max_retries</code> system property. If this property isn't set, the value fallbacks to 0.</p> <ul> <li>
+<code translate="no" dir="ltr">max_retries</code>: Defines the number of times the Orchestrator retries a transition after a transient failure or a bundle crash notification. The retry counter resets to the value of <code translate="no" dir="ltr">max_retries</code> after a successful operation or when a new mode is processed. If multiple mappings target the same instance, the one with the highest <code translate="no" dir="ltr">max_retries</code> takes precedence.</li> </ul> <aside class="note"><strong>Note:</strong><span> The value of the system property <code translate="no" dir="ltr">ro.boot.sdv.orchestrator.recovery.max_retries</code> is read once when the Orchestrator starts.</span></aside> <h4 id="config-sample">Configuration sample</h4> 
+<pre>service_bundle_config {
+  package_name: "oem.package"
+  service_bundle_name: "OemApplication"
+  instance: "fog_front_light"
+  instance: "fog_rear_light"
+
+  # Defines the restart configuration mapping for specific instances.
+  retry_mapping {
+    instance: "fog_front_light"
+    instance: "fog_rear_light"
+    retry_config {
+      max_retries: 3
+    }
+  }
+}
+</pre> <h3 id="recovery-behavior">Recovery behavior</h3> <p>The Orchestrator's restart and retry logic gracefully manages several failure scenarios:</p> <ul> <li>
+<strong>Normal operation crash</strong>: If a service bundle crashes while running, the Orchestrator applies the restart strategy and attempts to bring the bundle back to its last requested state based on retries left.</li> <li>
+<strong>Crash during mode transition</strong>: If a bundle crashed while enforcing a new mode, the restart request is queued and processed later. Once the request is processed, the Orchestrator checks which was the last state for the instance and only applies the restart if the instance isn't at the last requested state (from the last mode transition).</li> <li>
+<strong>New mode during recovery</strong>: If the Orchestrator receives a request to transition to a new mode while a bundle is being restarted (or it's in the queue of instances to restart), it cancels the ongoing recovery. The new mode transition takes over, and the retry counter is reset to allow a fresh set of attempts for the new target state.</li> </ul> <p>The Orchestrator distinguishes between different error types returned by the Lifecycle Manager to determine the retry strategy:</p> <ul> <li>
+<strong>Transient errors (<code translate="no" dir="ltr">SERVICE_NOT_FOUND</code>, <code translate="no" dir="ltr">OPERATION_FAILED</code>, <code translate="no" dir="ltr">INTERNAL_ERROR</code>):</strong> The Orchestrator retries the operation without taking any special cleanup action.</li> <li>
+<strong>Persistent errors (<code translate="no" dir="ltr">VALUE_CORRUPTED</code>, <code translate="no" dir="ltr">INVALID_ARGUMENT</code>):</strong> The Orchestrator assumes the service bundle might be in a corrupted state and attempts to kill the service instance before retrying the operation to ensure a clean restart.</li> <li>
+<strong>Permanent errors (<code translate="no" dir="ltr">PERMISSION_DENIED</code>):</strong> The operation isn't retried, and the bundle is considered to be at an unrecoverable state.</li> </ul> <p>If the Lifecycle Manager crashes, all service bundle processes are lost. Because the actual state is unknown, the Orchestrator invalidates each instance and applies a restart strategy with remaining retries to bring each instance to the last requested state.</p> <p>To prevent infinite recovery loops for bundles that repeatedly crash or fail, the retry counter is only reset to <code translate="no" dir="ltr">max_retries</code> after a lifecycle operation succeeds, or when a new mode transition is requested. If a bundle exhausts its retries due to consecutive failures (for example, a transition failure followed by a crash), it isn't restarted until the retry counter is reset.</p> <h3 id="state-reporting">State Reporting to Health Monitor</h3> <p>The Orchestrator exposes an internal binder interface that the Health Monitor (HM) registers to, enabling it to receive continuous updates about the state of all service bundles. Through this interface, the Orchestrator actively reports both:</p> <ul> <li>
+<strong>Lifecycle state:</strong> The intended state of the instance based on current configuration and active modes (such as started, created, or destroyed).</li> <li>
+<strong>Recovery state:</strong> The status of reaching the intended lifecycle state, indicating if the instance is operational, currently retrying after a failure, or has failed to recover after exhausting all retries.</li> </ul> <p>This information is reported for all instances, including those that haven't registered to be heartbeat-monitored. HM uses this information to implement its APIs to report the state of the VM. You can learn more in <a href="health-monitor">Health monitoring</a>.</p> <h4 id="examples">Examples</h4> <p>This section presents examples for configuring states with conditions.</p> <h5 id="base-service">Base service sample</h5> <ul> <li>Has no condition and is therefore always active.</li> <li>Starts a single service instance.</li> </ul> 
+<pre>state {
+  # Note: This state has no condition, hence its actions are valid throughout the lifetime of the program
+  instances_states { started: "ServiceBundleName" }
+}
+</pre> <h5 id="hvac-app">HVAC app sample</h5> <ul> <li><p>Condition: Active when <code translate="no" dir="ltr">custom_state != occupancy.OCCUPANCY_EMPTY ||
+custom_state == preheat.PREHEAT_ON</code>.</p></li> <li><p>Declares multiple HVAC-related service instances as <code translate="no" dir="ltr">started</code>.</p></li> </ul> 
+<pre>state {
+  condition {
+    or {
+      # I.e. when the vehicle is occupied (for example, by _DRIVER / _NON_DRIVER / _PET)
+      not {
+        custom_state {
+          mode: "occupancy"
+          state: "OCCUPANCY_EMPTY"
+        }
+      }
+      custom_state {
+        mode: "preheat"
+        state: "PREHEAT_ON"
+      }
+    }
+  }
+
+  # HVAC-related services
+  instances_states {
+    started: "HvacTemperatureCommand"
+    started: "TempSensorDriverZone"
+    started: "TempSensorPassengerZone"
+    started: "RefrigerantLoop"
+  }
+}
+</pre> <h5 id="power-saving">Power saving sample</h5> <ul> <li>
+<p>Condition: Active when <code translate="no" dir="ltr">custom_state == system_power.SYSTEM_POWER_LOW &amp;&amp;
+custom_state == range_ext.RANGE_EXT_ON</code>.</p> <p>This state can be viewed as a power savings state.</p>
+</li> <li><p>Declares one HVAC-related service instance as <code translate="no" dir="ltr">destroyed</code>.</p></li> <li>
+<p>In this example, when <code translate="no" dir="ltr">SYSTEM_POWER_LOW</code> and <code translate="no" dir="ltr">RANGE_EXT_ON</code> modes are active, the HVAC app runs without the <code translate="no" dir="ltr">RefrigerantLoop</code> service instance:</p> 
+<pre>state {
+  condition {
+    and {
+      custom_state {
+        mode: "system_power"
+        state: "SYSTEM_POWER_LOW"
+      }
+      custom_state {
+        mode: "range_ext"
+        state: "RANGE_EXT_ON"
+      }
+    }
+  }
+
+  # Disable services with high power consumption
+  instances_states { destroyed: "RefrigerantLoop" }
+}
+</pre>
+</li> </ul> <h5 id="life-onboard">Life onboard sample</h5> <ul> <li>
+<p>Condition: Active if <code translate="no" dir="ltr">power_state == ON &amp;&amp; vehicle_state == LIFE_ON_BOARD</code>.</p> <p>This state can be viewed as <em>Someone is in the car and the car is powered on</em>.</p>
+</li> <li><p>Declares temperature sensors as running.</p></li> <li><p>When someone is in the car, items such as temperature are monitored for safety reasons.</p></li> </ul> 
+<pre>state {
+  condition {
+    and {
+      power_state: "ON"
+      vehicle_state: "LIFE_ON_BOARD"
+    }
+  }
+
+  # Temperature monitoring services
+  instances_states {
+    started: "TempSensorDriverZone"
+    started: "TempSensorPassengerZone"
+  }
+}
+</pre> <h2 id="full-examples">Examples</h2> <p>This section presents full examples containing:</p> <ul> <li><p>A service bundle-level proto configuration introducing a service bundle with two instances, each being one part of a group</p></li> <li><p>A VM-level proto configuration introducing logic to interact with the groups based on modes</p></li> </ul> <h3 id="service-bundle-example">Service bundle-level configuration</h3> 
+<pre># proto-file: //system/software_defined_vehicle/orchestration/distributed_config/src/protos/service_bundle_config.proto
+# proto-message: ServiceBundleConfig
+
+package_name: "oem.package"
+service_bundle_name: "OemApplication"
+instance: "fog_front_light"
+instance: "fog_rear_light"
+instance: "turn_signal_light"
+custom_mode: "FOG"
+custom_mode: "TURN"
+
+group_mapping {
+    group: "fog_light"
+    instance: "fog_front_light"
+    instance: "fog_rear_light"
+}
+
+group_mapping {
+    group: "flasher_light"
+    instance: "turn_signal_light"
+}
+
+state {
+    condition {
+        power_state: "ON"
+    }
+
+    instances_states {
+        created: "turn_signal_light"
+        destroyed: "fog_front_light"
+        destroyed: "fog_rear_light"
+    }
+}
+</pre> <h3 id="vm-example">VM-level configuration</h3> 
+<pre># proto-file: //system/software_defined_vehicle/orchestration/distributed_config/src/protos/vm_config.proto
+# proto-message: VmConfig
+
+group_mapping {
+    group: "lights"
+    subgroup: "fog_light"
+    subgroup: "flasher_light"
+}
+
+state {
+    condition {
+        custom_state {
+            mode: "FOG"
+            state: "ON"
+        }
+    }
+    groups_states {
+        started: "fog_light"
+    }
+}
+
+state {
+    condition {
+        custom_state {
+            mode: "TURN"
+            state: "RIGHT"
+        }
+    }
+    groups_states {
+        started: "flasher_light"
+    }
+}
+
+state {
+    condition {
+        vehicle_state: "SUSPEND_TO_RAM_ENTER"
+    }
+    groups_states {
+        created: "lights"
+    }
+}
+</pre> <h2 id="max-bundles-parallelism">Configure bundle management parallelism</h2> <p>The <code translate="no" dir="ltr">ro.boot.sdv.max_bundles_management_threads</code> system property is a key tuning parameter for controlling the performance and resource consumption during service bundle lifecycle operations. It defines the maximum level of parallelism for service bundles transactions and directly affects two core services:</p> <ol> <li><p><strong>Orchestration Engine:</strong> This service reads the property to determine how many concurrent calls (for example, <code translate="no" dir="ltr">startService</code>, <code translate="no" dir="ltr">stopService</code>) the Orchestrator can make to the Lifecycle Manager. This is crucial for performance during boot-up and mode transitions where many bundles may change state simultaneously.</p></li> <li><p><strong>Lifecycle Manager:</strong> This service uses the property's value to calculate the size of its Binder thread pool, which is responsible for handling all incoming requests. This ensures that the LM has enough threads to handle the concurrent requests from the Orchestrator.</p></li> </ol> <p>If this property isn't set, both services default to a value of <code translate="no" dir="ltr">12</code>.</p> <h3 id="max-bundles-parallelism-config">Configuration method</h3> <p>You can set the property in your device's <code translate="no" dir="ltr">BoardConfig.mk</code> file by adding it to the <code translate="no" dir="ltr">BOARD_BOOTCONFIG</code> variable. This ensures the value is applied every time the device boots.</p> 
+<pre>BOARD_BOOTCONFIG += \
+    androidboot.sdv.max_bundles_management_threads=8
+</pre> <p>To change the value for your device, modify this line in the appropriate <code translate="no" dir="ltr">BoardConfig.mk</code> file and rebuild.</p> <h2 id="boot-time-optimization">Boot-time optimization</h2> <p>The <code translate="no" dir="ltr">ro.sdv.orchestrator.state.ready</code> is a <code translate="no" dir="ltr">write-once</code> boolean property that is part of a boot-time performance optimization strategy. It indicates that the Orchestration agent has completed its initialization and is ready to start managing the lifecycle of service bundles. Its primary purpose is to prioritize the startup of the Orchestrator and its managed service bundles by controlling the startup sequence of other SDV agents.</p> <ul> <li>
+<strong>Set by:</strong> The Orchestration agent.</li> <li>
+<strong>When:</strong> Once during the boot-up sequence.</li> <li>
+<strong>Usage:</strong> This property is used by the init system to control the startup sequence of most SDV agents (Updates Manager, VSIDL provider, Health Monitor, Service Discovery, Data Tunnel, RPC, VPM and Telemetry). By starting the Orchestrator early and having other agents wait for this property, the system ensures that the Orchestrator can begin its critical task of starting service bundles without competing for system resources.</li> </ul> <h3 id="performance">Performance</h3> <p>During system boot, starting all agents simultaneously can lead to resource contention, slowing down the overall boot process. To mitigate this, a sequential startup order is enforced using system properties:</p> <ol> <li>
+<strong>Service bundles registry:</strong> Starts first to load all service bundle metadata.</li> <li>
+<strong>Lifecycle Manager and Orchestrator:</strong> These core agents start as soon as the registry is ready. This early start is crucial as it allows the Orchestrator to begin evaluating its configuration and preparing to start service bundles immediately.</li> <li>
+<strong>Other SDV agents:</strong> Start only after the Orchestrator is ready.</li> </ol> <p>This controlled sequence ensures the Orchestrator has priority to use system resources to start service bundles at the earliest possible moment, leading to a faster, more deterministic, and more efficient system startup.</p> <h2 id="modes">Modes consumed by the Orchestrator</h2> <p>The orchestration agent maintains an active subscription to vehicle and power modes transmitted by the VPM. Upon initial connection establishment between the Orchestrator and the Vehicle and Power Management (VPM) system, the Orchestrator sets the following boolean system properties to <code translate="no" dir="ltr">true</code>:</p> <ul> <li><p><code translate="no" dir="ltr">sdv.orchestrator.bootup.power_mode.ready</code></p></li> <li><p><code translate="no" dir="ltr">sdv.orchestrator.bootup.vehicle_mode.ready</code></p></li> </ul> <aside class="special"><strong>Important:</strong><span> These properties serve only as a one-time indication of the first connection event and are <strong>not</strong> dynamically updated to reflect ongoing connection status (they aren't reset upon VPM crashes or subsequent connection losses). Consequently, their true state does not ensure an active connection between the Orchestrator and VPM. These properties should not be relied upon for real-time connection status verification. Their primary intended use is to provide a preliminary signal indicating the earliest point at which the VEPSM can be initiated for mode setting. However, they should not be interpreted as a definitive confirmation of ongoing communication integrity. Mode updates can be lost despite these properties being set to <code translate="no" dir="ltr">true</code>.</span></aside><aside class="note"><strong>Note:</strong><span> These properties might be deprecated in future platform updates.</span></aside> <p>Using a configuration file as a reference, the orchestration agent dynamically computes the set of service bundles that should be in a running state based on the current values of the received modes. The Orchestrator then communicates with the lifecycle manager, issuing different commands to align the actual state of service bundles with the computed target state.</p> <h3 id="vehicle-states">Vehicle and power states</h3> <p>The Vehicle mode and power management (VPM) agent enables SDV components to be informed as to the current state of the vehicle, such as operational mode (for example, in Park or Drive) and power status (for example, On and Suspend). The Orchestrator evaluates these values to define which service bundles should run based on the Orchestrator configuration. To learn more, see <a href="power-management">Vehicle and power management</a>.</p> <h3 id="custom-modes">Custom modes</h3> <p>Given how many there are, we can't model all vehicle modes. Each OEM has different needs and standardizing vehicle modes can't address all OEM use cases. As a result, we support OEM-specific modes, known as <em>custom modes</em>. These modes don't extend the existing vehicle and power modes. Instead, they provide a way to define new modes.</p> <p>Functionality:</p> <ul> <li><p><strong>Global scope:</strong> Custom modes are global, applying uniformly across all VMs managed by the Orchestrator.</p></li> <li>
+<p><strong>Composition:</strong> Each custom mode change consists of two elements:</p> <ul> <li><p><strong>Name:</strong> Unique identifier selected by the OEM to represent the custom mode.</p></li> <li><p><strong>Value:</strong> The current state for custom mode, which can be <code translate="no" dir="ltr">UNDEFINED</code> when no value is set.</p></li> </ul>
+</li> <li><p><strong>Orchestrator role:</strong> The Orchestrator acts as a passive receiver of custom mode values.</p></li> <li><p><strong>Service bundle role:</strong> Each service bundle can own multiple custom modes and can publish new values to any. Multiple service bundles can own the same custom mode, which means that a custom mode can receive new values from different sources.</p></li> <li><p><strong>Validation responsibility:</strong> OEMs are responsible for ensuring valid state transitions. The Orchestrator accepts any new value.</p></li> </ul> <p>Estimated characteristics:</p> <ul> <li><p><strong>Estimated count:</strong> Power and vehicle modes manage the lifecycle of most service bundles, with custom modes playing a supplemental role. We expect that the order of magnitude of custom modes to be in the dozens and not the hundreds.</p></li> <li><p><strong>Estimated timing:</strong> Modes aren't sent periodically. Instead, modes are event driven, triggered by specific actions such as such as opening a door, initiating a parking sequence, starting a charging cycle, and other similar events of OEM-defined significance.</p></li> </ul> <p>Custom mode design provides the flexibility to define and manage specific modes while allowing the Orchestrator to remain agnostic to the underlying state machine logic.</p> <h4 id="supported-modes">Supported modes</h4> <p>To ensure that service bundles only publish to custom modes they own, each must explicitly declare the list of owned custom modes within its Orchestrator configuration, which is available-in the local VM with the service bundle registry. Attempts to publish to an undeclared custom mode are discarded.</p> <p>To declare the custom modes that a service bundle is allowed to publish (hence owns), the <code translate="no" dir="ltr">service_bundle_config</code> proto schema is extended with the following:</p> 
+<pre>// Service bundle configuration.
+//
+// Defines service bundle metadata, its instances, and configuration for instances
+// lifecycle states depending on the state of the vehicle.
+message ServiceBundleConfig {
+      [...]
+
+    // The list of custom modes that this service bundle publishes.
+    repeated string custom_mode = 5;
+}
+</pre>
+<aside class="note"><strong>Note:</strong><span> <code translate="no" dir="ltr">custom_mode</code> strings are a temporary solution resulting by the absence of resource-based ACLs. Upon the implementation of resource-based ACL support, this <code translate="no" dir="ltr">custom_mode</code> check will be deprecated.</span></aside> <h3 id="configure-bundles">Configure bundles based on modes</h3> <p>The existing Orchestrator proto configuration (the <code translate="no" dir="ltr">Condition</code> component) supports the manipulation of service bundles based on custom modes:</p> 
+<pre>message Condition {
+  oneof root {
+    string power_state = 1;
+    string vehicle_state = 2;
+    CustomState custom_state = 3;
+    Condition not = 4;
+    Expression and = 5;
+    Expression or = 6;
+  }
+}
+
+message CustomState {
+  // Custom mode being checked.
+  string mode = 1;
+  // State of the custom mode.
+  string state = 2;
+}
+</pre> <h4 id="proto-example">Proto sample</h4> <p>The following example shows how to configure instances of a service bundle to be started based on a <code translate="no" dir="ltr">TURN</code> and <code translate="no" dir="ltr">FOG</code> state:</p> 
+<pre>service_bundle_config {
+package_name: "oem.package"
+service_bundle_name: "OemApplication"
+instance: "flasher_light"
+// Service bundle is allowed to set values for the TURN mode
+custom_mode: "TURN"
+// Service bundle is allowed to set values for the FOG mode
+custom_mode: "FOG"
+
+state {
+    condition {
+        custom_state {
+            mode: "TURN"
+            state: "LEFT"
+        }
+    }
+    instances_states {
+        started: "flasher_light"
+    }
+}
+
+state {
+    condition {
+        custom_state {
+            mode: "FOG"
+            state: "ON"
+        }
+    }
+    // Group assumed to be defined containing all FOG lights instances.
+    groups_states {
+        started: "fog_lights"
+    }
+}
+
+}
+</pre> <h3 id="set-custom-modes">Set new custom modes</h3> <p>The process of setting a new custom mode value starts with the service bundle, which communicates the desired value to the local Orchestrator running on the same VM. The Orchestrator then verifies that the service bundle has the permissions needed to publish to the specified custom mode, referencing the configuration defined in the <code translate="no" dir="ltr">.textproto</code>, to determine if it should propagate the value to other VMs. Once propagated, each Orchestrator reviews its configuration to find the list of service bundles for which state should be changed.</p> <h4 id="rpc">RPC</h4> <p>Each Orchestrator running on each VM creates an RPC server to listen for new custom mode values. Each service bundle wanting to update a custom mode must create an RPC client to the server. ACLs are enforced to prevent non-authorized bundles from connecting to the server.</p> <p>The proto definition for setting a new value through RPC looks like this example:</p> 
+<pre>syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+package com.sdv.google.Orchestrator;
+
+// Representation of the request used by service bundles to update a custom mode.
+// Service bundles are permitted to update only the custom modes specifically designated
+// for them within the Orchestrator configuration.
+message SetCustomStateRequest {
+  // Required.
+  // The name of the custom mode.
+  // The mode string can not be longer than 56 characters and can only contain
+  // letters, numbers, dashes, dots and underscores: [a-zA-Z0-9_-.].
+  // No other special character nor spaces should be present in the mode.
+  string mode = 1;
+
+  // Required.
+  // The new value for the custom mode.
+  // The value string can not be longer than 56 characters and can only contain
+  // letters, numbers, dashes, dots and underscores: [a-zA-Z0-9_-.].
+  // No other special character nor spaces should be present in the value.
+  string value = 2;
+
+  // Required.
+  // The timestamp in which the new custom mode value was set. This is used to
+  // prevent race conditions whenever different service bundles in different
+  // VMs want to set a new value for the same custom mode.
+  // We use this timestamp to order the requests and we promise eventual
+  // consistency: while temporary inconsistencies may occur, the system will
+  // eventually converges to the correct state.
+  .google.protobuf.Timestamp timestamp = 3;
+}
+
+// Representation of the set custom state response.
+message SetCustomStateResponse {}
+
+// Orchestrator interface for service bundles that update the value of a
+// custom mode.
+// When a new value is received, it is propagated to Orchestrators running on
+// other VMs.
+service CustomStateService {
+  // Updates the value for the custom mode.
+  // Returns the error:
+  // - PermissionDenied: the service is not authorized to update the custom mode.
+  // - InvalidArgument: the provided mode and/or value are not valid.
+  rpc SetCustomState(SetCustomStateRequest) returns (SetCustomStateResponse) {};
+}
+</pre> <h3 id="power-cancellation">Cancellation of power transitions</h3> <p>The Orchestrator allows the cancellation of ongoing power transitions through the <code translate="no" dir="ltr">SHUTDOWN_CANCELLED</code> power mode (sent by VPM to the Orchestrator).</p> <aside class="note"><strong>Note:</strong><span> Modes are enforced sequentially, even though service bundles are transitioned in parallel within the same mode transition. This means that a new mode isn't executed until all service bundles from the current in-progress mode have completed their transitions.</span></aside> <p>Consider the following Orchestrator configuration as an example:</p> 
+<pre>state {
+    condition {
+        power_state: "SUSPEND_TO_RAM_ENTER"
+    }
+    instances_states {
+        started: "instance-1"
+        started: "instance-2"
+        started: "instance-3"
+    }
+}
+</pre> <p>When a <code translate="no" dir="ltr">SHUTDOWN_CANCELLED</code> mode is received, two primary scenarios dictate the Orchestrator's behavior. In both cases, the <code translate="no" dir="ltr">SHUTDOWN_CANCELLED</code> power mode is appended to the end of the queue. Then <code translate="no" dir="ltr">SHUTDOWN_CANCELLED</code> is executed after queued elements have been consumed.</p> <h4 id="cancel-in-progress-mode">Scenario 1: Current in-progress mode is a power mode</h4> <p>If the Orchestrator is executing a power mode update, then a cancellation of the in-progress mode is requested. While the Lifecycle Manager doesn't inherently support cancelling an in-progress transition, the Orchestrator verifies that no new service bundle requests are initiated.</p> <p>Example: If <code translate="no" dir="ltr">instance-1</code> from the configuration in the previous example is in the process of starting when the <code translate="no" dir="ltr">SHUTDOWN_CANCELLED</code> mode is received, <code translate="no" dir="ltr">instance-1</code> completes its startup. However, <code translate="no" dir="ltr">instance-2</code> and <code translate="no" dir="ltr">instance-3</code> don't proceed with their transitions to the started state.</p> <h4 id="cancel-queued-mode">Scenario 2: A power mode exists in the processing queue</h4> <p>In the case where the Orchestrator is processing a non-power mode update, and there's a power request in the queue of modes to be executed, the power transition is removed from the queue. This prevents its execution.</p> <p>Example: Using the configuration in the previous example, if the Orchestrator is working on a non-power related update (such as a vehicle update) and <code translate="no" dir="ltr">SUSPEND_TO_RAM_ENTER</code> is in the queue, receiving <code translate="no" dir="ltr">SHUTDOWN_CANCELLED</code> results in none of the instances (<code translate="no" dir="ltr">instance-1</code>, <code translate="no" dir="ltr">instance-2</code>, <code translate="no" dir="ltr">instance-3</code>) being started.</p> <h3 id="implementation-sample">Implementation sample</h3> <p>The catalog for a client that wants to use middleware generated code to create a client to the RPC server can look like this example:</p> 
+<pre># proto-file: //system/software_defined_vehicle/vsidl/language/src/protos/sdv/vsidl/v1/syntax.proto
+# proto-message: VsidlEntry
+
+package: "package_name"
+
+service_bundle {
+    name: "service_bundle_name"
+
+    client {
+        service: "com.android.sdv.orchestrator.CustomStateService"
+    }
+}
+</pre> <p>When generating code, you must add the dependency to the Orchestrator catalog:</p> 
+<pre>--dependency-catalog-path orchestration/engine/stable/vsidl/*
+</pre> <p>The client code to send a new value looks like:</p> 
+<pre>let fqin = ServiceFqin::builder()
+        .sdv_vm_name("vm_name")
+        .sdv_package_name("package_name")
+        .service_bundle_name("service_bundle_name")
+        .service_instance_name("instance_name")
+        .build()
+        .unwrap();
+let context_ref = ContextRef::create(fqin);
+let comms = Arc::new(SdvComms { context: context_ref });
+// service_bundle_name is the bundle generated with middleware code that defines
+// the RPC client to "com.android.sdv.orchestrator.CustomStateService".
+let client = service_bundle_name::new(comms).await.unwrap();
+let rpc_client = client
+        .create_rpc_client::&lt;Client&gt;(
+            UnitName::builder()
+                .vm_name(comms.context.get_self_fqin().get_sdv_vm_name())
+                .package_name("com.android.sdv.orchestrator")
+                .bundle_name("OrchestratorServiceBundle")
+                .service_unit_name(Client::DEFAULT_UNIT_NAME)
+                .build()
+                .unwrap(),
+            ClientOptions::default(),
+        )
+        .await;
+let client = Arc::new(rpc_client.unwrap());
+let request = SetCustomStateRequest {
+mode: custom_mode_name,
+value: custom_mode_value,
+timestamp: MessageField::some(Timestamp::now()),
+..Default::default()
+};
+let result = client.SetCustomState(&amp;request).await;
+// Process result
+</pre> <h2 id="dumpsys">Debugging tools</h2> <p>The Orchestrator agent has support for dumpsys tool. You can invoke it by running the following command on a running SDV instance:</p> <p><code translate="no" dir="ltr">adb shell dumpsys com.google.sdv.ISdvAgent/orch</code></p> <p>Use this tool to debug and gain insight into the internal state of the Orchestrator agent. Doing so displays:</p> <ul> <li>
+<strong>Current Modes State:</strong> See the active vehicle, power, and custom modes.</li> <li>
+<strong>Custom Mode Publishers:</strong> Identify which services can publish custom modes (and to which modes).</li> <li>
+<strong>Required state per service:</strong> Learn the state of each service bundle based on pre-defined conditions and current modes. This helps diagnose why a service might not be in the expected state.</li> <li>
+<strong>Mode Enforcement Status:</strong> Get a clear picture of an in-progress enforced mode, or the last enforced mode if none is in progress.</li> <li>
+<strong>Mode Enforcement Queue:</strong> View modes waiting to be enforced.</li> </ul> <aside class="note"><strong>Note:</strong><span> Information displayed is local to the VM in which the command was invoked. To learn about other VMs, run dumpsys on each VM.</span></aside> <p>For example:</p> 
+<pre>AGENT NAME: SDV Agent dump - Orchestrator
+AGENT FQIN: instance1:com.android.sdv.orchestrator.OrchestratorServiceBundle/default
+AGENT STATE: See orchestrator state below.
+----------------
+----------------
+INTERNAL STATE REPORTERS:
+
+*NAME: Configuration state
+*REPORT:
+Active modes:
+MODE                          VALUE                         TIMESTAMP (scs, ns)
+Power                         POWER_OFF_EXIT                -
+Vehicle                       VEHICLE_ON                    -
+Custom("CHARGING")            ON                            1750757590 (scs) 466507459 (ns)
+Custom("TIRE_PRESSURE")       front-left                    1750757570 (scs) 554522995 (ns)
+
+Modes allowed to publish by bundle (FQIN: modes):
+com.android.sdv.sample.orchestration/CustomModeControlBundle: CHARGING, TIRE_PRESSURE
+
+Requested state for instances:
+STATE          FQIN
+Started        com.android.sdv.sample.orchestration/CustomModeControlBundle/always-started-instance
+Started        com.android.sdv.sample.orchestration/OrchestratedServiceBundle/my-instance
+Started        com.sdv.oem.sample.diagnostics/DiagnosticsSampleWithDataItem/instance
+Started        com.sdv.oem.sample.diagnostics/DiagnosticsSampleWithEvent/instance
+Started        com.sdv.oem.user_preferences/UserPreferencesServiceBundle/default
+----------------
+*NAME: Engine state
+*REPORT:
+Last mode enforced was Custom("CHARGING") with value "ON"
+
+Next modes to process: []
+----------------
+</pre> <p>To learn more about individual service bundles managed by the Orchestrator, use the existing dumpsys from the Lifecycle Manager as follows:</p> <p><code translate="no" dir="ltr">dumpsys google.sdv.lifecycle.ILifecycleManager/default</code></p> <p>Doing so provides detailed information about the lifecycle state of each service. By combining Orchestrator dumpsys output with output from Lifecycle Manager presents a complete picture of the service bundles lifecycle in the VM.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/core-areas/orchestrator" class="_attribution-link">https://source.android.com/docs/automotive/sdv/core-areas/orchestrator</a>
+  </p>
+</div>

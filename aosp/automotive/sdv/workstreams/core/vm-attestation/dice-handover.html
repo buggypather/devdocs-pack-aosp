@@ -1,0 +1,30 @@
+<h1>Android HLOS CDI handover</h1>  <p>When the Android HLOS receives its <a href="dice-profile#android-cdi">Android HLOS CDI values and certificates</a> from the previous stage, it reads them and then derives and wipes the necessary secrets—such as public and private key pairs and further CDI stages—for SDV Service Discovery.</p> <p>This process takes place as soon as possible in the bootflow during <code translate="no" dir="ltr">early-init</code> in the <a href="https://android.googlesource.com/platform/system/core/+/HEAD/init/README.md#trigger-sequence">second stage init</a>. Doing so makes sure that Android HLOS consumes and wipes the CDI values before any third-party code executes.</p> <p>The Android Bootloader (or the guest loader in the hypervisor, if no Android Bootloader exists) passes the following values through the SDV's Linux Kernel to <code translate="no" dir="ltr">second stage init</code> in Android user-space:</p> <ul> <li>Attestation CDI value of the Android HLOS layer.</li> <li>Sealing CDI value of the Android HLOS layer.</li> <li>CBOR-encoded DICE chain until the Android HLOS layer.</li> </ul> <p>These values use the <code translate="no" dir="ltr">SdvDiceHandover</code> format. The <code translate="no" dir="ltr">SdvDiceHandover</code> is a CBOR-encoded map described by this <a href="https://datatracker.ietf.org/doc/rfc8610">CDDL</a> fragment:</p> 
+<pre>SdvDiceHandover = {
+   1 : bstr .size 32, ; CDI_Attest
+   2 : bstr .size 32, ; CDI_Seal
+   3 : DiceCertChain, ; Android SDV DICE chain
+}
+</pre> <p>The <code translate="no" dir="ltr">IRemotelyProvisionedComponent</code> HAL <a href="https://cs.android.com/android/platform/superproject/main/+/main:hardware/interfaces/security/rkp/aidl/android/hardware/security/keymint/generateCertificateRequestV2.cddl;l=77;drc=690571283b16a9e2cef876e7a76dd7405aab18a4"><code translate="no" dir="ltr">DiceCertChain</code></a> specifies the format of the <code translate="no" dir="ltr">DiceCertChain</code>. You don't require <a href="https://www.rfc-editor.org/rfc/rfc8949.html#name-core-deterministic-encoding">deterministically encoded CBOR</a> for <code translate="no" dir="ltr">SdvDiceHandover</code>, though it's highly recommended as it supports a wider range of DICE policies.</p> <p>The <code translate="no" dir="ltr">SdvDiceHandover</code> format is very similar to the:</p> <ul> <li><p><a href="https://cs.android.com/android/platform/superproject/main/+/main:external/open-dice/src/android.c;l=212;drc=9c7394cad96a0a22793ec334fe520cd39277ab3b"><code translate="no" dir="ltr">AndroidDiceHandover</code></a> format that the Open Profile for DICE reference implementation defines,</p></li> <li><p><a href="https://www.rfc-editor.org/rfc/rfc8949.html#name-core-deterministic-encoding"><code translate="no" dir="ltr">PvmfwDiceHandover</code></a> format that the <code translate="no" dir="ltr">pvmfw</code> uses to hand over the DICE chain to a pVM. For example, Microdroid.</p></li> </ul> <p>In contrast to the <code translate="no" dir="ltr">AndroidDiceHandover</code> and similarly to the <code translate="no" dir="ltr">PvmfwDiceHandover</code> format, the <code translate="no" dir="ltr">DiceCertChain</code> is required and not optional.</p> <h2 id="open-dice-driver">Open Profile for DICE kernel driver</h2> <p>The DICE handover of the Android HLOS CDI from the Android Bootloader (or the guest loader in the hypervisor, if there's no bootloader) to the Android HLOS relies on the <a href="https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/drivers/misc/open-dice.c">Open Profile for DICE kernel driver</a>. The Android Bootloader writes the DICE Chain entry to a region in the guest's memory that the Device Tree (DT) must specify.</p> <p>The driver reads this memory region that the DT specifies and exposes it the user space as an <code translate="no" dir="ltr">/dev/open-dice0</code> device. The driver allows reading and wiping this memory region. The Open Profile for DICE driver only exists on arm64 architectures because device tree is an arm64-only concept.</p> <p>Specify the memory region that the Open Profile for DICE driver exposes using a <code translate="no" dir="ltr">reserved-memory</code> node in the DT that you tag for the driver by specifying <code translate="no" dir="ltr">"google,open-dice"</code> in the <code translate="no" dir="ltr">compatible</code> property. For example:</p> 
+<pre>reserved-memory {
+  // The number of u32 cells to represent the address of a memory region
+  #address-cells = &lt;2&gt;;
+  // The number of u32 cells to represent the size of a memory region
+  #size-cells = &lt;2&gt;;
+  ranges;
+  // The unit address (after the @) must match the address in the reg property
+  dice@D1C30000 {
+    compatible = "google,open-dice";
+    no-map;
+    // The address and the size of the memory region that is passed to the Open
+    // Profile for DICE driver. The address must be page-aligned, and the size a
+    // multiple of the page size. The first two hex numbers (cells) represent
+    // the address of the memory region, the last two represent its size.
+    reg = &lt;0x0 0xD1C30000 0x0 0x1000&gt;;
+  };
+};
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/core/vm-attestation/dice-handover" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/core/vm-attestation/dice-handover</a>
+  </p>
+</div>

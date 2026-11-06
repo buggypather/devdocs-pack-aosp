@@ -1,0 +1,292 @@
+<h1>Wi-Fi and cellular coex channel avoidance</h1>   <p>The Wi-Fi and cellular coex channel avoidance feature, introduced in Android 12, identifies and avoids using unsafe Wi-Fi channels in cases where there might be interference from or to cellular channels. This includes interfaces such as STA, SoftAp, Wi-Fi Direct (P2P), and Wi-Fi Aware (NAN).</p> <p>This page discusses the following:</p> <ul> <li>Information the cellular modem must report to the Android framework.</li> <li>Algorithms the Wi-Fi framework uses to calculate Wi-Fi channels to be avoided.</li> <li>Configuration tables that device manufacturers must provide for the Wi-Fi framework.</li> <li>System APIs, configurations, and HAL APIs related to the channel avoidance feature.</li> <li>Framework behavior for handling channel avoidance.</li> <li>Chip vendor behavior for handling channel avoidance.</li> <li>Implementation details for channel avoidance.</li> <li>Tests for validating channel avoidance behavior.</li> </ul> <h2 id="background">Background</h2> <p>For devices with cellular technologies such as LTE, 5G NR, and Licensed Assisted Access (LAA), the cellular channels in use can interfere with the Wi-Fi channel in use. This occurs when the cellular and Wi-Fi channels are within short frequency separation (neighboring channels) or when there is harmonic and intermodulation interference.</p> <p>This type of interference becomes a problem when one antenna is transmitting and another is receiving at the same time. In this case, the transmitting antenna floods the receiving antenna, impacting its reception quality.</p> <p>This document refers to the interfering transmitter as the <em>aggressor</em> and the receiver experiencing the interference as the <em>victim</em>. The Wi-Fi channel that is either the aggressor or the victim is referred to as an <em>unsafe channel</em>.</p> <p>The Wi-Fi and cellular coex channel avoidance feature provides a consistent approach for channel avoidance reducing the need for proprietary code that diverges from the Wi-Fi framework. Additionally, the feature allows device manufacturers to configure, enable and disable, and override the feature.</p> <p>The feature performs channel avoidance by controlling the Wi-Fi channels. The Wi-Fi channel avoidance scheme can be described as a series of four abstract steps:</p> <ol> <li>Modem reports change in cellular frequency</li> <li>Coex avoidance algorithm calculates unsafe Wi-Fi channels</li> <li>Coex avoidance algorithm informs Wi-Fi service</li> <li>Framework or driver performs appropriate Wi-Fi action</li> </ol> <p><img src="https://source.android.com/static/docs/core/connect/images/channel-avoidance-scheme.png" alt="Channel avoidance scheme" width="500" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> Channel avoidance scheme</p> <h2 id="reporting-change">Report a change in cellular frequency</h2> <p>The telephony service reports the cellular channels in use. When the operating cellular frequency changes, the modem reports this information to the telephony service through <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/interfaces/radio/1.6/types.hal"><code translate="no" dir="ltr">IRadio::PhysicalChannelConfig</code></a>. This information includes indications for Licensed Assisted Access (LAA) and Carrier Aggregation (CA).</p> <p>From Android 12, the following fields in <code translate="no" dir="ltr">1.6 IRadio::PhysicalChannelConfig</code> provide required information for the coex formulas that the modem must populate.</p> 
+<pre>struct PhysicalChannelConfig {
+    /** Connection status for cell. Valid values are PRIMARY_SERVING and SECONDARY_SERVING */
+    CellConnectionStatus status;
+
+    /** The radio technology for this physical channel */
+    RadioTechnology rat;
+
+    /** Downlink Absolute Radio Frequency Channel Number */
+    int32_t channelNumberDownlink;
+
+    /** Uplink Absolute Radio Frequency Channel Number */
+    int32_t channelNumberUplink;
+
+    /** Downlink cell bandwidth, in kHz */
+    int32_t cellBandwidthDownlink;
+
+    /** Uplink cell bandwidth, in kHz */
+    int32_t cellBandwidthUplink;
+}
+</pre> <h2 id="unsafe-wifi-channels">Calculate unsafe Wi-Fi channels</h2> <p>When the modem reports a change in cellular frequency, the coex channel algorithm calculates the interference between cellular and Wi-Fi channels and determines which Wi-Fi channels are unsafe.</p> <p>There are multiple types of interference requiring different formulas: <em>neighboring</em> and <em>harmonic/intermodulation</em>. Due to the physical differences in antenna and layout between devices, the patterns of neighboring and harmonic/intermodulation interference for each device are different. To account for this, device manufacturers must provide a <em>lookup table</em> to plug parameters into generic formulas for the two types of interference. These parameters are defined per cell band and are referenced by the bands of the active cell channels.</p> <p>A maximum power cap can be defined in the lookup table. If defined, an unsafe channel transmits with the specified power cap. Otherwise, the channel transmits at full power.</p> <p>In general, the channel avoidance feature uses a best effort approach to avoid unsafe Wi-Fi channels to optimize performance. But in certain cases (for example, because of carrier requirements), it's mandatory for certain interfaces to avoid unsafe channels for certain cellular bands. In such cases, <em>mandatory restrictions</em> are represented as a bitmask containing values for whether to prohibit certain channels such as Wi-Fi Direct (P2P), SoftAp, and Wi-Fi Aware (NAN). While an unsafe channel acts as a recommendation against using that channel for all use cases, mandatory restrictions mark specific use cases for mandatory avoidance.</p> <p>If every channel of the 2.4 GHz or 5 GHz band is marked unsafe, the lookup table can define a default 2.4 GHz channel or a default 5 GHz channel per interfering cell band as the safest choice. These default channels aren't reported as unsafe channels when the rest of the band is reported unsafe.</p> <aside class="note"><strong>Note:</strong><span> The modem should limit the frequency of notifications to avoid spamming the <code translate="no" dir="ltr">onPhysicalChannelConfigurationChanged()</code> callback.</span></aside> <h3 id="override-list">Override list</h3> <p>A formulaic approach is limited in cases where interference is heavily bandwidth dependent (and thus channels with larger bandwidth might be unsafe but not channels with smaller bandwidth). In cases, such as with LAA, it's beneficial to skip the calculations and use a specified list of unsafe channels.</p> <p>To do this, you can specify an <em>override list</em> of unsafe channels in the lookup table for certain entries. An override list in a table entry indicates that the calculation for that specific cell channel is skipped. Instead, the override list explicitly specifies the unsafe Wi-Fi channels for the matching cell channel.</p> <p>For bandwidth-sensitive cases, you can selectively avoid certain bandwidths by specifying certain channels with certain bandwidths in the override list. This is because each Wi-Fi channel number corresponds to a specified bandwidth.</p> <p>The override list is represented by a list of channel numbers or predefined category keywords for each Wi-Fi band:</p> <p>2g categories:</p> <ul> <li>
+<code translate="no" dir="ltr">all</code> (entire 2.4 GHz band)</li> </ul> <p>5g categories:</p> <ul> <li>
+<code translate="no" dir="ltr">all</code> (entire 5 GHz band)</li> <li>
+<code translate="no" dir="ltr">20mhz</code> (5 GHz 20 MHz channels)</li> <li>
+<code translate="no" dir="ltr">40mhz</code> (5 GHz 40 MHz channels)</li> <li>
+<code translate="no" dir="ltr">80mhz</code> (5 GHz 80 MHz channels)</li> <li>
+<code translate="no" dir="ltr">160mhz</code> (5 GHz 160 MHz channels)</li> </ul> <h3 id="neighboring-interference">Neighboring channel interference</h3> <p>To determine neighboring channel interference, the coex avoidance algorithm makes sure the distance <em>ΔF</em> between an aggressor and victim channel doesn't go under a specified <em>threshold</em>.</p> <p><img src="https://source.android.com/static/docs/core/connect/images/channel-interference.png" alt="Channel interference" width="300" class="android-image-dark-theme-background"> </p> <p><strong>Figure 2.</strong> Distance between an aggressor and victim channel</p> <p>The threshold is determined by the physical configuration of the device and the threshold value provided in the lookup table entry per interfering band. Bands that are considered non-interfering don't have a table entry and unsafe channels don't need to be calculated (this is the majority of the time).</p> <p>Neighboring interference parameters</p> <ul> <li>
+<code translate="no" dir="ltr">wifiVictimMhz</code>: MHz distance threshold for a Wi-Fi victim (cell uplink)</li> <li>
+<code translate="no" dir="ltr">cellVictimMhz</code>: MHz distance threshold for a cell victim (cell downlink)</li> </ul> <aside class="note"><strong>Note:</strong><span> Both thresholds (<code translate="no" dir="ltr">wifiVictimMhz</code> and <code translate="no" dir="ltr">cellVictimMhz</code>) can be provided for a single band in the case of FDD. Each of the thresholds apply to the corresponding uplink and downlink FDD channels. The thresholds can be the same for a TDD band.</span></aside> <p>The algorithm behaves as follows for each active cell channel:</p> <ol> <li>For the channel's band, tries to find a lookup table entry. If no table entry is found, returns with no unsafe channels for that cell channel.</li> <li>Based on the cellular band, identifies which Wi-Fi band is at risk and which side of the band the interference comes from (for example, lower 2.4 GHz channels, higher 2.4 GHz channels, lower 5 GHz channels).</li> <li>
+<p>If <code translate="no" dir="ltr">wifiVictimMhz</code> is present and the cell channel has uplink and</p> <ol> <li>
+<p>If the lower part of the Wi-Fi band is at risk:</p> <ol> <li>Finds the upper limit of unsafe channels by adding <code translate="no" dir="ltr">wifiVictimMhz</code> to the cell uplink's highest frequency.</li> <li>Finds the first 20 Mhz Wi-Fi channel whose lower edge overlaps the limit.</li> <li>Marks the Wi-Fi channel, every larger bandwidth channel that contains it (for example, 40 Mhz, 80 Mhz), and every lower channel of the same band as the unsafe channel.</li> </ol>
+</li> <li>
+<p>If the upper part of the Wi-Fi band is at risk:</p> <ol> <li>Finds the lower limit of unsafe channels by subtracting wifiVictimMhz to the cell uplink's lowest frequency.</li> <li>Finds the first Wi-Fi channel whose upper edge overlaps the limit.</li> <li>Marks the Wi-Fi channel, every larger channel that contains it (for example, 40M hz, 80 Mhz), and every higher channel of the same band as the unsafe channel.</li> </ol>
+</li> </ol>
+</li> <li>
+<p>If <code translate="no" dir="ltr">cellVictimMhz</code> is present and the cell channel has downlink:</p> <ol> <li>It performs step 3 using <code translate="no" dir="ltr">cellVictimMhz</code> as the threshold and compares against cell downlink instead of cell uplink.</li> </ol>
+</li> <li><p>It applies the table entry's power cap to the calculated unsafe channels.</p></li> </ol> <p><img src="https://source.android.com/static/docs/core/connect/images/unsafe-calc-neighboring.png" alt="Unsafe channel calculation" width="650" class="android-image-dark-theme-background"> </p> <p><strong>Figure 3.</strong> Unsafe channel calculation for neighboring channel interference</p> <h3 id="harmonic-intermodulation-distortion">Harmonic or intermodulation distortion</h3> <p>For harmonic or intermodulation distortion, the coex engine calculates the range of the harmonic or intermodulation signal and evaluates the percent overlap it has with a potential victim channel. If the overlap exceeds an overlap threshold, the algorithm considers this an unsafe situation. The calculation of the percent overlap of the harmonic or intermodulation distortion on a victim channel is performed with the following equation:</p> <div> $$ overlap = \frac{min(distortion_{high}, victim_{high}) - max(distortion_{low}, victim_{low})}{victim_{bandwidth}} $$ </div> <p>In the harmonic distortion case, the algorithm considers the harmonic distortion of a cell uplink channel victimizing Wi-Fi channels. It then substitutes the distortion high and distortion low with the harmonic values based on the cell uplink frequencies and a harmonic degree $ N $.</p> <div> $$ harmonic_{high} = N * uplink_{high} $$ </div> <div> $$ harmonic_{low} = N * uplink_{low} $$ </div> <p><img src="https://source.android.com/static/docs/core/connect/images/unsafe-calc-harmonic.png" alt="Unsafe channel calculation harmonic distortion" width="650" class="android-image-dark-theme-background"> </p> <p><strong>Figure 4.</strong> Unsafe channel calculation for harmonic distortion</p> <p>In the intermodulation case, the algorithm considers the intermodulation distortion of the cell uplink and the Wi-Fi channel victimizing the cell downlink channel. It then substitutes the distortion high and distortion low with the intermodulation values based on the cell uplink frequencies, Wi-Fi frequencies, and the two intermodulation coefficients $ M $, $ N $.</p> <div> $$ intermod_{high} = |M*wifi_{high} + N*uplink_{high}| $$ </div> <div> $$ intermod_{low} = |M*wifi_{low} + N*uplink_{low}| $$ </div> <p><img src="https://source.android.com/static/docs/core/connect/images/unsafe-calc-intermod.png" alt="Unsafe channel calculation intermodulation distortion" width="650" class="android-image-dark-theme-background"> </p> <p><strong>Figure 5.</strong> Unsafe channel calculation for intermodulation distortion</p> <p>You can specify $ M $, $ N $ and overlap values in the lookup table per interfering cell band. If there is no interference for a band, then the values are omitted from the table for that band entry. Two sets of these values for the Wi-Fi 2.4 GHz and 5 GHz bands can be independently defined.</p> <p>Similar to the neighboring interference algorithm, the algorithm reuses the same power cap value defined per interfering cell band.</p> <p>The algorithm behaves as follows for each active cell channel:</p> <ol> <li>For the cell channel's band, it tries to find a lookup table entry. If no table entry is found, returns with no unsafe channels for this channel.</li> <li>
+<p>Finds the unsafe 2.4 GHz channels from harmonics if parameters are defined.</p> <ol> <li>Finds the harmonic degree N for 2.4 GHz.</li> <li>Calculates the harmonic high frequency and the harmonic low frequency based on N and the cell uplink.</li> <li>Finds the first 20 MHz Wi-Fi channel that is within the lower bound of the harmonic coming from below.</li> <li>Calculates the overlap of the harmonic over the Wi-Fi channel and marks the channel as unsafe if the overlap exceeds the 2.4 GHz Wi-Fi overlap threshold.</li> <li>Finds the first 20 MHz Wi-Fi channel that is within the upper bound of the harmonic coming from above.</li> <li>Calculates the overlap of the harmonic over the Wi-Fi channel and marks the channel as unsafe if the overlap exceeds the 2.4 GHz Wi-Fi overlap threshold.</li> <li>Marks every 20 MHz channel in between as an unsafe channel.</li> </ol>
+</li> <li>
+<p>Finds the unsafe 5 GHz channels from harmonics if parameters are defined.</p> <ol> <li>Finds the harmonic degree N for 5 GHz. If N is 0, skips to step 5.</li> <li>Calculates the harmonic high frequency and the harmonic low frequency based on N and the cell uplink.</li> <li>
+<p>Finds unsafe 20 Mhz channels.</p> <ol> <li>Finds the first 20 MHz Wi-Fi channel that is within the lower bound of the harmonic coming from below.</li> <li>Calculates the overlap of the harmonic over the Wi-Fi channel and marks the channel as unsafe if the overlap exceeds the 2.4 GHz Wi-Fi overlap threshold.</li> <li>Finds the first 20 MHz Wi-Fi channel that is within the upper bound of the harmonic coming from above.</li> <li>Calculates the overlap of the harmonic over the Wi-Fi channel and marks the channel as unsafe if the overlap exceeds the 2.4 GHz Wi-Fi overlap threshold.</li> <li>Marks every 20 MHz channel in between as an unsafe channel with the specified power cap.</li> </ol>
+</li> <li>
+<p>Finds unsafe 40 MHz, 80 MHz, 160 MHz channels</p> <ol> <li>Repeats step 3a but with 40 MHz, 80 MHz, 160 MHz.</li> <li>Instead of calculating the overlaps of the channels on the harmonic edge, reuses the calculated overlaps from the smaller constituent channels (for example, if two 20 Mhz channels make a 40 Mhz channel and have 30% and 90% overlap, then the average is 60% overlap for the 40 Mhz channel).</li> </ol>
+</li> </ol>
+</li> <li>
+<p>Finds the unsafe 2.4 GHz channels from intermodulation if parameters are defined.</p> <ol> <li>Finds the intermodulation coefficients N, M for 2.4 GHz.</li> <li>
+<p>For each 2.4 GHz Wi-Fi channel:</p> <ol> <li>Calculates the intermodulation low frequency and intermodulation high frequency based on N, M, cell uplink, and Wi-Fi channel.</li> <li>Calculates the overlap of the intermodulation over cell downlink and marks the channel as unsafe if the overlap exceeds the 2.4 GHz cell overlap threshold.</li> </ol>
+</li> </ol>
+</li> <li>
+<p>Finds the unsafe 5 GHz channels from intermodulation if parameters are defined.</p> <ol> <li>Repeats step 4 using the 5 GHz Wi-Fi channels and 5 GHz cell overlap threshold.</li> </ol>
+</li> <li><p>Applies the table entry's power cap to the calculated unsafe channels.</p></li> </ol> <h3 id="final-result">Final result</h3> <p>After both sets of unsafe channels from neighboring and harmonic interference are calculated, the final set is calculated by taking the union of both sets (and selecting the lower power cap if there are collisions), and removing the default channels from the set if there are no mandatory restrictions applied.</p> <p>The algorithm behaves as follows:</p> <ol> <li>If every 2.4 GHz Wi-Fi channel is marked as an unsafe channel, removes the default 2.4 GHz Wi-Fi channel from the set.</li> <li>If every 5 GHz Wi-Fi channel is marked as an unsafe channel, removes the default 5 GHz Wi-Fi channel from the set.</li> <li>Returns the final set of unsafe channels.</li> </ol> <aside class="note"><strong>Note:</strong><span> The algorithm doesn't address the calculation of mandatory restrictions because they are a special case.</span></aside> <h3 id="lookup-table">Lookup table format</h3> <p>The lookup tables are represented in an XML file located in the overlayable config string <code translate="no" dir="ltr">config_wifiCoexTableFilepath</code>, and is defined by the following XSD.</p> 
+<pre>
+&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+            version="1.0"&gt;
+
+  &lt;xsd:element name="table"&gt;
+    &lt;xsd:complexType&gt;
+      &lt;xsd:sequence&gt;
+        &lt;xsd:element ref="entry" minOccurs="1" maxOccurs="unbounded"/&gt;
+      &lt;/xsd:sequence&gt;
+    &lt;/xsd:complexType&gt;
+  &lt;/xsd:element&gt;
+
+  &lt;xsd:element name="entry"&gt;
+    &lt;xsd:complexType&gt;
+      &lt;xsd:sequence&gt;
+        &lt;xsd:element name="rat" type="ratType"/&gt;
+        &lt;xsd:element name="band" type="xsd:int"/&gt;
+        &lt;xsd:element name="powerCapDbm" type="xsd:int" minOccurs="0"/&gt;
+        &lt;xsd:choice&gt;
+          &lt;xsd:element ref="params"/&gt;
+          &lt;xsd:element ref="override"/&gt;
+        &lt;/xsd:choice&gt;
+      &lt;/xsd:sequence&gt;
+    &lt;/xsd:complexType&gt;
+  &lt;/xsd:element&gt;
+
+  &lt;xsd:simpleType name="ratType"&gt;
+    &lt;xsd:restriction base="xsd:string"&gt;
+      &lt;xsd:enumeration value="LTE"/&gt;
+      &lt;xsd:enumeration value="NR"/&gt;
+    &lt;/xsd:restriction&gt;
+  &lt;/xsd:simpleType&gt;
+
+  &lt;!-- Define coex algorithm parameters --&gt;
+  &lt;xsd:element name="params"&gt;
+    &lt;xsd:complexType&gt;
+      &lt;xsd:sequence&gt;
+        &lt;xsd:element ref="neighborThresholds" minOccurs="0"/&gt;
+        &lt;xsd:element name="harmonicParams2g" type="harmonicParams" minOccurs="0"/&gt;
+        &lt;xsd:element name="harmonicParams5g" type="harmonicParams" minOccurs="0"/&gt;
+        &lt;xsd:element name="intermodParams2g" type="intermodParams" minOccurs="0"/&gt;
+        &lt;xsd:element name="intermodParams5g" type="intermodParams" minOccurs="0"/&gt;
+        &lt;xsd:element ref="defaultChannels" minOccurs="0"/&gt;
+      &lt;/xsd:sequence&gt;
+    &lt;/xsd:complexType&gt;
+  &lt;/xsd:element&gt;
+
+  &lt;xsd:element name="neighborThresholds"&gt;
+    &lt;xsd:complexType&gt;
+      &lt;xsd:sequence&gt;
+        &lt;xsd:element name="wifiVictimMhz" type="xsd:int" minOccurs="0"/&gt;
+        &lt;xsd:element name="cellVictimMhz" type="xsd:int" minOccurs="0"/&gt;
+      &lt;/xsd:sequence&gt;
+    &lt;/xsd:complexType&gt;
+  &lt;/xsd:element&gt;
+
+  &lt;xsd:complexType name="harmonicParams"&gt;
+    &lt;xsd:sequence&gt;
+      &lt;xsd:element name="N" type="xsd:int"/&gt;
+      &lt;xsd:element name="overlap" type="xsd:int"/&gt;
+    &lt;/xsd:sequence&gt;
+  &lt;/xsd:complexType&gt;
+
+  &lt;xsd:complexType name="intermodParams"&gt;
+    &lt;xsd:sequence&gt;
+      &lt;xsd:element name="N" type="xsd:int"/&gt;
+      &lt;xsd:element name="M" type="xsd:int"/&gt;
+      &lt;xsd:element name="overlap" type="xsd:int"/&gt;
+    &lt;/xsd:sequence&gt;
+  &lt;/xsd:complexType&gt;
+
+  &lt;xsd:element name="defaultChannels"&gt;
+    &lt;xsd:complexType&gt;
+      &lt;xsd:sequence&gt;
+        &lt;xsd:element name="default2g" type="xsd:int" minOccurs="0"/&gt;
+        &lt;xsd:element name="default5g" type="xsd:int" minOccurs="0"/&gt;
+      &lt;/xsd:sequence&gt;
+    &lt;/xsd:complexType&gt;
+  &lt;/xsd:element&gt;
+
+  &lt;!-- Define algorithm override lists --&gt;
+  &lt;xsd:element name="override"&gt;
+    &lt;xsd:complexType&gt;
+      &lt;xsd:sequence&gt;
+        &lt;xsd:element ref="override2g" minOccurs="0"/&gt;
+        &lt;xsd:element ref="override5g" minOccurs="0"/&gt;
+      &lt;/xsd:sequence&gt;
+    &lt;/xsd:complexType&gt;
+  &lt;/xsd:element&gt;
+
+  &lt;xsd:element name="override2g"&gt;
+    &lt;xsd:complexType&gt;
+      &lt;xsd:sequence&gt;
+        &lt;xsd:element name="category" type="overrideCategory2g" minOccurs="0" maxOccurs="unbounded"/&gt;
+        &lt;xsd:element name="channel" type="xsd:int" minOccurs="0" maxOccurs="unbounded"/&gt;
+      &lt;/xsd:sequence&gt;
+    &lt;/xsd:complexType&gt;
+  &lt;/xsd:element&gt;
+
+  &lt;xsd:element name="override5g"&gt;
+    &lt;xsd:complexType&gt;
+      &lt;xsd:sequence&gt;
+        &lt;xsd:element name="category" type="overrideCategory5g" minOccurs="0" maxOccurs="unbounded"/&gt;
+        &lt;xsd:element name="channel" type="xsd:int" minOccurs="0" maxOccurs="unbounded"/&gt;
+      &lt;/xsd:sequence&gt;
+    &lt;/xsd:complexType&gt;
+  &lt;/xsd:element&gt;
+
+  &lt;xsd:simpleType name="overrideCategory2g"&gt;
+    &lt;xsd:restriction base="xsd:string"&gt;
+      &lt;xsd:enumeration value="all"/&gt;
+    &lt;/xsd:restriction&gt;
+  &lt;/xsd:simpleType&gt;
+
+  &lt;xsd:simpleType name="overrideCategory5g"&gt;
+    &lt;xsd:restriction base="xsd:string"&gt;
+      &lt;xsd:enumeration value="all"/&gt;
+      &lt;xsd:enumeration value="20Mhz"/&gt;
+      &lt;xsd:enumeration value="40Mhz"/&gt;
+      &lt;xsd:enumeration value="80Mhz"/&gt;
+      &lt;xsd:enumeration value="160Mhz"/&gt;
+    &lt;/xsd:restriction&gt;
+  &lt;/xsd:simpleType&gt;
+&lt;/xsd:schema&gt;
+</pre> <h4 id="example-xml">Example XML table</h4> <p>The following is an example XML lookup table:</p> 
+<pre>
+&lt;table&gt;
+  &lt;!-- Entry using algorithm parameters --&gt;
+  &lt;entry&gt;
+    &lt;rat&gt;LTE&lt;/rat&gt;
+    &lt;band&gt;40&lt;/band&gt;
+    &lt;powerCapDbm&gt;50&lt;/powerCapDbm&gt;
+    &lt;params&gt;
+      &lt;neighborThresholds&gt;
+        &lt;wifiVictimMhz&gt;25&lt;/wifiVictimMhz&gt;
+        &lt;cellVictimMhz&gt;40&lt;/cellVictimMhz&gt;
+      &lt;/neighborThresholds&gt;
+
+      &lt;harmonicParams2g&gt;
+        &lt;N&gt;3&lt;/N&gt;
+        &lt;overlap&gt;50&lt;/overlap&gt;
+      &lt;/harmonicParams2g&gt;
+
+      &lt;harmonicParams5g&gt;
+        &lt;N&gt;3&lt;/N&gt;
+        &lt;overlap&gt;50&lt;/overlap&gt;
+      &lt;/harmonicParams5g&gt;
+
+      &lt;intermodParams2g&gt;
+        &lt;N&gt;-2&lt;/N&gt;
+        &lt;M&gt;1&lt;/M&gt;
+        &lt;overlap&gt;75&lt;/overlap&gt;
+      &lt;/intermodParams2g&gt;
+
+      &lt;intermodParams5g&gt;
+        &lt;N&gt;-2&lt;/N&gt;
+        &lt;M&gt;1&lt;/M&gt;
+        &lt;overlap&gt;75&lt;/overlap&gt;
+      &lt;/intermodParams5g&gt;
+
+      &lt;defaultChannels&gt;
+        &lt;default2g&gt;6&lt;/default2g&gt;
+        &lt;default5g&gt;36&lt;/default5g&gt;
+      &lt;/defaultChannels&gt;
+    &lt;/params&gt;
+  &lt;/entry&gt;
+  &lt;!-- Entry using the override list --&gt;
+  &lt;entry&gt;
+    &lt;rat&gt;LTE&lt;/rat&gt;
+    &lt;band&gt;41&lt;/band&gt;
+    &lt;powerCapDbm&gt;50&lt;/powerCapDbm&gt;
+    &lt;override&gt;
+      &lt;override2g&gt;
+        &lt;channel&gt;6&lt;/channel&gt;
+        &lt;channel&gt;11&lt;/channel&gt;
+        ...
+      &lt;/override2g&gt;
+      &lt;override5g&gt;
+        &lt;category&gt;40Mhz&lt;/category&gt;
+        &lt;channel&gt;34&lt;/channel&gt;
+        ...
+      &lt;/override5g&gt;
+    &lt;/override&gt;
+  &lt;/entry&gt;
+&lt;/table&gt;
+</pre> <h3 id="ca">Carrier aggregation</h3> <p>For Carrier Aggregation (CA), the harmonic or intermodulation ranges for each uplink or downlink might not produce enough overlap to cause interference independently, but might produce enough overlap when combined. The algorithm considers each harmonic or intermodulation range independently and takes the union of the returned unsafe channels. For the intermodulation case, this means assessing the intermodulation range of every UL onto every DL.</p> <p>The algorithm makes no distinction between PCELL, PSCELL, or SCELL and treats them as equal.</p> <h3 id="laa">License Assisted Access</h3> <p>License Assisted Access (LAA) is identified as band #46. The algorithm treats this band similar to other bands. In this case, the full 5 Ghz channels can be set as an override list in the lookup table.</p> <p>Depending on carrier requirements, the channel avoidance algorithm sets mandatory restrictions on SoftAP and Wi-Fi Direct (P2P) for the entire 5 GHz Wi-Fi band. For the algorithm to handle this use case, the carrier config value <code translate="no" dir="ltr">restrict_5g_softap_wifi_direct_for_laa</code> must be defined. If the cell channel is on LAA and <code translate="no" dir="ltr">restrict_5g_softap_wifi_direct_for_laa</code> is <code translate="no" dir="ltr">true</code>, the algorithm returns the set of unsafe channels with the entire 5 GHz band and sets the mandatory restriction flags for SoftAP and Wi-Fi Direct (P2P).</p> <h2 id="inform-wifi">Inform Wi-Fi service</h2> <p>After the coex channel algorithm has calculated the unsafe channels, to provide your system apps with the unsafe channels and their restrictions, use the following @SystemApi data structure defined in the Android framework.</p> 
+<pre>public final class CoexUnsafeChannel {
+  public static final int POWER_CAP_NONE
+  public @WifiAnnotations.WifiBandBasic int getBand();
+  public int getChannel();
+  // Returns the specified power cap in dBm, or POWER_CAP_NONE if not specified.
+  public int getPowerCapDbm();
+}
+</pre> <p>Use the following <code translate="no" dir="ltr">WifiManager</code> @SystemApi methods and callback to enable the apps to get updated values when the unsafe channels change.</p> 
+<pre>public static final int COEX_RESTRICTION_WIFI_DIRECT;
+public static final int COEX_RESTRICTION_SOFTAP;
+public static final int COEX_RESTRICTION_WIFI_AWARE;
+
+// Register a CoexCallback to listen on onCoexUnsafeChannelsChanged callbacks. The callback will be called whenever the unsafe channels change, as well as immediately after registering to get the current values.
+public void registerCoexCallback(Executor executor, CoexCallback callback);
+public void unregisterCoexCallback(CoexCallback callback);
+
+public abstract static class CoexCallback {
+  //Gets called whenever getCoexUnsafeChannels()/getCoexRestrictions() have updated values
+  public void onCoexUnsafeChannelsChanged(List&lt;CoexUnsafeChannel&gt; unsafeChannels,
+      int restrictions);
+}
+</pre> <h2 id="wifi-action">Perform Wi-Fi action</h2> <p>When the Wi-Fi service receives information about the set of unsafe channels, it performs the appropriate action to avoid those channels. This section describes the behavior of the Wi-Fi service in different scenarios.</p> <h3 id="inform-driver">Inform the driver</h3> <p>Because the driver has a major role in performing channel avoidance, it's essential to convey the unsafe channels to the driver and firmware. To do this, use the following <code translate="no" dir="ltr">IWifiChip</code> HAL API.</p> <p>For AIDL:</p> 
+<pre>void setCoexUnsafeChannels(in CoexUnsafeChannel[] unsafeChannels,
+    in int restrictions)
+</pre> <p>For HIDL (1.5 or higher):</p> 
+<pre>setCoexUnsafeChannels(vec&lt;CoexUnsafeChannel&gt; unsafeChannels,
+  bitfield&lt;IfaceType&gt; restrictions);
+</pre> <h3 id="softap">SoftAP</h3> <p>SoftAP is the main use case for unsafe channel avoidance. The following section outlines the key SoftAp scenarios where channel avoidance can be applied with ACS. The scenarios describe the behavior of the channel avoidance algorithm and the driver or firmware.</p> <h4 id="start_softap_with_acs_enabled_no_softap_is_up_yet">Start SoftAP with ACS enabled (no SoftAP is up yet)</h4> <ol> <li>
+<p>If channels are unsafe and there is a SoftAP restriction:</p> <ol> <li>The framework removes unsafe channels from the ACS list.</li> <li>If the list is empty, the framework stops SoftAP.</li> </ol>
+</li> <li>
+<p>If channels are unsafe and there are no restrictions:</p> <ol> <li>The vendor driver or firmware gives priority to the safe channels over the unsafe channels.</li> </ol>
+</li> </ol> <h4 id="softap_is_up_with_acs_enabled_and_unsafe_channels_are_updated">SoftAP is up with ACS enabled and unsafe channels are updated</h4> <ol> <li>
+<p>If the SoftAP channel is unsafe and there is a SoftAP restriction:</p> <ol> <li>The framework updates the ACS list by removing the unsafe channels.</li> <li>If the list is empty, the framework closes SoftAP.</li> </ol>
+</li> <li>
+<p>If the SoftAP channel is unsafe and there are no restrictions:</p> <ol> <li>No action is taken by the framework. The vendor driver or firmware handles avoiding the unsafe channels or applying the power cap if avoidance isn't feasible.</li> </ol>
+</li> </ol> <h3 id="wifi-direct">Wi-Fi Direct (P2P)</h3> <ol> <li>
+<p>If there are unsafe channels with Wi-Fi Direct (P2P) restrictions:</p> <ol> <li>The framework requests <code translate="no" dir="ltr">wpa_supplicant</code> to avoid the unsafe channels using the HAL method <code translate="no" dir="ltr">ISupplicantP2pIface::setDisallowedFrequencies()</code>.</li> </ol>
+</li> <li>
+<p>If there are unsafe channels without restrictions:</p> <ol> <li>The vendor driver or firmware applies the power cap if an unsafe channel without Wi-Fi Direct (P2P) restriction is used.</li> </ol>
+</li> </ol> <h3 id="wifi-aware">Wi-Fi Aware (NAN)</h3> <p>The framework is not involved in channel selection for Wi-Fi Aware (NAN) and no framework action is taken. The vendor driver or firmware is responsible for Wi-Fi Aware (NAN) channel avoidance.</p> <h2 id="disable">Disable the algorithm</h2> <p>If you want to disable the default algorithm implementation and pass your own list of unsafe channels for avoidance, configure the overlay <code translate="no" dir="ltr">config_wifiDefaultCoexAlgorithmEnabled</code>. If the overlay is set to <code translate="no" dir="ltr">false</code>, the default algorithm is disabled. You can then use your own out-of-band proprietary algorithm to generate a list of unsafe channels to plumb to the framework using the following system API.</p> 
+<pre>public void setCoexUnsafeChannels(Set&lt;CoexUnsafeChannel&gt; coexUnsafeChannels,
+  int coexRestrictions);
+</pre> <h2 id="validate">Validate the implementation</h2> <p>To validate your implementation of the Wi-Fi and cellular coex channel avoidance feature, use the following tests.</p> <h3 id="cts">CTS tests</h3> <ul> <li>
+<code translate="no" dir="ltr">WifiManagerTest.java</code> <ul> <li><code translate="no" dir="ltr">testCoexMethodsShouldFailNoPermission()</code></li> <li><code translate="no" dir="ltr">testListenOnCoexUnsafeChannels()</code></li> </ul>
+</li> </ul> <h3 id="acts">ACTS tests</h3> <ul> <li>
+<code translate="no" dir="ltr">WifiManagerTest.py</code> <ul> <li><code translate="no" dir="ltr">test_set_get_coex_unsafe_channels()</code></li> </ul>
+</li> </ul> <h3 id="vts">VTS tests</h3> <ul> <li>If AIDL is implemented: <code translate="no" dir="ltr">wifi_chip_aidl_test.cpp</code> <ul> <li><code translate="no" dir="ltr">TEST_P(WifiChipAidlTest, SetCoexUnsafeChannels)</code></li> </ul>
+</li> <li>If HIDL is implemented: <code translate="no" dir="ltr">wifi_chip_hidl_test.cpp</code> <ul> <li><code translate="no" dir="ltr">TEST_P(WifiChipHidlTest, setCoexUnsafeChannels)</code></li> </ul>
+</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/connect/wifi-coex-channel-avoidance" class="_attribution-link">https://source.android.com/docs/core/connect/wifi-coex-channel-avoidance</a>
+  </p>
+</div>

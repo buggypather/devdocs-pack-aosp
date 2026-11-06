@@ -1,0 +1,55 @@
+<h1>Download the Android source</h1>  <p>The Android source is located in a collection of Git repositories hosted by Google. The Git repository includes the entire history of the Android source, including changes to the source and when the changes were made. This page describes how to download the source.</p> <aside class="note"><strong>Note:</strong><span> All commands on this page are preceded by a dollar sign ($) to differentiate them from output or entries within files. To omit the dollar sign when copying the command, click the <strong>Copy code sample</strong> icon in the top right of each command box.</span></aside><aside class="note"><strong>Note:</strong><span> To obtain the source code for third-party components where the open source license grants you the right to receive the source, see <a href="https://source.android.com/opensourcerequest">Obtain Android source</a>.</span></aside> <h2 id="initialize_the_repo_client">Initialize the Repo client</h2> <p>Set up your client to access the Android source repository:</p> <ol> <li>
+<p>Create and navigate to a working directory:</p> 
+<pre>mkdir WORKING_DIRECTORY
+cd WORKING_DIRECTORY</pre>
+<aside class="note"><strong>Note:</strong><span> You can have more than one version of Android on your development machine as long as they exist in separate directories. Android checkouts can be very large. Verify you have enough disk space for one or more copies of the source code.</span></aside>
+</li> <li>
+<p>Initialize your working directory for source control:</p> 
+<pre>repo init --partial-clone --no-use-superproject -b android-latest-release -u https://android.googlesource.com/platform/manifest</pre> <p>The <code translate="no" dir="ltr">-b</code> option is used to identify the branch you're initializing. For a list of branches and tag names, see <a href="https://source.android.com/docs/setup/reference/build-numbers#source-code-tags-and-builds">Source code tags and builds</a>. Use tag names or branch names with the <code translate="no" dir="ltr">-b</code> option.</p> <aside class="note"><strong>Note:</strong><span> These instructions assume you're working in the <code translate="no" dir="ltr">android-latest-release</code> branch. If you want to make changes in a different branch, you must initialize your Repo client and download source for that branch.</span></aside> <p>The <code translate="no" dir="ltr">-u</code> option is required and is used to specify a <em>manifest</em> file, which is an XML file specifying where the various Git projects in the Android source are placed within your working directory. In this example, the name of the manifest file isn't specified, so the command uses the default manifest file (<code translate="no" dir="ltr">default.xml</code>).</p> <p>The output should contain the message:</p> 
+<pre>repo has been initialized in path_to_working_directory</pre>
+</li> </ol> <p>For information on manifest file format, see <a href="https://gerrit.googlesource.com/git-repo/+/main/docs/manifest-format.md">repo Manifest Format</a>.</p> <p>For a list of all Repo commands, see the <a href="https://source.android.com/docs/setup/reference/repo">Repo command reference</a>.</p> <h2 id="download_the_android_source_2">Download the Android source</h2> <p>Run the following command to download the Android source tree to your working directory:</p> 
+<pre>repo sync -c -j8</pre> <p>The <code translate="no" dir="ltr">-c</code> argument instructs Repo to fetch the current manifest branch from the server. The <code translate="no" dir="ltr">-j8</code> command splits the sync across threads for faster completion.</p> <p>This operation should take a little over an hour.</p> <p>If you run into any problems during download, refer to <a href="download/troubleshoot-sync">Troubleshoot and fix sync issues</a>.</p> <h2 id="downloading-proprietary-binaries">Download proprietary binaries</h2> <p>AOSP can run on Cuttlefish emulators directly, but AOSP can't be used on hardware without additional device-specific proprietary libraries. Here's how to obtain those device binaries:</p> <ul> <li>If you're downloading the <code translate="no" dir="ltr">main</code> branch and building for a Nexus or Pixel device, download the latest binaries from the <a href="https://developers.google.com/android/blobs-preview">Binaries preview site</a>.</li> <li>If you're downloading and building the <code translate="no" dir="ltr">main</code> branch and building for your own device, you must provide your device-specific binaries.</li> <li>If you're downloading and building a tagged, non-main, branch and building for a Nexus or Pixel device, download the device-specific binary from <a href="https://developers.google.com/android/drivers">Driver Binaries for Nexus and Pixel devices</a>.</li> </ul> <h3 id="extracting-proprietary-binaries">Extract proprietary binaries</h3> <p>Each set of binaries comes as a self-extracting script in a compressed archive. To extract and place these binaries in the correct location of your source tree:</p> <ol> <li>Extract the archive.</li> <li>Run the included self-extracting shell script from the root of your AOSP source tree.</li> <li>Agree to the terms of the enclosed license agreement. The binaries and their matching makefiles are installed in the <code translate="no" dir="ltr">vendor/</code> hierarchy of the source tree.</li> </ol> <h2 id="verifying-git-tags">(optional) Verify code legitimacy</h2> <p>If you're concerned about the legitimacy of the source code, such as whether it came from Google, you can verify the Git tags for the branch.</p> <p>To verify Git tags:</p> <ol> <li>
+<p>Copy and paste the following key block into a text file, such as <code translate="no" dir="ltr">keyfile.asc</code>.</p> 
+<pre>-----BEGIN PGP PUBLIC KEY BLOCK-----
+Version: GnuPG v1.4.2.2 (GNU/Linux)
+
+mQGiBEnnWD4RBACt9/h4v9xnnGDou13y3dvOx6/t43LPPIxeJ8eX9WB+8LLuROSV
+lFhpHawsVAcFlmi7f7jdSRF+OvtZL9ShPKdLfwBJMNkU66/TZmPewS4m782ndtw7
+8tR1cXb197Ob8kOfQB3A9yk2XZ4ei4ZC3i6wVdqHLRxABdncwu5hOF9KXwCgkxMD
+u4PVgChaAJzTYJ1EG+UYBIUEAJmfearb0qRAN7dEoff0FeXsEaUA6U90sEoVks0Z
+wNj96SA8BL+a1OoEUUfpMhiHyLuQSftxisJxTh+2QclzDviDyaTrkANjdYY7p2cq
+/HMdOY7LJlHaqtXmZxXjjtw5Uc2QG8UY8aziU3IE9nTjSwCXeJnuyvoizl9/I1S5
+jU5SA/9WwIps4SC84ielIXiGWEqq6i6/sk4I9q1YemZF2XVVKnmI1F4iCMtNKsR4
+MGSa1gA8s4iQbsKNWPgp7M3a51JCVCu6l/8zTpA+uUGapw4tWCp4o0dpIvDPBEa9
+b/aF/ygcR8mh5hgUfpF9IpXdknOsbKCvM9lSSfRciETykZc4wrRCVGhlIEFuZHJv
+aWQgT3BlbiBTb3VyY2UgUHJvamVjdCA8aW5pdGlhbC1jb250cmlidXRpb25AYW5k
+cm9pZC5jb20+iGAEExECACAFAknnWD4CGwMGCwkIBwMCBBUCCAMEFgIDAQIeAQIX
+gAAKCRDorT+BmrEOeNr+AJ42Xy6tEW7r3KzrJxnRX8mij9z8tgCdFfQYiHpYngkI
+2t09Ed+9Bm4gmEO5Ag0ESedYRBAIAKVW1JcMBWvV/0Bo9WiByJ9WJ5swMN36/vAl
+QN4mWRhfzDOk/Rosdb0csAO/l8Kz0gKQPOfObtyYjvI8JMC3rmi+LIvSUT9806Up
+hisyEmmHv6U8gUb/xHLIanXGxwhYzjgeuAXVCsv+EvoPIHbY4L/KvP5x+oCJIDbk
+C2b1TvVk9PryzmE4BPIQL/NtgR1oLWm/uWR9zRUFtBnE411aMAN3qnAHBBMZzKMX
+LWBGWE0znfRrnczI5p49i2YZJAjyX1P2WzmScK49CV82dzLo71MnrF6fj+Udtb5+
+OgTg7Cow+8PRaTkJEW5Y2JIZpnRUq0CYxAmHYX79EMKHDSThf/8AAwUIAJPWsB/M
+pK+KMs/s3r6nJrnYLTfdZhtmQXimpoDMJg1zxmL8UfNUKiQZ6esoAWtDgpqt7Y7s
+KZ8laHRARonte394hidZzM5nb6hQvpPjt2OlPRsyqVxw4c/KsjADtAuKW9/d8phb
+N8bTyOJo856qg4oOEzKG9eeF7oaZTYBy33BTL0408sEBxiMior6b8LrZrAhkqDjA
+vUXRwm/fFKgpsOysxC6xi553CxBUCH2omNV6Ka1LNMwzSp9ILz8jEGqmUtkBszwo
+G1S8fXgE0Lq3cdDM/GJ4QXP/p6LiwNF99faDMTV3+2SAOGvytOX6KjKVzKOSsfJQ
+hN0DlsIw8hqJc0WISQQYEQIACQUCSedYRAIbDAAKCRDorT+BmrEOeCUOAJ9qmR0l
+EXzeoxcdoafxqf6gZlJZlACgkWF7wi2YLW3Oa+jv2QSTlrx4KLM=
+=Wi5D
+-----END PGP PUBLIC KEY BLOCK-----
+</pre>
+</li> <li>
+<p>Run the following command to input a public key into your GnuPG key database. The key is used to sign annotated tags that represent releases.</p> 
+<pre>gpg --import keyfile.asc</pre>
+</li> <li>
+<p>After importing the keys, you can verify any tag by running this command:</p> 
+<pre>git tag -v TAG_NAME</pre>
+</li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/setup/downloading" class="_attribution-link">https://source.android.com/docs/setup/downloading</a>
+  </p>
+</div>

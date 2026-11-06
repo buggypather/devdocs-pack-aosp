@@ -1,0 +1,233 @@
+<h1>Dynamic System Updates</h1>  <p>Dynamic System Updates (DSU) allows you to make an Android system image that users can download from the internet and try out without the risk of corrupting the current system image. This document describes how to support DSU.</p> <h2 id="kernel-requirements">Kernel requirements</h2> <p>See <a href="dynamic_partitions/implement">Implementing Dynamic Partitions</a> for kernel requirements.</p> <p>In addition, DSU relies on the device-mapper-verity (dm-verity) kernel feature to verify the Android system image. So you must enable the following kernel configs:</p> <ul> <li><code translate="no" dir="ltr">CONFIG_DM_VERITY=y</code></li> <li><code translate="no" dir="ltr">CONFIG_DM_VERITY_FEC=y</code></li> </ul> <h2 id="partition-requirements">Partition requirements</h2> <p>Starting in Android 11, DSU requires the <code translate="no" dir="ltr">/data</code> partition to use the F2FS or ext4 file system. F2FS gives better performance and is recommended, but the difference should be insignificant.</p> <p>Here are some examples of how long a dynamic system update takes with a Pixel device:</p> <ul> <li>Using F2FS: <ul> <li>109s, 8G user, 867M system, file system type: F2FS: encryption=aes-256-xts:aes-256-cts</li> <li>104s, 8G user, 867M system, file system type: F2FS: encryption=ice</li> </ul>
+</li> <li>Using ext4: <ul> <li>135s, 8G user, 867M system, file system type: ext4: encryption=aes-256-xts:aes-256-cts</li> </ul>
+</li> </ul> <p>If it takes much longer on your platform, you may want to check if the mount flag contains any flag that makes “sync” write, or you can specify an “async” flag explicitly to get better performance.</p> <p>The <code translate="no" dir="ltr">metadata</code> partition (16 MB or larger) is required for storing data related to the installed images. It must be mounted during first stage mount.</p> <p>The <code translate="no" dir="ltr">userdata</code> partition must use F2FS or ext4 file system. When using F2FS, include all F2FS related patches available in the <a href="../architecture/kernel/android-common">Android common kernel</a>.</p> <p>DSU was developed and tested with kernel/common 4.9. It's recommended to use kernel 4.9 and higher for this feature.</p> <h2 id="vendor-hal-behavior">Vendor HAL behavior</h2> <h3 id="weaver-hal">Weaver HAL</h3> <p>The <a href="../../security/features/authentication/weaver">Weaver HAL</a> provides a fixed number of slots for storing user keys. The DSU consumes two extra key slots. If an OEM has a Weaver HAL, it needs to have enough slots for a generic system image (GSI) and a host image.</p> <h3 id="gatekeeper-hal">Gatekeeper HAL</h3> <p>The <a href="../../security/features/authentication/gatekeeper">Gatekeeper HAL</a> needs to support large <code translate="no" dir="ltr">USER_ID</code> values, because the GSI offsets UIDs to the HAL by +1000000.</p> <h2 id="verify_boot">Verify boot</h2> <p>If you want to support booting <a href="https://developer.android.com/topic/generic-system-image/releases">Developer GSI Images</a> in <a href="../../security/features/verifiedboot/device-state">LOCKED state</a> without disabling verified boot, include Developer GSI keys by adding the following line to the file <code translate="no" dir="ltr">device/&lt;device_name&gt;/device.mk</code>:</p> 
+<pre>$(call inherit-product, $(SRC_TARGET_DIR)/product/developer_gsi_keys.mk)
+</pre> <h3 id="rollback_protection">Rollback protection</h3> <p>When using DSU, the downloaded Android system image must be newer than the current system image on the device. This is done by comparing the security patch levels in the <a href="https://android.googlesource.com/platform/external/avb/">Android Verified Boot</a> (AVB) <a href="https://android-review.googlesource.com/c/platform/build/+/909173">AVB property descriptor</a> of both system images: <code translate="no" dir="ltr">Prop: com.android.build.system.security_patch -&gt;
+'2019-04-05'</code>.</p> <p>For devices not using AVB, put the security patch level of the current system image into the kernel cmdline or bootconfig with the bootloader: <code translate="no" dir="ltr">androidboot.system.security_patch=2019-04-05</code>.</p> <h2 id="hardware-requirements">Hardware requirements</h2> <p>When you launch a DSU instance, two temporary files are allocated:</p> <ul> <li>A logical partition to store <code translate="no" dir="ltr">GSI.img</code> (1~1.5 G)</li> <li>An 8 GB empty <code translate="no" dir="ltr">/data</code> partition as the sandbox for running the GSI</li> </ul> <p>We recommend reserving at least 10 GB of free space before launching a DSU instance. DSU also supports allocation from an SD card. When an SD card is present, it has the highest priority for the allocation. SD card support is critical for lower-powered devices that might not have enough internal storage. When an SD card is present, make sure it's not adopted. DSU doesn't support <a href="../storage/adoptable">adopted SD cards</a>.</p> <h2 id="available-frontends">Available frontends</h2> <p>You can launch DSU using <code translate="no" dir="ltr">adb</code>, an OEM app, or the one-click DSU loader (in Android 11 or higher).</p> <h3 id="launching-dsu-using-adb">Launch DSU using adb</h3> <p>To launch DSU using adb, enter these commands:</p> 
+<pre>$ simg2img out/target/product/.../system.img system.raw
+$ gzip -c system.raw &gt; system.raw.gz
+$ adb push system.raw.gz /storage/emulated/0/Download
+$ adb shell am start-activity \
+-n com.android.dynsystem/com.android.dynsystem.VerificationActivity  \
+-a android.os.image.action.START_INSTALL    \
+-d file:///storage/emulated/0/Download/system.raw.gz  \
+--el KEY_SYSTEM_SIZE $(du -b system.raw|cut -f1)  \
+--el KEY_USERDATA_SIZE 8589934592
+</pre> <h3 id="launching-dsu-using-app">Launch DSU using an app</h3> <p>The main entry point to DSU is the <code translate="no" dir="ltr">android.os.image.DynamicSystemClient.java</code> API:</p> 
+<pre>public class DynamicSystemClient {
+
+
+...
+...
+
+     /**
+     * Start installing DynamicSystem from URL with default userdata size.
+     *
+     * @param systemUrl A network URL or a file URL to system image.
+     * @param systemSize size of system image.
+     */
+    public void start(String systemUrl, long systemSize) {
+        start(systemUrl, systemSize, DEFAULT_USERDATA_SIZE);
+    }
+</pre> <p>You must bundle/preinstall this app on the device. Because <code translate="no" dir="ltr">DynamicSystemClient</code> is a system API, you can't build the app with the regular SDK API and you can't publish it on Google Play. The purpose of this app is:</p> <ol> <li>Fetch an image list and the corresponding URL with a vendor-defined scheme.</li> <li>Match the images in the list against the device and show compatible images for the user to select.</li> <li>
+<p>Invoke <code translate="no" dir="ltr">DynamicSystemClient.start</code> like this:</p> 
+<pre>DynamicSystemClient aot = new DynamicSystemClient(...)
+   aot.start(
+        ...URL of the selected image...,
+        ...uncompressed size of the selected image...);
+
+</pre>
+</li> </ol> <p>The URL points to a gzipped, non-sparse, system image file, which you can make with the following commands:</p> 
+<pre>$ simg2img ${OUT}/system.img ${OUT}/system.raw
+$ gzip ${OUT}/system.raw
+$ ls ${OUT}/system.raw.gz
+</pre> <p>The filename should follow this format:</p> 
+<pre>&lt;android version&gt;.&lt;lunch name&gt;.&lt;user defined title&gt;.raw.gz
+</pre> <p>Examples:</p> <ul> <li><code translate="no" dir="ltr">o.aosp_taimen-userdebug.2018dev.raw.gz</code></li> <li><code translate="no" dir="ltr">p.aosp_taimen-userdebug.2018dev.raw.gz</code></li> </ul> <h3 id="one-click-dsu-loader">One-click DSU loader</h3> <p>Android 11 introduces the one-click DSU loader, which is a frontend in the developer settings.</p> <p><img src="https://source.android.com/static/docs/core/ota/images/launch-dsu-loader.png" alt="Launching the DSU loader" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> Launching the DSU loader</p> <p>When the developer clicks the <strong>DSU Loader</strong> button, it fetches a pre-configured DSU JSON descriptor from the web and displays all applicable images in the floating menu. Select an image to start the DSU installation, and the progress shows on the notification bar.</p> <p><img src="https://source.android.com/static/docs/core/ota/images/install-dsu-image.png" alt="DSU image installation progress" class="android-image-dark-theme-background"> </p> <p><strong>Figure 2.</strong> DSU image installation progress</p> <p>By default, the DSU loader loads a JSON descriptor that contains the GSI images. The following sections demonstrate how to make OEM-signed DSU packages and load them from the DSU loader.</p> <h2 id="feature-flag">Feature flag</h2> <p>The DSU feature is under the <code translate="no" dir="ltr">settings_dynamic_android</code> feature flag. Before using DSU, make sure the corresponding feature flag is enabled.</p> <p><img src="https://source.android.com/static/docs/core/ota/images/aot-settings.png" alt="Enabling the feature flag." class="android-image-dark-theme-background"> </p> <p><strong>Figure 3.</strong> Enabling the feature flag</p> <p>The feature flag UI might be unavailable on a device running a user build. In this case, use the <code translate="no" dir="ltr">adb</code> command instead:</p> 
+<pre>$ adb shell setprop persist.sys.fflag.override.settings_dynamic_system 1
+</pre> <h2 id="vendor-host-system-images-on-GCE">Vendor host system images on GCE (optional)</h2> <p>One of the possible storage locations for the system images is the Google Compute Engine (GCE) bucket. The release administrator uses the <a href="https://console.cloud.google.com/storage">GCP storage console</a> to add/delete/change the released system image.</p> <p>The images must be public access, as shown here:</p> <p><img src="https://source.android.com/static/docs/core/ota/images/aot-image-access.png" alt="Public access in GCE" class="android-image-dark-theme-background"> </p> <p><strong>Figure 4.</strong> Public access in GCE</p> <p>The procedure to make an item public is available in the <a href="https://cloud.google.com/storage/docs/access-control/making-data-public">Google Cloud documentation</a>.</p> <h2 id="multiple-partition-dsu">Multiple-partition DSU in ZIP file</h2> <p>Starting in Android 11, DSU can have more than one partition. For example, it can contain a <code translate="no" dir="ltr">product.img</code> in addition to the <code translate="no" dir="ltr">system.img</code>. When the device boots, the first stage <code translate="no" dir="ltr">init</code> detects the installed DSU partitions and replaces the on-device partition temporarily, when the installed DSU is enabled. The DSU package may contain a partition that doesn't have a corresponding partition on the device.</p> <p><img src="https://source.android.com/static/docs/core/ota/images/dsu-multiple-partitions.png" alt="DSU process with multiple partitions" class="android-image-dark-theme-background"> </p> <p><strong>Figure 5.</strong> DSU process with multiple partitions</p> <h2 id="oem-signed-dsu">OEM-signed DSU</h2> <p>To make sure all images running on the device are authorized by the device manufacturer, all images within a DSU package must be signed. For example, assume there’s a DSU package that contains two partition images like below:</p> 
+<pre>dsu.zip {
+    - system.img
+    - product.img
+}
+</pre> <p>Both <code translate="no" dir="ltr">system.img</code> and <code translate="no" dir="ltr">product.img</code> must be signed by the OEM key before they are put into the ZIP file. The common practice is to use an asymmetric algorithm, for example, RSA, where the secret key is used to sign the package and the public key is used to verify it. The first stage ramdisk must include the paring public key, for example, <code translate="no" dir="ltr">/avb/*.avbpubkey</code>. If the device already adopted AVB, the existing signing procedure will suffice. The following sections illustrate the signing process and highlight the placement of the AVB pubkey that is used to verify the images in the DSU package.</p> <h2 id="dsu-json-descriptor">DSU JSON descriptor</h2> <p>The DSU JSON descriptor describes DSU packages. It supports two primitives. First, the <code translate="no" dir="ltr">include</code> primitive includes additional JSON descriptors or redirects the DSU loader to a new location. For example:</p> 
+<pre>{
+    "include": ["https://.../gsi-release/gsi-src.json"]
+}
+</pre> <p>Second, the <code translate="no" dir="ltr">image</code> primitive is used to describe released DSU packages. Inside the image primitive there are several attributes:</p> <ul> <li><p>The <code translate="no" dir="ltr">name</code> and <code translate="no" dir="ltr">details</code> attributes are strings that are shown on the dialog for the user to select.</p></li> <li><p>The <code translate="no" dir="ltr">cpu_api</code>, <code translate="no" dir="ltr">vndk</code>, and <code translate="no" dir="ltr">os_version</code> attributes are used for compatibility checks, which are described in the next section.</p></li> <li><p>The optional <code translate="no" dir="ltr">pubkey</code> attribute describes the public key that pairs with the secret key that's used to sign the DSU package. When it’s specified, the DSU service can check if the device has the key used to verify the DSU package. This avoids installing an unrecognized DSU package, for example installing a DSU signed by OEM-A to a device made by OEM-B.</p></li> <li>
+<p>The optional <code translate="no" dir="ltr">tos</code> attribute points to a text file that describes the terms of service for the corresponding DSU package. When a developer selects a DSU package with the terms of service attribute specified, the dialog box shown in Figure 6 opens, asking the developer to accept the terms of service before installing the DSU package.</p> <p><img src="https://source.android.com/static/docs/core/ota/images/dsu-tos.png" alt="Terms of service dialog box" class="android-image-dark-theme-background"> </p> <p><strong>Figure 6.</strong> Terms of service dialog box</p>
+</li> </ul> <p>For reference, here's a DSU JSON descriptor for the GSI:</p> 
+<pre>{
+   "images":[
+      {
+         "name":"GSI+GMS x86",
+         "os_version":"10",
+         "cpu_abi": "x86",
+         "details":"exp-QP1A.190711.020.C4-5928301",
+         "vndk":[
+            27,
+            28,
+            29
+         ],
+         "pubkey":"",
+         "tos": "https://dl.google.com/developers/android/gsi/gsi-tos.txt",
+         "uri":"https://.../gsi/gsi_gms_x86-exp-QP1A.190711.020.C4-5928301.zip"
+      },
+      {
+         "name":"GSI+GMS ARM64",
+         "os_version":"10",
+         "cpu_abi": "arm64-v8a",
+         "details":"exp-QP1A.190711.020.C4-5928301",
+         "vndk":[
+            27,
+            28,
+            29
+         ],
+         "pubkey":"",
+         "tos": "https://dl.google.com/developers/android/gsi/gsi-tos.txt",
+         "uri":"https://.../gsi/gsi_gms_arm64-exp-QP1A.190711.020.C4-5928301.zip"
+      },
+      {
+         "name":"GSI ARM64",
+         "os_version":"10",
+         "cpu_abi": "arm64-v8a",
+         "details":"exp-QP1A.190711.020.C4-5928301",
+         "vndk":[
+            27,
+            28,
+            29
+         ],
+         "pubkey":"",
+         "uri":"https://.../gsi/aosp_arm64-exp-QP1A.190711.020.C4-5928301.zip"
+      },
+      {
+         "name":"GSI x86_64",
+         "os_version":"10",
+         "cpu_abi": "x86_64",
+         "details":"exp-QP1A.190711.020.C4-5928301",
+         "vndk":[
+            27,
+            28,
+            29
+         ],
+         "pubkey":"",
+         "uri":"https://.../gsi/aosp_x86_64-exp-QP1A.190711.020.C4-5928301.zip"
+      }
+   ]
+}
+</pre> <h2 id="compatibility-management">Compatibility management</h2> <p>Several attributes are used to specify the compatibility between a DSU package and the local device:</p> <ul> <li><p><code translate="no" dir="ltr">cpu_api</code> is a string that describes the device architecture. This attribute is mandatory and is compared with the <code translate="no" dir="ltr">ro.product.cpu.abi</code> system property. Their values must match exactly.</p></li> <li><p><code translate="no" dir="ltr">os_version</code> is an optional integer that specifies an Android release. For example, for Android 10, <code translate="no" dir="ltr">os_version</code> is <code translate="no" dir="ltr">10</code> and for Android 11, <code translate="no" dir="ltr">os_version</code> is <code translate="no" dir="ltr">11</code>. When this attribute is specified, it must be equal to or greater than the <code translate="no" dir="ltr">ro.system.build.version.release</code> system property. This check is used to prevent booting an Android 10 GSI image on an Android 11 vendor device, which is currently not supported. Booting an Android 11 GSI image on an Android 10 device is allowed.</p></li> <li><p><code translate="no" dir="ltr">vndk</code> is an optional array that specifies all VNDKs that are included in the DSU package. When it's specified, the DSU loader checks if the number extracted from the <code translate="no" dir="ltr">ro.vndk.version</code> system property is included.</p></li> </ul> <h2 id="revoking-dsu-keys-for-security">Revoke DSU keys for security</h2> <p>In the extremely rare case when the RSA key pair used to sign the DSU images is compromised, the ramdisk should be updated as soon as possible to remove the compromised key. In addition to updating the boot partition, you can block compromised keys using a DSU key revocation list (key blacklist) from an HTTPS URL.</p> <p>The DSU key revocation list contains a list of revoked AVB public keys. During DSU installation, the public keys inside the DSU images are validated with the revocation list. If the images are found to contain a revoked public key, the DSU installation process stops.</p> <p>The key revocation list URL should be a HTTPS URL to ensure the security strength, and is specified in a resource string:</p> 
+<pre>frameworks/base/packages/DynamicSystemInstallationService/res/values/strings.xml@key_revocation_list_url
+</pre> <p>The string's value is <code translate="no" dir="ltr">https://dl.google.com/developers/android/gsi/gsi-keyblacklist.json</code>, which is a revocation list for Google-released GSI keys. This resource string can be overlaid and customized, so that OEMs who adopt the DSU feature can provide and maintain their own key blacklist. This provides a way for the OEM to block certain public keys without updating the device's ramdisk image.</p> <p>The format of the revocation list is:</p> 
+<pre>{
+   "entries":[
+      {
+         "public_key":"bf14e439d1acf231095c4109f94f00fc473148e6",
+         "status":"REVOKED",
+         "reason":"Key revocation test key"
+      },
+      {
+         "public_key":"d199b2f29f3dc224cca778a7544ea89470cbef46",
+         "status":"REVOKED",
+         "reason":"Key revocation test key"
+      }
+   ]
+}
+</pre> <ul> <li>
+<code translate="no" dir="ltr">public_key</code> is the SHA-1 digest of the revoked key, in the format described in the <a href="#generating-avb-pubkey-attribute-in-json-descriptor">generating the AVB pubkey</a> section.</li> <li>
+<code translate="no" dir="ltr">status</code> indicates the revocation status of the key. Currently, the only supported value is <code translate="no" dir="ltr">REVOKED</code>.</li> <li>
+<code translate="no" dir="ltr">reason</code> is an optional string describing the reason for revocation.</li> </ul> <h2 id="dsu-procedures">DSU procedures</h2> <p>This section describes how to perform several DSU configuration procedures.</p> <h3 id="generating-new-key-pair">Generate a new key pair</h3> <p>Use the <code translate="no" dir="ltr">openssl</code> command to generate an RSA private/public key pair in <code translate="no" dir="ltr">.pem</code> format (for example, with size 2048 bit):</p> 
+<pre>$ openssl genrsa -out oem_cert_pri.pem 2048
+$ openssl rsa -in oem_cert_pri.pem -pubout -out oem_cert_pub.pem
+</pre> <p>The private key might not be accessible and is only kept in a <a href="https://en.wikipedia.org/wiki/Hardware_security_module">hardware security module (HSM)</a>. In this case, there might be a x509 public key certificate available after key generation. See the <a href="#adding-pairing-pubkey-to-ramdisk">Adding the pairing pubkey to the ramdisk</a> section for instructions to generate the AVB public key from a x509 certificate.</p> <p>To convert an x509 certificate to PEM format:</p> 
+<pre>$ openssl x509 -pubkey -noout -in oem_cert_pub.x509.pem &gt; oem_cert_pub.pem
+</pre> <p>Skip this step if the certificate is already a PEM file.</p> <h3 id="adding-pairing-pubkey-to-ramdisk">Add the pairing pubkey to the ramdisk</h3> <p>The <code translate="no" dir="ltr">oem_cert.avbpubkey</code> must be put under <code translate="no" dir="ltr">/avb/*.avbpubkey</code> to verify the signed DSU package. First, convert the public key in PEM format to AVB public key format:</p> 
+<pre>$ avbtool extract_public_key --key oem_cert_pub.pem --output oem_cert.avbpubkey
+</pre> <p>Then include the public key in the first stage ramdisk with the following steps.</p> <ol> <li>
+<p>Add a prebuilt module to copy the <code translate="no" dir="ltr">avbpubkey</code>. For example, add <code translate="no" dir="ltr">device/&lt;company&gt;/&lt;board&gt;/oem_cert.avbpubkey</code> and <code translate="no" dir="ltr">device/&lt;company&gt;/&lt;board&gt;/avb/Android.mk</code> with content like this:</p> 
+<pre>include $(CLEAR_VARS)
+
+LOCAL_MODULE := oem_cert.avbpubkey
+LOCAL_MODULE_CLASS := ETC
+LOCAL_SRC_FILES := $(LOCAL_MODULE)
+ifeq ($(BOARD_USES_RECOVERY_AS_BOOT),true)
+LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/first_stage_ramdisk/avb
+else
+LOCAL_MODULE_PATH := $(TARGET_RAMDISK_OUT)/avb
+endif
+
+include $(BUILD_PREBUILT)
+</pre>
+</li> <li>
+<p>Make the droidcore target depend on the added <code translate="no" dir="ltr">oem_cert.avbpubkey</code>:</p> 
+<pre>droidcore: oem_cert.avbpubkey
+</pre>
+</li> </ol> <h3 id="generating-avb-pubkey-attribute-in-json-descriptor">Generate the AVB pubkey attribute in the JSON descriptor</h3> <p>The <code translate="no" dir="ltr">oem_cert.avbpubkey</code> is in the AVB public key binary format. Use SHA-1 to make it readable before putting it into the JSON descriptor:</p> 
+<pre>$ sha1sum oem_cert.avbpubkey | cut -f1 -d ' '
+3e62f2be9d9d813ef5........866ac72a51fd20
+</pre> <p>This will be the content of the <code translate="no" dir="ltr">pubkey</code> attribute of the JSON descriptor.</p> 
+<pre>   "images":[
+      {
+         ...
+         "pubkey":"3e62f2be9d9d813ef5........866ac72a51fd20",
+         ...
+      },
+</pre> <h3 id="signing-dsu-package">Sign a DSU package</h3> <p>Use one of these methods to sign a DSU package:</p> <ul> <li><p>Method 1: Reuse the artifact made by the original AVB signing process to make a DSU package. An alternative approach is to extract the already signed images from the release package and use the extracted images to make the ZIP file directly.</p></li> <li>
+<p>Method 2: Use the following commands to sign DSU partitions if the private key is available. Each <code translate="no" dir="ltr">img</code> within a DSU package (the ZIP file) is signed separately:</p> 
+<pre>$ key_len=$(openssl rsa -in oem_cert_pri.pem -text | grep Private-Key | sed -e 's/.*(\(.*\) bit.*/\1/')
+$ for partition in system product; do
+    avbtool add_hashtree_footer \
+        --image ${OUT}/${partition}.img \
+        --partition_name ${partition} \
+        --algorithm SHA256_RSA${key_len} \
+        --key oem_cert_pri.pem
+done
+</pre>
+</li> </ul> <p>For more information about adding <code translate="no" dir="ltr">add_hashtree_footer</code> using <code translate="no" dir="ltr">avbtool</code>, see <a href="https://android.googlesource.com/platform/external/avb/#using-avbtool">Using avbtool</a>.</p> <h3 id="verifying-dsu-package-locally">Verify the DSU package locally</h3> <p>It’s recommended to verify all local images against the pairing public key with these commands:</p> 
+<pre>
+for partition in system product; do
+    avbtool verify_image --image ${OUT}/${partition}.img  --key oem_cert_pub.pem
+done
+</pre> <p>The expected output looks like this:</p> 
+<pre>Verifying image dsu/system.img using key at oem_cert_pub.pem
+vbmeta: Successfully verified footer and SHA256_RSA2048 vbmeta struct in dsu/system.img
+: Successfully verified sha1 hashtree of dsu/system.img for image of 898494464 bytes
+
+Verifying image dsu/product.img using key at oem_cert_pub.pem
+vbmeta: Successfully verified footer and SHA256_RSA2048 vbmeta struct in dsu/product.img
+: Successfully verified sha1 hashtree of dsu/product.img for image of 905830400 bytes
+</pre> <h3 id="making-dsu-package">Make a DSU package</h3> <p>The following example makes a DSU package that contains a <code translate="no" dir="ltr">system.img</code> and a <code translate="no" dir="ltr">product.img</code>:</p> 
+<pre>dsu.zip {
+    - system.img
+    - product.img
+}
+</pre> <p>After both images are signed, use the following command to make the ZIP file:</p> 
+<pre>$ mkdir -p dsu
+$ cp ${OUT}/system.img dsu
+$ cp ${OUT}/product.img dsu
+$ cd dsu &amp;&amp; zip ../dsu.zip *.img &amp;&amp; cd -
+</pre> <h3 id="customizing-one-click-dsu">Customize the one-click DSU</h3> <p>By default, the DSU loader points to a metadata of GSI images which is <code translate="no" dir="ltr">https://...google.com/.../gsi-src.json</code>.</p> <p>OEMs can overwrite the list by defining the <code translate="no" dir="ltr">persist.sys.fflag.override.settings_dynamic_system.list</code> property that points to their own JSON descriptor. For example, an OEM may provide JSON metadata that includes GSI as well as OEM proprietary images like this:</p> 
+<pre>{
+    "include": ["https://dl.google.com/.../gsi-src.JSON"]
+    "images":[
+      {
+         "name":"OEM image",
+         "os_version":"10",
+         "cpu_abi": "arm64-v8a",
+         "details":"...",
+         "vndk":[
+            27,
+            28,
+            29
+         ],
+         "spl":"...",
+         "pubkey":"",
+         "uri":"https://.../....zip"
+      },
+
+}
+</pre> <p>It’s possible for an OEM to chain published DSU metadata as shown in Figure 7.</p> <p><img src="https://source.android.com/static/docs/core/ota/images/dsu-metadata-chaining.png" alt="Chaining published DSU metadata" class="android-image-dark-theme-background"> </p> <p><strong>Figure 7.</strong> Chaining published DSU metadata</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/ota/dynamic-system-updates" class="_attribution-link">https://source.android.com/docs/core/ota/dynamic-system-updates</a>
+  </p>
+</div>

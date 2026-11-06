@@ -1,0 +1,217 @@
+<h1>Rust telemetry client library API reference</h1>  <p>This page describes the types, methods, and error handling in the <code translate="no" dir="ltr">libsdv_telemetry_rust_wrapper</code> library.</p> <h2 id="telemetry-service-holder">TelemetryServiceHolder interface</h2> <p>The primary interface for clients is the <code translate="no" dir="ltr">TelemetryServiceHolder</code> struct. This interface provides the full set of methods for managing the service connection, metrics configurations, and data reports.</p> <h3 id="service-lifecycle">Service lifecycle management</h3> <p>These methods establish and terminate the connection with the underlying Telemetry service.</p> <h4 id="get">get</h4> 
+<pre>pub fn get() -&gt; TelemetryResult&lt;TelemetryServiceHolder&gt;
+</pre> <p>A static method that retrieves a thread-safe handle to the Telemetry service. This is a blocking call that waits until the telemetry binder service is ready. The Telemetry service supports only a single instance of the <code translate="no" dir="ltr">TelemetryServiceHolder</code>. Calling this method more than once causes undefined or unexpected behavior.</p> <p><code translate="no" dir="ltr">TelemetryServiceHolder</code> implements <code translate="no" dir="ltr">Send</code> and <code translate="no" dir="ltr">Sync</code> traits, meaning it can be safely shared across threads, for example, by wrapping it in an instance of <code translate="no" dir="ltr">Arc</code>. Most of <code translate="no" dir="ltr">TelemetryServiceHolder</code>'s methods are <code translate="no" dir="ltr">async</code> and can be used concurrently.</p> <table> <thead> <tr> <th colspan="2">Returns</th> </tr> </thead> <tbody> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr">
+          <a href="#telemetry-result">TelemetryResult</a>&lt;<a href="#telemetry-service-holder">TelemetryServiceHolder</a>&gt;
+        </code> </td> <td> A result containing the service handle, or <code translate="no" dir="ltr"><a href="#telemetry-error">TelemetryError</a></code> instance if the service can't be obtained </td> </tr> </tbody> </table> <h4 id="init">init</h4> 
+<pre>pub async fn init(
+    &amp;self,
+    misc_status_callback: impl Fn(TelemetryServiceStatus) + Send + Sync + 'static,
+    report_ready_callback: impl Fn(ReportInfo) + Send + Sync + 'static,
+) -&gt; TelemetryResult&lt;()&gt;
+</pre> <p>Initializes the service by registering asynchronous callbacks. Call this method once after obtaining the <code translate="no" dir="ltr">TelemetryServiceHolder</code> and before any other interactions.</p> <table> <thead> <tr> <th colspan="2">Parameters</th> </tr> </thead> <tbody> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr">misc_status_callback</code> </td> <td> <code translate="no" dir="ltr">impl Fn(<a href="#telemetry-service-status">TelemetryServiceStatus</a>) + Send + Sync +
+          'static</code>: A closure that receives and processes status and error updates from the Telemetry service </td> </tr> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr">report_ready_callback</code> </td> <td> <code translate="no" dir="ltr">impl Fn(<a href="#report-info">ReportInfo</a>) + Send + Sync + 'static</code>: A closure that receives and processes notifications when a new metrics report is ready for retrieval </td> </tr> </tbody> </table> <table> <thead> <tr> <th colspan="2">Returns</th> </tr> </thead> <tbody> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr"> <a href="#telemetry-result">TelemetryResult</a>&lt;()&gt; </code> </td> <td> An empty result on success, or <code translate="no" dir="ltr"><a href="#telemetry-error">TelemetryError</a></code> instance on failure </td> </tr> </tbody> </table> <h4 id="finish">finish</h4> 
+<pre>pub fn finish(&amp;self) -&gt; TelemetryResult&lt;()&gt;
+</pre> <p>Gracefully shuts down the service connection, clears registered listeners, and cleans up associated resources. Call this method once when the app terminates.</p> <table> <thead> <tr> <th colspan="2">Returns</th> </tr> </thead> <tbody> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr"> <a href="#telemetry-result">TelemetryResult</a>&lt;()&gt; </code> </td> <td> An empty result on success, or <code translate="no" dir="ltr"><a href="#telemetry-error">TelemetryError</a></code> instance on failure </td> </tr> </tbody> </table> <h3 id="metrics-config-management">Metrics configuration management</h3> <p>These asynchronous methods manage the definition and state of data collection configurations.</p> <p>The Telemetry service maintains configurations in two states:</p> <ul> <li>
+<strong>Inactive:</strong> The configuration is validated and stored on disk but isn't used for data collection.</li> <li>
+<strong>Active:</strong> The configuration collects data, and its components (triggers, publishers, for example) are active.</li> </ul> <p>To ensure configurations persist across service restarts and device reboots, the service stores them on the device's disk. The service stores all configurations in two state-based directories, validating and, if necessary, activating them on boot.</p> <h4 id="add-metrics-config">add_metrics_config</h4> 
+<pre>pub async fn add_metrics_config(&amp;self, serialized_config: &amp;[u8]) -&gt; TelemetryResult&lt;String&gt;
+</pre> <p>Adds a new metrics configuration to the service. The configuration must be provided as a serialized byte array. The added configuration is inactive by default.</p> <table> <thead> <tr> <th colspan="2">Parameters</th> </tr> </thead> <tbody> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr">serialized_config</code> </td> <td> <code translate="no" dir="ltr">&amp;[u8]</code>: A byte slice containing the protobuf-serialized configuration data </td> </tr> </tbody> </table> <table> <thead> <tr> <th colspan="2">Returns</th> </tr> </thead> <tbody> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr"> <a href="#telemetry-result">TelemetryResult</a>&lt;String&gt; </code> </td> <td> A result containing the UUID of the newly added configuration on success, or <code translate="no" dir="ltr"><a href="#telemetry-error">TelemetryError</a></code> instance on failure </td> </tr> </tbody> </table> <hr> <h4 id="activate-metrics-config">activate_metrics_config</h4> 
+<pre>pub async fn activate_metrics_config(&amp;self, config_uuid: &amp;str) -&gt; TelemetryResult&lt;String&gt;
+</pre> <p>Activates a previously added (or deactivated) metrics configuration, starting its data collection and reporting.</p> <table> <thead> <tr> <th colspan="2">Parameters</th> </tr> </thead> <tbody> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr">config_uuid</code> </td> <td>
+<code translate="no" dir="ltr">&amp;str</code>: The UUID of the configuration to activate</td> </tr> </tbody> </table> <table> <thead> <tr> <th colspan="2">Returns</th> </tr> </thead> <tbody> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr"> <a href="#telemetry-result">TelemetryResult</a>&lt;String&gt; </code> </td> <td> A result containing the UUID of the activated configuration on success, or <code translate="no" dir="ltr"><a href="#telemetry-error">TelemetryError</a></code> instance on failure </td> </tr> </tbody> </table> <hr> <h4 id="deactivate-metrics-config">deactivate_metrics_config</h4> 
+<pre>pub async fn deactivate_metrics_config(&amp;self, config_uuid: &amp;str) -&gt; TelemetryResult&lt;String&gt;
+</pre> <p>Stops data collection and reporting for an active metrics configuration. The configuration remains in the service and can be re-activated later.</p> <table> <thead> <tr> <th colspan="2">Parameters</th> </tr> </thead> <tbody> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr">config_uuid</code> </td> <td>
+<code translate="no" dir="ltr">&amp;str</code>: The UUID of the configuration to deactivate</td> </tr> </tbody> </table> <table> <thead> <tr> <th colspan="2">Returns</th> </tr> </thead> <tbody> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr"> <a href="#telemetry-result">TelemetryResult</a>&lt;String&gt; </code> </td> <td> A result containing the UUID of the deactivated configuration on success, or <code translate="no" dir="ltr"><a href="#telemetry-error">TelemetryError</a></code> instance on failure </td> </tr> </tbody> </table> <hr> <h4 id="remove-metrics-config">remove_metrics_config</h4> 
+<pre>pub async fn remove_metrics_config(&amp;self, config_uuid: &amp;str) -&gt; TelemetryResult&lt;String&gt;
+</pre> <p>Removes a metrics configuration permanently. If the configuration is active, the service deactivates it first.</p> <table> <thead> <tr> <th colspan="2">Parameters</th> </tr> </thead> <tbody> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr">config_uuid</code> </td> <td>
+<code translate="no" dir="ltr">&amp;str</code>: The UUID of the configuration to remove</td> </tr> </tbody> </table> <table> <thead> <tr> <th colspan="2">Returns</th> </tr> </thead> <tbody> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr"> <a href="#telemetry-result">TelemetryResult</a>&lt;String&gt; </code> </td> <td> A result containing the UUID of the removed configuration on success, or <code translate="no" dir="ltr"><a href="#telemetry-error">TelemetryError</a></code> instance on failure </td> </tr> </tbody> </table> <hr> <h4 id="remove-all-metrics-configs">remove_all_metrics_configs</h4> 
+<pre>pub async fn remove_all_metrics_configs(&amp;self) -&gt; TelemetryResult&lt;String&gt;
+</pre> <p>Removes all existing metrics configurations, deactivating any that are active.</p> <table> <thead> <tr> <th colspan="2">Returns</th> </tr> </thead> <tbody> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr"> <a href="#telemetry-result">TelemetryResult</a>&lt;String&gt; </code> </td> <td> A result containing a status message string on success, or <code translate="no" dir="ltr"><a href="#telemetry-error">TelemetryError</a></code> instance on failure </td> </tr> </tbody> </table> <hr> <h4 id="get-active-metrics-config-uuids">get_active_metrics_config_uuids</h4> 
+<pre>pub async fn get_active_metrics_config_uuids(&amp;self) -&gt; TelemetryResult&lt;Vec&lt;String&gt;&gt;
+</pre> <p>Queries the service for a list of UUIDs for all configurations in the active state.</p> <table> <thead> <tr> <th colspan="2">Returns</th> </tr> </thead> <tbody> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr"> <a href="#telemetry-result">TelemetryResult</a>&lt;Vec&lt;String&gt;&gt; </code> </td> <td> A result containing a vector of UUID strings for active metrics configurations on success, or <code translate="no" dir="ltr"><a href="#telemetry-error">TelemetryError</a></code> instance on failure </td> </tr> </tbody> </table> <hr> <h4 id="get-inactive-metrics-config-uuids">get_inactive_metrics_config_uuids</h4> 
+<pre>pub async fn get_inactive_metrics_config_uuids(&amp;self) -&gt; TelemetryResult&lt;Vec&lt;String&gt;&gt;
+</pre> <p>Queries the service for a list of UUIDs for all configurations in the inactive state.</p> <table> <thead> <tr> <th colspan="2">Returns</th> </tr> </thead> <tbody> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr"> <a href="#telemetry-result">TelemetryResult</a>&lt;Vec&lt;String&gt;&gt; </code> </td> <td> A result containing a vector of UUID strings for inactive metrics configurations on success, or <code translate="no" dir="ltr"><a href="#telemetry-error">TelemetryError</a></code> instance on failure </td> </tr> </tbody> </table> <h3 id="report-handling">Metrics report handling and retrieval</h3> <p>These methods let you query for available reports and retrieve the collected report data.</p> <h4 id="get-metrics-report">get_metrics_report</h4> 
+<pre>pub async fn get_metrics_report(&amp;self, report_uuid: &amp;str) -&gt; TelemetryResult&lt;MetricsReport&gt;
+</pre> <p>Retrieves the full metrics report data for a specific report UUID. You can get the report UUID from a notification by using the <code translate="no" dir="ltr">report_ready_callback</code> or by calling <code translate="no" dir="ltr">get_ready_reports_info</code>.</p> <table> <thead> <tr> <th colspan="2">Parameters</th> </tr> </thead> <tbody> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr">report_uuid</code> </td> <td>
+<code translate="no" dir="ltr">&amp;str</code>: The UUID of the specific report to retrieve</td> </tr> </tbody> </table> <table> <thead> <tr> <th colspan="2">Returns</th> </tr> </thead> <tbody> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr"> <a href="#telemetry-result">TelemetryResult</a>&lt;MetricsReport&gt; </code> </td> <td> A result containing the deserialized <code translate="no" dir="ltr">MetricsReport</code> protobuf object on success, or <code translate="no" dir="ltr"><a href="#telemetry-error">TelemetryError</a></code> instance on failure </td> </tr> </tbody> </table> <h4 id="get-ready-reports-info">get_ready_reports_info</h4> 
+<pre>pub async fn get_ready_reports_info(&amp;self) -&gt; TelemetryResult&lt;Vec&lt;ReportInfo&gt;&gt;
+</pre> <p>Queries the Telemetry service for a list of all reports that are completed and ready for retrieval. This is useful for checking the state of reports if a callback notification was missed (for example, if <code translate="no" dir="ltr">report_ready_callback</code> was registered late).</p> <table> <thead> <tr> <th colspan="2">Returns</th> </tr> </thead> <tbody> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr">
+          <a href="#telemetry-result">TelemetryResult</a>&lt;Vec&lt;<a href="#report-info">ReportInfo</a>&gt;&gt;
+        </code> </td> <td> A result containing vector of <code translate="no" dir="ltr"><a href="#report-info">ReportInfo</a></code> objects on success, or <code translate="no" dir="ltr"><a href="#telemetry-error">TelemetryError</a></code> instance on failure </td> </tr> </tbody> </table> <hr> <h2 id="core-types">Core types, callbacks, and error handling</h2> <p>The <code translate="no" dir="ltr">libsdv_telemetry_rust_wrapper</code> uses a set of custom types to interact with the Telemetry service, manage asynchronous callbacks, and handle service errors.</p> <h3 id="api-response-types">API response and error types</h3> <p>These types are returned directly by library methods to indicate the immediate success or failure of the requested operation.</p> <h4 id="telemetry-result">TelemetryResult</h4> <p>Most methods return a <code translate="no" dir="ltr">TelemetryResult&lt;T&gt;</code>, which is an alias for the standard <code translate="no" dir="ltr">Result</code> type, specialized for service-level errors:</p> 
+<pre>pub type TelemetryResult&lt;T&gt; = Result&lt;T, TelemetryError&gt;;
+</pre> <h4 id="telemetry-error">TelemetryError</h4> <p>The <code translate="no" dir="ltr">TelemetryError</code> struct encapsulates all failures and provides detailed, service-specific error information:</p> <table> <thead> <tr> <th colspan="2">Fields</th> </tr> </thead> <tbody> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr">status</code> </td> <td> <code translate="no" dir="ltr"><a href="#telemetry-service-status-codes">TelemetryServiceStatusCodes</a></code>: An enumerable error code </td> </tr> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr">message</code> </td> <td>
+<code translate="no" dir="ltr">String</code>: A descriptive message that details the error</td> </tr> </tbody> </table> <h4 id="telemetry-service-status-codes">TelemetryServiceStatusCodes</h4> <p>A numeric enumeration representing the outcome of API calls and internal service states. These codes are used in both <a href="#telemetry-error"><code translate="no" dir="ltr">TelemetryError</code></a> and <a href="#telemetry-service-status"><code translate="no" dir="ltr">TelemetryServiceStatus</code></a>. For example:</p> <table> <thead> <tr> <th colspan="3">Codes</th> </tr> </thead> <tbody> <tr> <td style="background-color: #f9f9f9; vertical-align: top; border-right: 1px solid #e0e0e0"> <code translate="no" dir="ltr">200</code> </td> <td style="vertical-align: top; border-right: 1px solid #e0e0e0"> <code translate="no" dir="ltr">TELEMETRY_SERVICE_API_CALL_SUCCESS</code> </td> <td>Success</td> </tr> <tr> <td style="background-color: #f9f9f9; vertical-align: top; border-right: 1px solid #e0e0e0"> <code translate="no" dir="ltr">402</code> </td> <td style="vertical-align: top; border-right: 1px solid #e0e0e0"> <code translate="no" dir="ltr">METRICS_CONFIG_PARSE_ERROR</code> </td> <td>Failed to parse metrics configuration</td> </tr> <tr> <td style="background-color: #f9f9f9; vertical-align: top; border-right: 1px solid #e0e0e0"> <code translate="no" dir="ltr">407</code> </td> <td style="vertical-align: top; border-right: 1px solid #e0e0e0"> <code translate="no" dir="ltr">REMOVE_METRICS_CONFIG_FAILED</code> </td> <td>Failed to remove metrics configuration</td> </tr> <tr> <td style="background-color: #f9f9f9; vertical-align: top; border-right: 1px solid #e0e0e0"> <code translate="no" dir="ltr">417</code> </td> <td style="vertical-align: top; border-right: 1px solid #e0e0e0"> <code translate="no" dir="ltr">METRICS_CONFIG_RUNTIME_EXPRESSION_NODE_EVALUATION_ERROR</code> </td> <td>Failed to evaluate the expression specified in the metrics configuration</td> </tr> </tbody> </table> <h3 id="callback-types">Asynchronous callback types</h3> <p>The registered listeners (<code translate="no" dir="ltr">misc_status_callback</code> and <code translate="no" dir="ltr">report_ready_callback</code>) pass these types to the client to provide updates on background processes.</p> <h4 id="telemetry-service-status">TelemetryServiceStatus</h4> <p>The <code translate="no" dir="ltr">TelemetryServiceStatus</code> struct serves as an argument for the <code translate="no" dir="ltr">misc_status_callback</code> closure of <a href="#init"><code translate="no" dir="ltr">init</code></a>, which is registered during service initialization. It provides asynchronous updates about the service's health and runtime issues, for example, disconnection from a data source.</p> <table> <thead> <tr> <th colspan="2">Fields</th> </tr> </thead> <tbody> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr">id</code> </td> <td>
+<code translate="no" dir="ltr">usize</code>: A unique identifier for the status event</td> </tr> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr">code</code> </td> <td> <code translate="no" dir="ltr"><a href="#telemetry-service-status-codes">TelemetryServiceStatusCodes</a></code>: Status code categorizing the event </td> </tr> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr">message</code> </td> <td>
+<code translate="no" dir="ltr">String</code>: A human-readable description of the status</td> </tr> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr">details</code> </td> <td> <code translate="no" dir="ltr">Option&lt;<a href="#status-details">StatusDetails</a>&gt;</code>: Optional structured data that provides additional context on the status </td> </tr> </tbody> </table> <h4 id="status-details">StatusDetails</h4> <p>This enum wraps specific error contexts. If <code translate="no" dir="ltr">details</code> is present in <a href="#telemetry-service-status"><code translate="no" dir="ltr">TelemetryServiceStatus</code></a>, it's one of the following variants:</p> <table> <thead> <tr> <th colspan="2">Variants</th> </tr> </thead> <tbody> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr">AggregationPublisherErrorDetails</code> </td> <td>An error occurred while aggregating data</td> </tr> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr">ServicePublisherErrorDetails</code> </td> <td>An error occurred while attempting to connect to a service</td> </tr> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr">ConditionalTriggerErrorDetails</code> </td> <td>An error occurred while evaluating the expression of a conditional trigger</td> </tr> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr">MetricsReportGeneratorErrorDetails</code> </td> <td>An error occurred while generating a metrics report</td> </tr> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr">ServiceErrorDetails</code> </td> <td>An error occurred when receiving a new message from a service</td> </tr> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr">FileIOErrorDetails</code> </td> <td>A file I/O error occurred</td> </tr> </tbody> </table> <p>Each enum variant contains additional fields providing even more context.</p> <h4 id="report-info">ReportInfo</h4> <p>The <code translate="no" dir="ltr">ReportInfo</code> struct serves as an argument for the <code translate="no" dir="ltr">report_ready_callback</code> closure of <a href="#init"><code translate="no" dir="ltr">init</code></a>, which is registered during service initialization. It contains the identifiers describing a metrics report:</p> <table> <thead> <tr> <th colspan="2">Fields</th> </tr> </thead> <tbody> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr">config_uuid</code> </td> <td>
+<code translate="no" dir="ltr">String</code>: The UUID of the metrics configuration that generated the report</td> </tr> <tr> <td style="
+          background-color: #f9f9f9;
+          vertical-align: top;
+          border-right: 1px solid #e0e0e0;
+          width: 250px;
+        "> <code translate="no" dir="ltr">report_uuid</code> </td> <td>
+<code translate="no" dir="ltr">String</code>: The UUID of the metrics report that is ready for retrieval</td> </tr> </tbody> </table> <p>The <code translate="no" dir="ltr">report_uuid</code> field is the only necessary for further retrieval of the metrics report itself (see <a href="#get-metrics-report"><code translate="no" dir="ltr">get_metrics_report</code></a>), while <code translate="no" dir="ltr">config_uuid</code> serves only as additional information on its source.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/telemetry/sdk/client/api" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/telemetry/sdk/client/api</a>
+  </p>
+</div>

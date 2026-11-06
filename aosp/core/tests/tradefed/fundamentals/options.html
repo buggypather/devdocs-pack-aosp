@@ -1,0 +1,36 @@
+<h1>Option handling in Tradefed</h1>  <p>Option handling lies at the heart of Trade Federation's modular approach. In particular, options are the mechanism by which the developer, Integrator, and Test Runner can work together without having to duplicate each-other's work. Put simply, our implementation of option handling allows the developer to mark a Java class member as being configurable, at which point the value of that member can be augmented or overridden by the Integrator, and can be subsequently augmented or overridden by the Test Runner. This mechanism works for all Java intrinsic types, as well as for any <code translate="no" dir="ltr">Map</code> or <code translate="no" dir="ltr">Collection</code> instances of intrinsic types.</p> <p class="note"><strong>Note:</strong> The option-handling mechanism only works for classes implementing one of the interfaces included in the <a href="lifecycle">Test Lifecycle</a>, and only when that class is <em>instantiated</em> by the lifecycle machinery.</p> <h2 id="developer">Developer</h2> <p>To start off, the developer marks a member with the <code translate="no" dir="ltr"><a href="https://android.googlesource.com/platform/tools/tradefederation/+/android17-release/common_util/com/android/tradefed/config/Option.java">@Option</a></code> annotation.  They specify (at a minimum) the <code translate="no" dir="ltr">name</code> and <code translate="no" dir="ltr">description</code> values, which specify the argument name associated with that Option, and the description that is displayed on the TF console when the command is run with <code translate="no" dir="ltr">--help</code> or <code translate="no" dir="ltr">--help-all</code>.</p> <p>As an example, let's say we want to build a functional phone test that dials a variety of phone numbers, and expects to receive a sequence of DTMF tones from each number after it connects.</p> 
+<pre>public class PhoneCallFuncTest extends IRemoteTest {
+    @Option(name = "timeout", description = "How long to wait for connection, in millis")
+    private long mWaitTime = 30 * 1000;  // 30 seconds
+
+    @Option(name = "call", description = "Key: Phone number to attempt. " +
+            "Value: DTMF to expect. May be repeated.")
+    private Map&lt;String, String&gt; mCalls = new HashMap&lt;String, String&gt;;
+
+    public PhoneCallFuncTest() {
+        mCalls.add("123-456-7890", "01134");  // default
+    }</pre> <p>That's all that's required for the developer to set up two points of configuration for that test. They could then go off and use <code translate="no" dir="ltr">mWaitTime</code> and <code translate="no" dir="ltr">mCalls</code> as normal, without paying much attention to the fact that they're configurable. Because the <code translate="no" dir="ltr">@Option</code> fields are set after the class is instantiated, but before the <code translate="no" dir="ltr">run</code> method is called, that provides an easy way for implementors to set up defaults for or perform some kind of filtering on <code translate="no" dir="ltr">Map</code> and <code translate="no" dir="ltr">Collection</code> fields, which are otherwise append-only.</p> <h2 id="integrator">Integrator</h2> <p>The Integrator works in the world of configurations, which are written in XML. The config format allows the Integrator to set (or append) a value for any <code translate="no" dir="ltr">@Option</code> field. For instance, suppose the Integrator wanted to define a lower-latency test that calls the default number, as well as a long-running test that calls a variety of numbers. They could create a pair of configurations that might look like the following:</p> 
+<pre>&lt;?xml version="1.0" encoding="utf-8"?&gt;
+&lt;configuration description="low-latency default test; low-latency.xml"&gt;
+    &lt;test class="com.example.PhoneCallFuncTest"&gt;
+        &lt;option name="timeout" value="5000" /&gt;
+    &lt;/test&gt;
+&lt;/configuration&gt;</pre> 
+<pre>&lt;?xml version="1.0" encoding="utf-8"?&gt;
+&lt;configuration description="call a bunch of numbers; many-numbers.xml"&gt;
+    &lt;test class="com.example.PhoneCallFuncTest"&gt;
+        &lt;option name="call" key="111-111-1111" value="#*#*TEST1*#*#" /&gt;
+        &lt;option name="call" key="222-222-2222" value="#*#*TEST2*#*#" /&gt;
+        &lt;!-- ... --&gt;
+    &lt;/test&gt;
+&lt;/configuration&gt;</pre> <h2 id="testrunner">Test Runner</h2> <p>The Test Runner also has access to these configuration points through the Trade Federation console. First and foremost, they run a command (that is, a config and all of its arguments) with the <code translate="no" dir="ltr">run command &lt;name&gt;</code> instruction (or <code translate="no" dir="ltr">run &lt;name&gt;</code> for short). Beyond that, they can specify any list of arguments are part of the command, which can replace or append to fields specified by lifecycle objects within each config.</p> <p>To run the low-latency test with the <code translate="no" dir="ltr">many-numbers</code> phone numbers, the Test Runner could execute:</p> 
+<pre>
+tf&gt; run low-latency.xml --call 111-111-1111 #*#*TEST1*#*# --call 222-222-2222 #*#*TEST2*#*#
+</pre> <p>Or, to get a similar effect from the opposite direction, the Test Runner could reduce the wait time for the <code translate="no" dir="ltr">many-numbers</code> test:</p> 
+<pre>
+tf&gt; run many-numbers.xml --timeout 5000</pre> <h2 id="order">Option ordering</h2> <p>You might notice that the <code translate="no" dir="ltr">call</code> option underlying implementation is a <code translate="no" dir="ltr">Map</code> so upon repeated <code translate="no" dir="ltr">--call</code> on the command line, they're all stored.</p> <p>The option <code translate="no" dir="ltr">timeout</code>, which has an underlying implementation of <code translate="no" dir="ltr">long</code>, can only store one value. So only the last value specified is stored. <code translate="no" dir="ltr">--timeout 5 --timeout 10</code> results in <code translate="no" dir="ltr">timeout</code> containing 10.</p> <p>In case of a <code translate="no" dir="ltr">List</code> or <code translate="no" dir="ltr">Collection</code> as the underlying implementation, all the values are stored, in the order specified on the command line.</p> <h2 id="boolean">Boolean options</h2> <p>Options of boolean underlying type can be set to <code translate="no" dir="ltr">true</code> by directly passing the option name, for example, <code translate="no" dir="ltr">--[option-name]</code> and can be set to <code translate="no" dir="ltr">false</code> using the syntax <code translate="no" dir="ltr">--no-[option-name]</code>.</p> <h2 id="seealso">See also</h2> <a href="../testing/through-suite/option-passing">Pass options to suite and modules</a><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/tradefed/fundamentals/options" class="_attribution-link">https://source.android.com/docs/core/tests/tradefed/fundamentals/options</a>
+  </p>
+</div>

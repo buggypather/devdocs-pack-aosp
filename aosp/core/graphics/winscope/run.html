@@ -1,0 +1,52 @@
+<h1>Run Winscope</h1>  <p>Winscope tracing is part of the Android framework. This page outlines the steps required to download, build, and run the Winscope trace viewer locally.</p> <h2 id="build">Build Winscope locally</h2> <p>Follow these steps to set up your PC to run the Winscope tracer:</p> <ol> <li>
+<a href="../../../setup/build/building">Download the Android source</a>.</li> <li>
+<p>Navigate to the Winscope folder:</p> 
+<pre>cd development/tools/winscope
+</pre>
+</li> <li>
+<p>Install dependencies using:</p> 
+<pre>npm install
+</pre> <p>To see a list of available commands, run: <code translate="no" dir="ltr">npm run</code></p>
+</li> <li>
+<p>Build all prod and test targets using:</p> 
+<pre>npm run build:prod
+</pre>
+</li> <li>
+<p>Run Winscope using:</p> 
+<pre>npm run start
+</pre>
+</li> </ol> <aside class="note"><strong>Note:</strong><span> You can also download and build Winscope to host on a standard web server to get a shareable link to the tool.</span></aside> <h2 id="build-separate-parts">Build separate parts</h2> <p>You can build individual parts of Winscope separately using the following commands:</p> <table> <tr> <th>Command</th> <th>Description</th> </tr> <tr> <td><code translate="no" dir="ltr">build:trace_processor</code></td> <td>Checks out and rebuilds the latest version of<br> Perfetto's <code translate="no" dir="ltr">trace_processor</code>.</td> </tr> <tr> <td><code translate="no" dir="ltr">build:protos</code></td> <td>Recompiles the proto definitions.</td> </tr> </table> <h2 id="run-tests">Run tests</h2> <aside class="tip"><strong>Tip:</strong><span> Winscope doesn't build on Soong and can't be built by Tradefed, so it's recommended to have a local Git hook to the tests in your local environment.</span></aside> <p>Winscope contains unit and end-to-end tests. To run them use <code translate="no" dir="ltr">npm run
+&lt;command&gt;</code>:</p> <table> <tr> <th>Command</th> <th>Description</th> </tr> <tr> <td><code translate="no" dir="ltr">test:unit:ci</code></td> <td>Runs the unit tests in a less verbose format for CI<br> or presubmit hook.</td> </tr> <tr> <td><code translate="no" dir="ltr">test:unit:dev</code></td> <td>Runs the unit tests in a more verbose format for<br> local development. This mode watches for changes and<br> automatically reruns the correct tests.</td> </tr> <tr> <td><code translate="no" dir="ltr">test:e2e</code></td> <td>Runs the end-to-end tests, such as those for the<br> cross-tool protocol.</td> </tr> <tr> <td><code translate="no" dir="ltr">test:presubmit:quiet</code></td> <td>Builds all presubmit unit tests, linters, and graph<br> analysis in a less verbose format for CI or presubmit<br> hook.</td> </tr> <tr> <td><code translate="no" dir="ltr">test:presubmit</code></td> <td>Builds all presubmit unit tests, linters, and graph<br> analysis in a more verbose format for local<br> development.</td> </tr> <tr> <td><code translate="no" dir="ltr">test:all</code></td> <td>Runs all tests (unit and end-to-end), linters, and<br> graph analysis in a more verbose format for local<br> development.</td> </tr> </table> <h3 id="e2e-tests">End-to-end tests</h3> <p>Before running end-to-end tests, you must start the remote tool and install the correct version of the Chrome driver. In the following code snippet, the <code translate="no" dir="ltr">run test:e2e</code> command automatically installs the Chrome driver.</p> 
+<pre>$ npm run start
+$ npm run start:remote_tool_mock
+$ npm run test:e2e
+</pre> <p>The following table lists the necessary commands and their descriptions. To run them use <code translate="no" dir="ltr">npm run <var translate="no">command</var></code>:</p> <table> <tr> <th>Command</th> <th>Description</th> </tr> <tr> <td><code translate="no" dir="ltr">start:remote_tool_mock</code></td> <td>Starts the remote tool mock for testing cross tool protocol.</td> </tr> <tr> <td><code translate="no" dir="ltr">install:chromedriver</code></td> <td>Installs the Chrome driver necessary to run end-to-end tests.</td> </tr> </table> <h3 id="update-intdef">Update @IntDef mapping</h3> <p><code translate="no" dir="ltr">@IntDef</code> is an annotation used in Android to restrict the possible values of an integer. Winscope uses a mapping of these annotations to display the name of the value instead of the integer.</p> <p>If new <code translate="no" dir="ltr">@IntDef</code> values are added to the Android framework but not updated in Winscope, they are displayed as raw integer values instead of descriptive strings. To fix this issue, update the IntDef mapping file (<code translate="no" dir="ltr">development/tools/winscope/src/common/intDefMapping.json</code>).</p> <p>To automatically update the <code translate="no" dir="ltr">@IntDef</code> mapping, do the following:</p> <ol> <li>
+<p>Run the <code translate="no" dir="ltr">update_intdef_mappings.sh</code> script from the <code translate="no" dir="ltr">development/tools/winscope/scripts/</code> directory in your local Android tree. This script triggers the annotation process that extracts the latest <code translate="no" dir="ltr">@IntDef</code> values from the code and updates <code translate="no" dir="ltr">intDefMapping.json</code>:</p> 
+<pre>cd development/tools/winscope
+./scripts/update_intdef_mappings.sh
+</pre>
+</li> <li><p>Commit the changes to <code translate="no" dir="ltr">src/common/intDefMapping.json</code> using the <code translate="no" dir="ltr">git commit</code> command and upload them using the <code translate="no" dir="ltr">repo upload</code> command.</p></li> </ol> <p>If the script isn't available, follow these steps to update the <code translate="no" dir="ltr">@IntDef</code> mapping manually from your Android root directory (<code translate="no" dir="ltr">$ANDROID_BUILD_TOP</code>):</p> <ol> <li>
+<p>Build <code translate="no" dir="ltr">framework-minus-apex-intdefs</code> for the annotation preprocessor to run:</p> 
+<pre>m framework-minus-apex-intdefs
+</pre>
+</li> <li>
+<p>Copy the generated <code translate="no" dir="ltr">intDefMapping.json</code> file to the prebuilts repository:</p> 
+<pre>$ python3 -c 'import sys,json,collections; print(json.dumps(collections.OrderedDict(sorted(collections.ChainMap(*map(lambda x:json.load(open(x)), sys.argv[1:])).items())), indent=2))' $(find out/soong/.intermediates/frameworks/base -iname intDefMapping.json) &gt; ./development/tools/winscope/src/common/intDefMapping.json
+</pre>
+</li> <li><p>Upload the changes in Winscope using <code translate="no" dir="ltr">repo upload</code>.</p></li> </ol> <h2 id="other-commands">Other commands</h2> <p>In addition to build and tests, Winscope scripts contain other capabilities, as shown in the table. To run them use <code translate="no" dir="ltr">npm run <var translate="no">command</var></code>:</p> <table> <tr> <th>Command</th> <th>Description</th> </tr> <tr> <td><code translate="no" dir="ltr">format:check</code></td> <td>Checks for code formatting issues using <code translate="no" dir="ltr">prettier</code>.</td> </tr> <tr> <td><code translate="no" dir="ltr">format:fix</code></td> <td>Checks and auto fixes code formatting issues using <code translate="no" dir="ltr">prettier</code>.</td> </tr> <tr> <td><code translate="no" dir="ltr">eslint:check</code></td> <td>Checks for code formatting issues using <code translate="no" dir="ltr">eslint</code>.</td> </tr> <tr> <td><code translate="no" dir="ltr">eslint:fix</code></td> <td>Checks and auto fixes code formatting issues using <code translate="no" dir="ltr">eslint</code>.</td> </tr> <tr> <td><code translate="no" dir="ltr">tslint:check</code></td> <td>Checks for code formatting issues using <code translate="no" dir="ltr">tslint</code>.</td> </tr> <tr> <td><code translate="no" dir="ltr">tslint:fix</code></td> <td>Checks and auto fixes code formatting issues using <code translate="no" dir="ltr">tslint</code>.</td> </tr> <tr> <td><code translate="no" dir="ltr">deps_graph:check_cycles</code></td> <td>Analyzes the code for cyclical dependencies.</td> </tr> </table> <h2 id="troubleshoot">Troubleshoot</h2> <p>Use the following tips for troubleshooting:</p> <ul> <li>
+<p><strong>Error <code translate="no" dir="ltr">ProtocolError: missing required '&lt;FIELD&gt;'</code> or <code translate="no" dir="ltr">TypeError: Cannot
+read property '&lt;PROP&gt;' of null</code></strong></p> <ul> <li>
+<p>This occurs when the trace file was created with a new proto definition, containing new <em>required</em> fields.</p> <ol> <li>Make sure you're opening the trace on the correct Winscope version (master, S, or R).</li> <li>
+<p>If you create the new field on the proto, recompile the protos in Winscope using <code translate="no" dir="ltr">npm run build:protos</code>.</p> <aside class="note"><strong>Note:</strong><span> You shouldn't need a new required field, because the protos should be backward compatible.</span></aside>
+</li> </ol>
+</li> </ul>
+</li> <li>
+<p><strong>Some installed dependency versions are wrong (build fails)</strong></p> <ul> <li>Revert changes to <code translate="no" dir="ltr">package.json</code> and <code translate="no" dir="ltr">package-lock.json</code>. Remove <code translate="no" dir="ltr">node_modules</code>. Run <code translate="no" dir="ltr">npm install</code> again.</li> </ul>
+</li> <li>
+<p><strong>I added a new field to one of the proto files. How do I display it?</strong></p> <ul> <li>Winscope uses the proto definitions from when it was compiled, so new fields won't appear by default. To show new fields, rebuild the protos using <code translate="no" dir="ltr">npm run build:protos</code>.</li> </ul>
+</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/graphics/winscope/run" class="_attribution-link">https://source.android.com/docs/core/graphics/winscope/run</a>
+  </p>
+</div>

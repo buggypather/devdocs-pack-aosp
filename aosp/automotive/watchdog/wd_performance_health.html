@@ -1,0 +1,147 @@
+<h1>Collect performance data</h1>  <p>Watchdog native service records I/O performance data since early-init during system boot up. The native service dumps the collected performance data in the bug report. Vendors can query the native service via dumpsys to either dump the collected data or start a custom collection session for debugging.</p> <h2 id="data-collection-frequency">Data collection frequency</h2> <p>The frequency of the performance data collection varies by the build type.</p> <ul> <li>On userdebug or eng builds, Watchdog collects performance data once every one (1) second during system boot up and once every one (1) minute post boot complete.</li> <li>On user builds, Watchdog collects performance data once every 20 seconds during system boot up and once every two (2) minutes after a boot is complete.</li> </ul> <h2 id="data-collection-events">Data collection events</h2> <p>Sample-based profiling is performed during various system events (such as system bootup, system wakeup, and user switch) and during the last N minutes window.</p> <ul> <li>
+<strong>Last N minutes events before bug report generation:</strong> Generated during a rolling window of 30 minutes.</li> <li>
+<strong>Boot time events:</strong> Generated after boot up.</li> <li>
+<strong>User switch events:</strong> Generated after a user switch is initiated.</li> <li>
+<strong>Custom collection events:</strong> Can specify polling period, max duration, and can filter by packages.</li> </ul> <h2 id="dump-performance-data">Dump performance data</h2> <p>When a bugreport is captured, Watchdog native service dumps the collected performance data in the bug report. Vendors can query the native service via the below dumpsys command to dump the collected performance data. See the section on <a href="#Collect-performance-data-for-debugging">Understanding the performance data report</a> for details about the report.</p> 
+<pre>adb shell dumpsys android.automotive.watchdog.ICarWatchdog/default &gt; /tmp/carwatchdog_dump.txt</pre> <h2 id="Collect-performance-data-for-debugging">Collect performance data for debugging</h2> <p>Vendors can use the Watchdog native service to custom collect performance data for debugging purposes. For example, to understand the I/O usage of an app or service, vendors can perform a custom performance data collection that profiles the I/O usage of either a specific list of packages or the entire system.</p> <h3 id="start-custom-collection-session">Start custom collection session</h3> <p>Shown below is the command to start a custom performance data collection session:</p> 
+<pre>adb shell dumpsys android.automotive.watchdog.ICarWatchdog/default --start_perf [--interval &lt;seconds&gt;] [--max_duration &lt;seconds&gt;] [--filter_packages &lt;package_name&gt;,&lt;package_name&gt;,...]</pre> <ul> <li>
+<code translate="no" dir="ltr">--start_perf</code> Starts a custom performance data collection session.</li> <li>
+<code translate="no" dir="ltr">--interval &lt;seconds&gt;</code> Specifies the profiling interval. By default, the interval is 30 seconds.</li> <li>
+<code translate="no" dir="ltr">--max_duration &lt;seconds&gt;</code> Specifies the maximum duration of the custom performance data collection session. If the session isn't stopped manually, the session is stopped and the collected data is discarded after this duration. By default, the maximum duration is 30 minutes.</li> <li>
+<code translate="no" dir="ltr">--filter_packages &lt;package_name&gt;,&lt;package_name&gt;...</code> Specifies a comma-separated list of package names to profile. When provided, the performance data collection is limited to these packages. Otherwise, the performance data collection is done for all packages in the system.</li> </ul> <p>For example, the below command starts a custom performance data collection with a profiling interval of <strong>10 seconds</strong>, maximum collection duration of <strong>1 hour</strong>, and limits the profiling to the <code translate="no" dir="ltr">com.google.android.car.kitchensink</code> and <code translate="no" dir="ltr">com.google.android.apps.maps</code> packages.</p> 
+<pre>adb shell dumpsys android.automotive.watchdog.ICarWatchdog/default --start_perf --interval 10 --max_duration 3600 --filter_packages com.google.android.car.kitchensink,com.google.android.apps.maps</pre> <h3 id="stop-and-dump-custom-collection-session">Stop and dump custom collection session</h3> <p>After recording the I/O usage of an app or service of interest, vendors should stop the custom performance data collection session to dump the collected data. This command stops the custom performance data collection and dumps the collected data to <code translate="no" dir="ltr">/tmp/carwatchdog_dump.txt</code>:</p> 
+<pre>adb shell dumpsys android.automotive.watchdog.ICarWatchdog/default --stop-perf &gt; /tmp/carwatchdog_custom_dump.txt</pre> <h3 id="dumpsys-help">Dumpsys help</h3> <p>To get dumpsys help:</p> 
+<pre>adb shell dumpsys android.automotive.watchdog.ICarWatchdog/default --help</pre> <h3 id="dump-to-proto-format">Dump to proto format</h3> <p>Optionally, dumpsys data can be dumped in proto format:</p> 
+<pre>adb shell dumpsys android.automotive.watchdog.ICarWatchdog/default --proto</pre> <h2 id="understand-the-performance-data-report">Understand the performance data report</h2> <p>To learn more, see the following sample performance data report:</p> 
+<pre>adb shell dumpsys android.automotive.watchdog.ICarWatchdog/default
+
+---------------------------------
+WatchdogPerfService report:
+---------------------------------
+Boot-time collection information:
+=================================
+Event polling interval: 1 second
+
+Wake-up collection information:
+===============================
+Event polling interval: 1 second
+
+User-switch collection information:
+===================================
+Event polling interval: 1 second
+
+Periodic collection information:
+================================
+Event polling interval: 60 seconds
+---------------------------------------------------------------------------
+Boot-time performance report:
+=================================
+No collection recorded
+---------------------------------------------------------------------------
+Wake-up performance report:
+===========================
+No collection recorded
+---------------------------------------------------------------------------
+User-switch events performance report:
+======================================
+No collection recorded
+---------------------------------------------------------------------------
+Last N minutes performance report:
+======================================
+Collection duration: 10800 seconds
+Number of collections: 181
+
+Collection 0: &lt;Mon Oct  2 18:36:06 2023 GMT&gt;
+=============================================
+Total CPU time (ms): 473210
+Total CPU cycles: 39553152000
+Total idle CPU time (ms)/percent: 435860 / 92.11%
+CPU I/O wait time (ms)/percent: 0 / 0.00%
+Number of context switches: 13723415093
+Number of I/O blocked processes/percent: 0 / 0.00%
+
+Top N CPU Times:
+----------------
+Android User ID, Package Name, CPU Time (ms), Percentage of total CPU time, CPU Cycles
+    Command, CPU Time (ms), Percentage of UID's CPU Time, CPU Cycles
+10, com.google.android.carassistant, 13357, 2.82%, 16409088000
+    assistant:interactor, 13360, 100.02%, 16409088000
+0, system, 9097, 1.92%, 9640512000
+    sensors@1.0-ser, 3790, 41.66%, 3773184000
+    system_server, 2760, 30.34%, 3135936000
+    com.android.car, 1150, 12.64%, 1099584000
+    binder:621_4, 1000, 10.99%, 1281024000
+    surfaceflinger, 230, 2.53%, 245376000
+0, audioserver, 4383, 0.93%, 4597248000
+    Main, 2690, 61.37%, 2980416000
+    binder:916_2, 950, 21.67%, 925056000
+    audioserver, 720, 16.43%, 691776000
+0, root, 4357, 0.92%, 3727872000
+    irq/311-iam2068, 2630, 60.36%, 2471616000
+    irq/26-90b6400., 370, 8.49%, 561024000
+    kworker/u16:4-bwmon_wq, 290, 6.66%, 48960000
+    kworker/u16:1-memlat_wq, 270, 6.20%, 0
+    ipcdaemon, 220, 5.05%, 218304000
+10, com.google.android.apps.geo.automotive.adas, 1509, 0.32%, 1756416000
+    adas:publishing, 1490, 98.74%, 1735680000
+    as:clientparams, 10, 0.66%, 20736000
+0, com.android.vending, 796, 0.17%, 765504000
+    android.vending, 790, 99.25%, 765504000
+0, shared:com.google.uid.shared, 581, 0.12%, 481152000
+    google.android.gms, 340, 58.52%, 237312000
+    .gms.persistent, 190, 32.70%, 184512000
+    process.gservices, 50, 8.61%, 59328000
+0, gps, 507, 0.11%, 659136000
+    binder:920_2, 500, 98.62%, 659136000
+10, com.android.vending, 489, 0.10%, 372288000
+    android.vending, 480, 98.16%, 372288000
+0, shared:android.uid.systemui, 438, 0.09%, 449856000
+    android.systemui, 440, 100.46%, 449856000
+
+Top N Storage I/O Reads:
+-------------
+Android User ID, Package Name, Foreground Bytes, Foreground Bytes %, Foreground Fsync, Foreground Fsync %, Background Bytes, Background Bytes %, Background Fsync, Background Fsync %
+0, root, 56123392, 81.95%, 1, 100.00%, 0, 0.00%, 0, 0.00%
+0, system, 12333056, 18.01%, 0, 0.00%, 0, 0.00%, 0, 0.00%
+
+Top N Storage I/O Writes:
+-------------------------
+Android User ID, Package Name, Foreground Bytes, Foreground Bytes %, Foreground Fsync, Foreground Fsync %, Background Bytes, Background Bytes %, Background Fsync, Background Fsync %
+0, com.android.vending, 0, 0.00%, 0, 0.00%, 520192, 46.35%, 20, 47.62%
+10, com.android.vending, 0, 0.00%, 0, 0.00%, 520192, 46.35%, 20, 47.62%
+10, shared:com.google.uid.shared, 0, 0.00%, 0, 0.00%, 45056, 4.01%, 0, 0.00%
+0, shared:com.google.uid.shared, 0, 0.00%, 0, 0.00%, 36864, 3.28%, 2, 4.76%
+0, logd, 24576, 40.00%, 0, 0.00%, 0, 0.00%, 0, 0.00%
+0, root, 20480, 33.33%, 0, 0.00%, 0, 0.00%, 0, 0.00%
+0, system, 16384, 26.67%, 0, 0.00%, 0, 0.00%, 0, 0.00%
+
+Top N I/O waiting UIDs:
+-----------------------
+Android User ID, Package Name, Number of owned tasks waiting for I/O, Percentage of owned tasks waiting for I/O
+    Command, Number of I/O waiting tasks, Percentage of UID's tasks waiting for I/O
+0, root, 2, 0.39%
+    dp_hdcp2p2, 1, 50.00%
+    hdcp_2x, 1, 50.00%
+
+Top N major page faults:
+------------------------
+Android User ID, Package Name, Number of major page faults, Percentage of total major page faults
+    Command, Number of major page faults, Percentage of UID's major page faults
+0, com.android.vending, 104, 48.83%
+    android.vending, 104, 100.00%
+10, com.android.vending, 104, 48.83%
+    android.vending, 104, 100.00%
+0, shared:com.google.uid.shared, 4, 1.88%
+    .gms.persistent, 4, 100.00%
+10, shared:com.google.uid.shared, 1, 0.47%
+    .gms.persistent, 1, 100.00%
+Number of major page faults since last collection: 213
+Percentage of change in major page faults since last collection: 0.00%</pre> <p>When capturing a bugreport, running a Watchdog dumpsys command without any arguments or stopping a custom collection session, the Watchdog native service dumps a performance data report similar to the above report.</p> <p>The report contains data collected during system boot up and the last N minutes before report generation.</p> <table class="alternating-odd-rows green"> <th width="30%">Item</th> <th>Description</th> <tr> <td><strong>Boot-time collection information</strong></td> <td>Provides information about the boot-time performance data collection session.</td> </tr> <tr> <td><strong>Wake-up collection information</strong></td> <td>Provides information about the wake-up performance data collection session when the system wakes up from suspend.</td> </tr> <tr> <td><strong>User-switch collection information</strong></td> <td>Provides information about the user-switch performance data collection session when there is a user-switch.</td> </tr> <tr> <td><strong>Periodic collection information</strong></td> <td>Provides information about the periodic performance collection session that starts post boot-complete.</td> </tr> <tr> <td><strong>Boot-time performance report</strong></td> <td>Contains performance data collected during system boot-up. This data persists in memory until system shutdown, so the data is dumped on all reports.</td> </tr> <tr> <td><strong>Wake-up performance report</strong></td> <td>Contains performance data collected during wake-up. This data is persistent in-memory until system shutdown, so the data is dumped on all reports.</td> </tr> <tr> <td><strong>User-switch performance report</strong></td> <td>Contains performance data collected during user-switch. This data persists in memory until system shutdown, so the data is dumped on all reports.</td> </tr> <tr> <td><strong>Last N minutes I/O performance report</strong></td> <td>Contains performance data collected (by the periodic collection session) during the last N minutes before the report generation.</td> </tr> <tr> <td><strong>Collection duration</strong></td> <td>Total duration of the performance data collection.</td> </tr> <tr> <td><strong>Number of collections</strong></td> <td>Total number of collections reported in a single report.</td> </tr> </table> <p>Each collection reported in the report may contain all or some of the below sections. The stats reported in each collection is the delta since the last collection except the stats that are instantaneous (for example, not aggregated since system boot-up).</p> <table class="alternating-odd-rows green"> <th width="30%">Item</th> <th>Description</th> <tr> <td><strong>CPU I/O wait time/percent</strong></td> <td>Absolute CPU time and percentage of total CPU time spent on context switching or waiting due to I/O operations since the last collection.</td> </tr> <tr> <td><strong>Total CPU time</strong></td> <td>Total CPU time in milliseconds.</td> </tr> <tr> <td><strong>Total idle CPU time</strong></td> <td>Total CPU time spent in idle.</td> </tr> <tr> <td><strong>CPU I/O wait time</strong></td> <td>Total time CPU spent waiting for I/O operations.</td> </tr> <tr> <td><strong>Number of context switches</strong></td> <td>Number of CPU switches from one process or thread to another.</td> </tr> <tr> <td><strong>Number of I/O blocked processes/percent</strong></td> <td>Total number of processes blocked waiting for I/O and the percentage of processes blocked waiting for I/O since the last collection.</td> </tr> <tr> <td><strong>Top N CPU Times</strong></td> <td> <p>Top N packages that consumed the most CPU time since the last collection:</p> <ul> <li>Each top-level line contains the user ID, package name, CPU time, percentage of total CPU time, and CPU cycles.</li> <li>Inner-level lines contain the command, CPU time, percentage of UID CPU time, and CPU cycles.</li> </ul> </td> </tr> <tr> <td><strong>Top N Storage I/O Reads</strong></td> <td> <p>Top N packages that read the most data from disk since the last collection.</p> <p>Each line contains the user ID, package name, total number of bytes read in foreground mode versus background mode, percentage of bytes across all foreground mode versus background mode reads in the system, total number of <code translate="no" dir="ltr">fsync</code> calls made in foreground mode versus background mode, and percentage of <code translate="no" dir="ltr">fsync</code> calls across all foreground mode versus background mode <code translate="no" dir="ltr">fsync</code> calls made in the system.</p>
+</td> </tr> <tr> <td><strong>Top N Storage I/O Writes</strong></td> <td>Top N packages that wrote most data to disk since the last collection. Each line contains fields similar to that of Top N Reads.</td> </tr> <tr> <td><strong>Top N I/O waiting UIDs</strong></td> <td>
+<p>Top N packages with the most I/O waiting tasks.</p> <ul> <li>Each top-level line contains the user ID, package names, number and percentage of tasks owned by the package waiting for I/O.</li> <li>Inner-level lines contain the I/O waiting information for the top processes owned by the package.</li> </ul> </td> </tr> <tr> <td><strong>Top N major page faults</strong></td> <td>Top N packages with the most major page faults since the last collection. </td>
+</tr> </table> <aside class="note"> <strong>Note:</strong> The report generated at the end of the custom performance data collection session is similar to the format above. However, the report contains the data collected <strong>only</strong> during the custom collection session.</aside><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/watchdog/wd_performance_health" class="_attribution-link">https://source.android.com/docs/automotive/watchdog/wd_performance_health</a>
+  </p>
+</div>

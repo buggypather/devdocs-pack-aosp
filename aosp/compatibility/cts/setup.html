@@ -1,0 +1,165 @@
+<h1>Set up CTS automated testing</h1>  <p>Before you can execute automated CTS tests, prepare your physical environment, set up your workstation, and configure the device you're testing.</p> <aside class="note"><strong>Note:</strong><span> To reduce the time it takes to run tests, you can test more than one DUT at a time. For example, you can attach devices to the same test workstation using a USB hub, for example.</span></aside> <h2 id="physical-environment">Set up physical environment</h2> <p>Certain CTS tests require the use of external devices to be set up near the DUT. To set up your physical environment:</p> <aside class="note"><strong>Note:</strong><span> If you're testing more than one DUT at a time, you must set up the physical environment for each DUT.</span></aside> <ol> <li>
+<p>If your DUT supports Bluetooth LE, place at least three Bluetooth LE beacons within 5 meters of the DUT for Bluetooth LE scan testing. Additionally:</p> <ul> <li>The beacons don't need to be configured or emit anything specific.</li> <li>The beacons can be any kind, including iBeacon, Eddystone, or even devices simulating BLE beacons.</li> </ul>
+</li> <li>
+<p>Place the DUT in front of a scene, such as a wall or the ceiling, at a distance equivalent to the DUT's minimum focus distance. Additionally:</p> <ul> <li>The scene must have sufficient lighting to allow the sensors under test to reach and remain at the maximum configured target frames per second (FPS) as specified in <a href="https://developer.android.com/reference/android/hardware/camera2/CaptureRequest#CONTROL_AE_TARGET_FPS_RANGE"><code translate="no" dir="ltr">CONTROL_AE_TARGET_FPS_RANGE</code></a>.</li> <li>This set up applies to all camera sensors reported by <a href="https://developer.android.com/reference/android/hardware/camera2/CameraManager#getCameraIdList()"><code translate="no" dir="ltr">getCameraIdList</code></a> as the test iterates over the listed devices and measures performance individually.</li> <li>If the DUT supports external cameras, such as USB webcams, plug in an external camera when running CTS. Otherwise, the CTS tests fail.
+</li> </ul>
+</li> <li>
+<p>If your DUT supports a global positioning system (GPS) or other global navigation satellite system (GNSS), provide a GNSS signal to the DUT at a suitable signal level for reception and location calculation. Additionally:</p> <ul> <li>The GPS must be compliant with ICD-GPS-200C.</li> <li>The GNSS signal can be of any type, including a satellite simulator or a repeater of outdoor signals.</li> <li>You can place the DUT close to a window so that it can directly receive enough GNSS signal from a satellite.</li> </ul> <aside class="caution"><strong>Caution:</strong><span> For the GPS testing, the internet connection setup must not block connections to <code translate="no" dir="ltr">supl.google.com</code> ports 7275, 7276, 7277, 7278, 7279 and 7280. These ports download GPS assistance data for testing position calculation on the local device.</span></aside>
+</li> <li>
+<p>Verify that your Wi-Fi network supports IPv4 and IPv6, has an internet connection with DNS for IPv4 and IPv6, supports IP multicast, and can treat the DUT as an <em>isolated client</em>.</p> <aside class="note"><strong>Note:</strong><span> An isolated client is a configuration where the DUT doesn't have visibility to the broadcast or multinetwork messages on that subnetwork. To set up an isolated client, use a Wi-Fi access point (AP) configuration or run the DUT on an isolated subnetwork without other devices being connected.</span></aside> <p>If you don't have access to a native IPv6 network, an IPv6 carrier network, or a VPN to pass IPv6 tests, use a Wi-Fi AP and an IPv6 tunnel.</p>
+</li> <li><p>Verify that the DUT has the <code translate="no" dir="ltr">UP</code>, <code translate="no" dir="ltr">BROADCAST</code>, and <code translate="no" dir="ltr">MULTICAST</code> flags set on the Wi-Fi interface.</p></li> <li><p>Verify that the Wi-Fi interface has IPv4 and IPv6 addresses assigned. To check the Wi-Fi interface properties, run <code translate="no" dir="ltr">adb shell ifconfig</code>.</p></li> <li><p>If your DUT supports <a href="../../core/connect/wifi-sta-sta-concurrency">Wi-Fi STA or STA concurrency</a>, set up at least two Wi-Fi networks. These Wi-Fi networks must run on different bands with different SSIDs or on the same SSID with different BSSIDs.</p></li> <li>
+<p>If your DUT supports <a href="../../core/connect/wifi-rtt">Wi-Fi round trip time (RTT)</a>, set up a device that supports Wi-Fi RTT:</p> <ol> <li>Place the Wi-Fi RTT device within 40 feet of the DUT.</li> <li>Power up the Wi-Fi RTT device.</li> </ol> <p>Here are two recommended devices supporting Wi-Fi RTT: - Google Wifi - Compulab's fitlet2 access point (set to 40 MHz bandwidth at 5 GHz).</p>
+</li> </ol> <h2 id="desktop-machine">Set up your desktop machine</h2> <p>Before running the CTS automated tests, verify that your desktop machine meets hardware and operating system requirements and has the proper software installed, as described in the following sections.</p> <h3 id="host-machine-reqt">Meet hardware requirements</h3> <p>Your CTS desktop machine should meet or exceed these hardware requirements:</p> <ul> <li><p>A 64-bit x86 system</p></li> <li><p>At least 256 GB of free disk space to accommodate the increased number of CTS test cases and an increase in Java heap space reservation in Tradefed</p></li> <li><p>A minimum of 32 GB of RAM</p></li> </ul> <h3 id="os-reqt">Meet operating system requirements</h3> <ul> <li><p>Your development machine must run a 64-bit Linux distribution with GNU C Library (glibc) 2.17 or higher.</p></li> <li><p>The Operating System language should be set to "English" to allow CTS to resolve the path correctly.</p></li> </ul> <h3 id="install-software">Install desktop software</h3> <p>To install the proper desktop software for CTS:</p> <ol> <li><p>Install the FFmpeg package version 5.1.3 or higher.</p></li> <li>
+<p>Install the most recent versions of <a href="http://developer.android.com/tools/adb.html">Android Debug Bridge (adb)</a> and <a href="https://developer.android.com/tools/aapt2">Android Asset Packaging Tool (AAPT2)</a> and add the location of those tools to the system path of your machine:</p> <ol> <li>Follow the instructions at the start of the <a href="https://developer.android.com/tools/sdkmanager">SDK Manager</a> documentation to install the <code translate="no" dir="ltr">sdkmanager</code> command-line tool. The link to download the command-line tools is in the <strong>Command line tools only</strong> section at the bottom of the <a href="https://developer.android.com/studio">Android Studio</a> download page.</li> <li>Update your system path to include the location of the newly installed <code translate="no" dir="ltr">sdkmanager</code>.</li> <li>Using <code translate="no" dir="ltr">sdkmanager</code>, install the latest <code translate="no" dir="ltr">platform-tools</code> and <code translate="no" dir="ltr">build-tools</code> packages. These packages contain adb and AAPT2. For information on installing packages, see <a href="https://developer.android.com/tools/sdkmanager#install">Install packages</a>.</li> <li>Update your path to include the location of the newly installed adb and AAPT2 tools.</li> <li>Verify that adb and AAPT2 are in your path.</li> </ol> <aside class="note"><strong>Note:</strong><span> Alternatively, if you're using Android Studio on your CTS desktop machine, you can check the <strong>Android SDK Platform-Tools</strong> and <strong>Android SDK Build-Tools</strong> options to install the platform and SDK build tools.</span></aside>
+</li> <li>
+<p>Install the proper version of <a href="http://openjdk.java.net/install/">Java Development Kit (JDK)</a>:</p> <ul> <li>For Android 11 or higher, install JDK 11.</li> <li>For Android 10 or lower, see <a href="setup-older">Set up CTS (AOSP 10 or lower)</a>.</li> </ul>
+</li> <li><p>For Android 13 and 14, install <a href="https://virtualenv.pypa.io/en/latest/how-to/install.html">virtualenv</a>. The virtualenv tool is required for multidevice tests.</p></li> <li><p>To verify that Python is installed, type <code translate="no" dir="ltr">python3</code>. The Python version and date should appear indicating python is properly installed.</p></li> <li>
+<p>Download and open the CTS packages from <a href="downloads">Compatibility Test Suite downloads</a> that match your devices' Android version and all the application binary interfaces (ABIs) that your devices support.</p> <p>For Android 17 and higher, you can download the content-defined chunking (CDC) package (<code translate="no" dir="ltr">android-chunked-cts.zip</code>) to reduce download size:</p> <ol> <li>Extract the downloaded archive (<code translate="no" dir="ltr">unzip android-chunked-cts.zip -d
+&lt;output_dir&gt;</code>).</li> <li>Run <code translate="no" dir="ltr">./android-cts/tools/cts-tradefed</code> to automatically restore <code translate="no" dir="ltr">android-cts/testcases/</code> from the deduplicated chunks before test execution (or run <code translate="no" dir="ltr">./android-cts/tools/cts_restorer --chunked-dir-path
+./android-cts/chunked-testcases --output-dir-path
+./android-cts/testcases</code> for standalone restoration).</li> </ol>
+</li> <li><p>Download and open the latest version of the <a href="downloads#cts-media-files">CTS media files</a>. The media files include video clips from <a href="https://peach.blender.org/">Big Buck Bunny</a>, which are copyrighted by the Blender Foundation under the <a href="http://creativecommons.org/licenses/by/3.0/">Creative Commons Attribution 3.0 license</a>.</p></li> <li>
+<p>(optional) When you run CTS for first time, it dynamically downloads some Mainline-related CTS files. Depending on your network speed, this download adds 10 minutes or more to the CTS run time.</p> <p>To avoid this added CTS run time, you can download the Mainline-related CTS files before running CTS. For information on downloading the Mainline-related CTS files, see <a href="#download-mainline">Download Mainline-related CTS files</a>.</p>
+</li> </ol> <h2 id="device-prep">Prepare the DUT</h2> <p>After setting up your desktop machine, you must set up and configure the DUT.</p> <h3 id="device-setup">Set up the DUT</h3> <p>To set up the DUT:</p> <ol> <li><p>Verify that the DUT is running a system image based on the known to be compatible user build (Android 4.0 or higher) from <a href="https://source.android.com/docs/setup/reference/build-numbers">Codenames, Tags, and Build Numbers</a> and uses the <code translate="no" dir="ltr">user</code> build variant. For more on build variants, see <a href="../../setup/build/building#choose-a-target">Choose a target</a>.</p></li> <li>
+<p>If the DUT is running Android 13 or higher, verify the build has <code translate="no" dir="ltr">ro.product.first_api_level</code> set to the API level that the device was commercially launched with. To set this value, make the following change to the <code translate="no" dir="ltr">device.mk</code> file:</p> 
+<pre>PRODUCT_SHIPPING_API_LEVEL := 21
+</pre> <p>Certain CTS requirements depend on the build that a device was originally shipped with. For example, devices that originally ship with earlier builds might be excluded from system requirements that apply to devices that ship with later builds. For valid API level values, see <a href="https://source.android.com/docs/setup/reference/build-numbers">Codenames, Tags, and Build Numbers</a>. For more information on <code translate="no" dir="ltr">ro.product.first_api_level</code>, see <a href="../../core/architecture/api-flags">Vendor API level</a>.</p> <p>For Android 10 or lower, see <a href="setup-older">Set up CTS (AOSP 10 or lower)</a>.   </p>
+</li> <li>
+<p>If your device supports APEX package management:</p> <ol> <li>Download the APEX shim package for your specific Android version and hardware architecture. The left two columns in <a href="#cts-shim-packages">shim packages</a> table provide links to the package to download.</li> <li>Copy the downloaded package to <code translate="no" dir="ltr">/system/apex</code>.</li> <li>Rename the file to <code translate="no" dir="ltr">com.android.apex.cts.shim.apex</code>.</li> </ol>
+</li> <li>
+<p>If your device doesn't support APEX package management:</p> <ol> <li>Download the APEX shim packages for your specific Android version and hardware architecture. The right two columns in the <a href="#cts-shim-packages">shim packages</a> table provide links to the packages to download.</li> <li>Copy the <code translate="no" dir="ltr">CtsShim.apk</code> to <code translate="no" dir="ltr">/system/app/</code>
+</li> <li>Rename the <code translate="no" dir="ltr">CtsShim.apk</code> to <code translate="no" dir="ltr">CtsShimPrebuilt.apk</code>
+</li> <li>Copy the <code translate="no" dir="ltr">CtsShimPriv.apk</code> to <code translate="no" dir="ltr">/system/priv-app/</code>
+</li> <li>Rename the <code translate="no" dir="ltr">CtsShimPriv.apk</code> to <code translate="no" dir="ltr">CtsShimPrivPrebuilt.apk</code>
+</li> </ol>
+</li> <li>
+<p>If your device reports more than one secure element:</p> <ol> <li>Download <a href="https://android.googlesource.com/platform/cts/+/android17-release/tests/tests/secure_element/sample_applet/uicc"><code translate="no" dir="ltr">google-cardlet.cap</code></a>.</li> <li>Copy the downloaded file to <code translate="no" dir="ltr">/data/uicc/cardlets/</code>. 
+</li> </ol>
+</li> <li><p>If your device reports more than one secure element, install the sample applet into the embedded Secure Element (eSE) of the DUT or into the SIM card used by the DUT. For more information, see <a href="secure-element">CTS test for Secure Element</a>.</p></li> <li><p>If your device doesn't have an embedded screen, connect a screen to the device.</p></li> <li>
+<p>If the device has a memory card slot, plug in an empty SD card. Use an SD card that supports an ultra high speed (UHS) bus with SDHC or SDXC capacity or a card with speed class 10 or better to verify that it can pass the CTS.</p> <aside class="warning"><strong>Warning:</strong><span> CTS might modify or erase data on the SD card plugged into the device.</span></aside>
+</li> <li>
+<p>If the device has SIM card slots, plug an activated SIM card into each slot. If the device supports SMS, each SIM card must have its own number field populated. For devices running Android 12 or higher, all SIM cards must have support for storing abbreviated dialing numbers (ADN). GSM and USIM cards with the telecom dedicated file (DF<sub>Telecom</sub>) satisfy this requirement.</p> <aside class="warning"><strong>Warning:</strong><span> CTS might modify or erase data on the SIM cards plugged into the device.</span></aside>
+</li> <li><p>Verify that your device has a SIM with CTS carrier privileges meeting the requirements specified in <a href="../../core/connect/uicc#prepare_uicc">Prepare the UICC</a>.</p></li> </ol> <aside class="note"><strong>Note:</strong><span> If you're testing more than one DUT at a time, you must set up each DUT.</span></aside> <h3 id="device-config">Configure the DUT</h3> <p>Use the following steps to configure your DUT for use with CTS.</p> <aside class="note"><strong>Note:</strong><span> If you're using Android 10 or lower, read <a href="setup-older#configure-dut">Configure the DUT</a>.</span></aside> <p>On the DUT:</p> <ol> <li>
+<p>Factory data reset the device.</p> <aside class="warning"><strong>Warning:</strong><span> This reset erases all user data from the device.</span></aside>
+</li> <li><p>Set the device's language to <strong>English (United States)</strong>.</p></li> <li><p>If the device supports customizing default fonts, verify the default <strong>sans-serif</strong> font family is set to <strong>Roboto</strong>.</p></li> <li><p>If there's a GPS or a Wi-Fi or mobile network feature on the device, enable the location setting.</p></li> <li><p>Connect to a Wi-Fi network that supports IPv6, can treat the DUT as an isolated client, and has an internet connection. For an explanation of isolated clients, see <a href="#physical-environment">Set up physical environment</a>.</p></li> <li><p>Verify that there isn't a lock pattern or password set.</p></li> <li>
+<p>Enable USB debugging:</p> <ol> <li><p>Navigate to <strong>Settings &gt; About phone</strong> and tap <strong>Build number</strong> seven times. The <strong>Developer options</strong> appears within the <strong>System</strong> settings category.</p></li> <li><p>Tap <strong>USB debugging</strong>.</p></li> </ol> <p>To enable USB debugging on Android 10 or lower, see <a href="setup-older">Set up CTS (AOSP 10 or lower)</a>.</p>
+</li> <li><p>Set the time to the 12-hour format.</p></li> <li><p>Enable <strong>Developer options &gt; Stay awake</strong>.</p></li> <li>
+<p>Disable USB app verification:</p> <ol> <li><p>Navigate to <strong>Developer options</strong>.</p></li> <li><p>Tap <strong>Verify apps over USB</strong>.</p></li> </ol>
+</li> <li>
+<p>In Android 13 or higher, enable mock modem:</p> <ol> <li><p>Navigate to <strong>Developer options</strong>.</p></li> <li><p>Tap <strong>Allow Mock Modem</strong>.</p></li> </ol> <p>This setting is required for specific telephony tests.</p>
+</li> </ol> <p>On the desktop machine:</p> <ol> <li><p>Launch the browser and dismiss any startup or setup screen.</p></li> <li><p>Connect the DUT to the desktop machine using a USB cable.</p></li> <li><p>If the system prompts you to accept an RSA key allowing debugging through this computer, click <strong>Allow USB debugging</strong>.</p></li> <li><p>Set Roboto2 as the sans-serif font using a user accessible affordance (not hidden) setting.</p></li> <li>
+<p>Copy the CTS media files to the DUT:</p> <ol> <li>Navigate (<code translate="no" dir="ltr">cd</code>) to the path where the media files are downloaded and unzipped.</li> <li>
+<p>Change the file permissions:</p> 
+<pre>chmod u+x copy_media.sh
+</pre>
+</li> <li>
+<p>Copy the files:</p> <ul> <li>
+<p>To copy clips up to a resolution of 720x480, run:</p> 
+<pre>./copy_media.sh 720x480</pre>
+</li> <li>
+<p>If you aren't sure of the maximum resolution, copy all of the files:</p> 
+<pre>./copy_media.sh all</pre>
+</li> <li>
+<p>If there are multiple DUTs, add the serial option (<code translate="no" dir="ltr">-s</code>) of a specific device to the end. For example, to copy up to 720x480 to the device with serial 1234567, run:</p> 
+<pre>./copy_media.sh 720x480 -s 1234567</pre>
+</li> </ul>
+</li> </ol>
+</li> </ol> <h2 id="download-mainline">Download Mainline-related CTS files</h2> <p>To download the Mainline-related CTS files:</p> <ol> <li>
+<p>Get the Android API level on the device by running:</p> 
+<pre>adb shell getprop ro.build.version.sdk
+</pre>
+</li> <li>
+<p>Follow the instructions in the <a href="https://android.googlesource.com/platform/cts/+/android17-release/tools/mcts/download_mcts.sh"><code translate="no" dir="ltr">download_mcts.sh</code> script</a> to download the Mainline CTS files.</p> <p>The download takes at least 10 minutes, depending on your network speed.</p>
+</li> </ol> <h2 id="shim-packages-table">Shim packages</h2> <p>The following table lists the packages available for each device version and architecture:</p> <table> <tr> <th style="width:20%">Device Version</th> <th colspan="2">Packages (if APEX supported)</th> <th colspan="2">Packages (if APEX isn't supported)</th> </tr> <tr> <th> </th> <th>ARM </th> <th>x86 </th> <th>ARM </th> <th>x86 </th> </tr> <tr> <td>Android 17 </td> <td>
+<a href="https://android.googlesource.com/platform/system/apex/+/refs/heads/android17-release/shim/prebuilts/arm/com.android.apex.cts.shim.v1.apex"> <code translate="no" dir="ltr">17-arm-release</code></a> </td> <td>
+<a href="https://android.googlesource.com/platform/system/apex/+/refs/heads/android17-release/shim/prebuilts/x86/com.android.apex.cts.shim.v1.apex"><code translate="no" dir="ltr">
+   android17-x86-release</code></a> </td> <td>
+<a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/packages/CtsShim/apk/arm/CtsShim.apk"><code translate="no" dir="ltr">
+   android17-arm-CtsShim.apk</code></a> <p><a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/packages/CtsShim/apk/arm/CtsShimPriv.apk"><code translate="no" dir="ltr">
+android17-arm-CtsShimPriv.apk</code></a></p> </td> <td>
+<a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/packages/CtsShim/apk/x86/CtsShim.apk"><code translate="no" dir="ltr">
+   android17-x86-CtsShim.apk</code></a> <p><a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/packages/CtsShim/apk/x86/CtsShimPriv.apk"><code translate="no" dir="ltr">
+android17-x86-CtsShimPriv.apk</code></a></p> </td> </tr> <tr> <td>Android 16 QPR2 </td> <td>
+<a href="https://android.googlesource.com/platform/system/apex/+/refs/heads/android16-qpr2-release/shim/prebuilts/arm/com.android.apex.cts.shim.v1.apex"> <code translate="no" dir="ltr">16-arm-release</code></a> </td> <td>
+<a href="https://android.googlesource.com/platform/system/apex/+/refs/heads/android16-qpr2-release/shim/prebuilts/x86/com.android.apex.cts.shim.v1.apex"><code translate="no" dir="ltr">
+   android16-x86-release</code></a> </td> <td>
+<a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android16-qpr2-release/packages/CtsShim/apk/arm/CtsShim.apk"><code translate="no" dir="ltr">
+   android16-arm-CtsShim.apk</code></a> <p><a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android16-qpr2-release/packages/CtsShim/apk/arm/CtsShimPriv.apk"><code translate="no" dir="ltr">
+android16-arm-CtsShimPriv.apk</code></a></p> </td> <td>
+<a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android16-qpr2-release/packages/CtsShim/apk/x86/CtsShim.apk"><code translate="no" dir="ltr">
+   android16-x86-CtsShim.apk</code></a> <p><a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android16-qpr2-release/packages/CtsShim/apk/x86/CtsShimPriv.apk"><code translate="no" dir="ltr">
+android16-x86-CtsShimPriv.apk</code></a></p> </td> </tr> <tr> <td>Android 16 </td> <td>
+<a href="https://android.googlesource.com/platform/system/apex/+/refs/heads/android16-release/shim/prebuilts/arm/com.android.apex.cts.shim.v1.apex"> <code translate="no" dir="ltr">16-arm-release</code></a> </td> <td>
+<a href="https://android.googlesource.com/platform/system/apex/+/refs/heads/android16-release/shim/prebuilts/x86/com.android.apex.cts.shim.v1.apex"><code translate="no" dir="ltr">
+   android16-x86-release</code></a> </td> <td>
+<a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android16-release/packages/CtsShim/apk/arm/CtsShim.apk"><code translate="no" dir="ltr">
+   android16-arm-CtsShim.apk</code></a> <p><a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android16-release/packages/CtsShim/apk/arm/CtsShimPriv.apk"><code translate="no" dir="ltr">
+android16-arm-CtsShimPriv.apk</code></a></p> </td> <td>
+<a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android16-release/packages/CtsShim/apk/x86/CtsShim.apk"><code translate="no" dir="ltr">
+   android16-x86-CtsShim.apk</code></a> <p><a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android16-release/packages/CtsShim/apk/x86/CtsShimPriv.apk"><code translate="no" dir="ltr">
+android16-x86-CtsShimPriv.apk</code></a></p> </td> </tr> <tr> <td>Android 15 </td> <td>
+<a href="https://android.googlesource.com/platform/system/apex/+/refs/heads/android15-release/shim/prebuilts/arm/com.android.apex.cts.shim.v1.apex"> <code translate="no" dir="ltr">15-arm-release</code></a> </td> <td>
+<a href="https://android.googlesource.com/platform/system/apex/+/refs/heads/android15-release/shim/prebuilts/x86/com.android.apex.cts.shim.v1.apex"><code translate="no" dir="ltr">
+   android15-x86-release</code></a> </td> <td>
+<a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android15-release/packages/CtsShim/apk/arm/CtsShim.apk"><code translate="no" dir="ltr">
+   android15-arm-CtsShim.apk</code></a> <p><a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android15-release/packages/CtsShim/apk/arm/CtsShimPriv.apk"><code translate="no" dir="ltr">
+android15-arm-CtsShimPriv.apk</code></a></p> </td> <td>
+<a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android15-release/packages/CtsShim/apk/x86/CtsShim.apk"><code translate="no" dir="ltr">
+   android15-x86-CtsShim.apk</code></a> <p><a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android15-release/packages/CtsShim/apk/x86/CtsShimPriv.apk"><code translate="no" dir="ltr">
+android15-x86-CtsShimPriv.apk</code></a></p> </td> </tr> <tr> <td>Android 14 </td> <td>
+<a href="https://android.googlesource.com/platform/system/apex/+/refs/heads/android14-release/shim/prebuilts/arm/com.android.apex.cts.shim.v1.apex"><code translate="no" dir="ltr">
+   android14-arm-release</code></a> </td> <td>
+<a href="https://android.googlesource.com/platform/system/apex/+/refs/heads/android14-release/shim/prebuilts/x86/com.android.apex.cts.shim.v1.apex"><code translate="no" dir="ltr">
+   android14-x86-release</code></a> </td> <td>
+<a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android14-release/packages/CtsShim/apk/arm/CtsShim.apk"><code translate="no" dir="ltr">
+   android14-arm-CtsShim.apk</code></a> <p><a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android14-release/packages/CtsShim/apk/arm/CtsShimPriv.apk"><code translate="no" dir="ltr">
+android14-arm-CtsShimPriv.apk</code></a></p> </td> <td>
+<a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android14-release/packages/CtsShim/apk/x86/CtsShim.apk"><code translate="no" dir="ltr">
+   android14-x86-CtsShim.apk</code></a> <p><a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android14-release/packages/CtsShim/apk/x86/CtsShimPriv.apk"><code translate="no" dir="ltr">
+android14-x86-CtsShimPriv.apk</code></a></p> </td> </tr> <tr> <td>Android 13 </td> <td>
+<a href="https://android.googlesource.com/platform/system/apex/+/refs/heads/android13-release/shim/prebuilts/arm/com.android.apex.cts.shim.v1.apex"><code translate="no" dir="ltr">
+   android13-arm-release</code></a> </td> <td>
+<a href="https://android.googlesource.com/platform/system/apex/+/refs/heads/android13-release/shim/prebuilts/x86/com.android.apex.cts.shim.v1.apex"><code translate="no" dir="ltr">
+   android13-x86-release</code></a> </td> <td>
+<a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android13-release/packages/CtsShim/apk/arm/CtsShim.apk"><code translate="no" dir="ltr">
+   android13-arm-CtsShim.apk</code></a> <p><a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android13-release/packages/CtsShim/apk/arm/CtsShimPriv.apk"><code translate="no" dir="ltr">
+android13-arm-CtsShimPriv.apk</code></a></p> </td> <td>
+<a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android13-release/packages/CtsShim/apk/x86/CtsShim.apk"><code translate="no" dir="ltr">
+   android13-x86-CtsShim.apk</code></a> <p><a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android13-release/packages/CtsShim/apk/x86/CtsShimPriv.apk"><code translate="no" dir="ltr">
+android13-x86-CtsShimPriv.apk</code></a></p> </td> </tr> <tr> <td>Android 12 </td> <td>
+<a href="https://android.googlesource.com/platform/system/apex/+/refs/heads/android12-release/shim/prebuilts/arm/com.android.apex.cts.shim.v1.apex"><code translate="no" dir="ltr">
+   android12-arm-release</code></a> </td> <td>
+<a href="https://android.googlesource.com/platform/system/apex/+/refs/heads/android12-release/shim/prebuilts/x86/com.android.apex.cts.shim.v1.apex"><code translate="no" dir="ltr">
+   android12-x86-release</code></a> </td> <td>
+<a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android12-release/packages/CtsShim/apk/arm/CtsShim.apk"><code translate="no" dir="ltr">
+   android12-arm-CtsShim.apk</code></a> <p><a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android12-release/packages/CtsShim/apk/arm/CtsShimPriv.apk"><code translate="no" dir="ltr">
+android12-arm-CtsShimPriv.apk</code></a></p> </td> <td>
+<a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android12-release/packages/CtsShim/apk/x86/CtsShim.apk"><code translate="no" dir="ltr">
+   android12-x86-CtsShim.apk</code></a> <p><a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android12-release/packages/CtsShim/apk/x86/CtsShimPriv.apk"><code translate="no" dir="ltr">
+android12-x86-CtsShimPriv.apk</code></a></p> </td> </tr> <tr> <td>Android 11 </td> <td>
+<a href="https://android.googlesource.com/platform/system/apex/+/refs/heads/android11-release/shim/prebuilts/arm/com.android.apex.cts.shim.v1.apex"> <code translate="no" dir="ltr">android11-arm-release</code></a> </td> <td>
+<a href="https://android.googlesource.com/platform/system/apex/+/refs/heads/android11-release/shim/prebuilts/x86/com.android.apex.cts.shim.v1.apex"> <code translate="no" dir="ltr">android11-x86-release</code></a> </td> <td>
+<a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android11-release/packages/CtsShim/apk/arm/CtsShim.apk"> <code translate="no" dir="ltr">android11-arm-CtsShim.apk</code></a> <p><a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android11-release/packages/CtsShim/apk/arm/CtsShimPriv.apk"><code translate="no" dir="ltr">
+android11-arm-CtsShimPriv.apk</code></a></p> </td> <td>
+<a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android11-release/packages/CtsShim/apk/x86/CtsShim.apk"><code translate="no" dir="ltr">
+   android11-x86-CtsShim.apk</code></a> <p><a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android11-release/packages/CtsShim/apk/x86/CtsShimPriv.apk"><code translate="no" dir="ltr">
+android11-x86-CtsShimPriv.apk</code></a></p> </td> </tr> <tr> <td>Android 10 </td> <td colspan="2">
+<a href="https://android.googlesource.com/platform/system/apex/+/refs/heads/android10-release/shim/com.android.apex.cts.shim.v1.apex"><code translate="no" dir="ltr">
+   android10-release</code></a> </td> <td>
+<a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android10-release/packages/CtsShim/apk/arm/CtsShim.apk"><code translate="no" dir="ltr">
+   android10-arm-CtsShim.apk</code></a> <p><a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android10-release/packages/CtsShim/apk/arm/CtsShimPriv.apk"><code translate="no" dir="ltr">
+   android10-arm-CtsShimPriv.apk</code></a></p> </td> <td>
+<a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android10-release/packages/CtsShim/apk/x86/CtsShim.apk"><code translate="no" dir="ltr">
+   android10-x86-CtsShim.apk</code></a> <p><a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android10-release/packages/CtsShim/apk/x86/CtsShimPriv.apk"><code translate="no" dir="ltr">
+   android10-x86-CtsShimPriv.apk</code></a></p> </td> </tr> <tr> <td>Android 9, O, and O-MR1 </td> <td>N/A </td> <td>N/A </td> <td>
+<a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/pie-release/packages/CtsShim/apk/arm/CtsShim.apk"><code translate="no" dir="ltr">
+   arm-CtsShim.apk</code></a> <p><a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/pie-release/packages/CtsShim/apk/arm/CtsShimPriv.apk"><code translate="no" dir="ltr">
+   arm-CtsShimPriv.apk</code></a></p> </td> <td>
+<a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/pie-release/packages/CtsShim/apk/x86/CtsShim.apk"><code translate="no" dir="ltr">
+   x86-CtsShim.apk</code></a> <p><a href="https://android.googlesource.com/platform/frameworks/base/+/refs/heads/pie-release/packages/CtsShim/apk/x86/CtsShimPriv.apk"><code translate="no" dir="ltr">
+   x86-CtsShimPriv.apk</code></a></p> </td> </tr> </table> <h2 id="whats_next">What's next?</h2> <p>After reading this document, continue to <a href="run">Run automated CTS tests</a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/compatibility/cts/setup" class="_attribution-link">https://source.android.com/docs/compatibility/cts/setup</a>
+  </p>
+</div>

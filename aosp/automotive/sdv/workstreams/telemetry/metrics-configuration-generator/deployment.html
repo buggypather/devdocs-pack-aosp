@@ -1,0 +1,42 @@
+<h1>Deployment</h1>  <p>This page describes how to deploy the <a href="../metrics-configuration-generator">Metrics Configuration Generator (MCG)</a>.</p> <h2 id="get-source">Access the source code</h2> <p>The source code for MCG is hosted on GitHub, in <a href="https://github.com/google/aaos-sdv-telemetry-mcg">aaos-sdv-telemetry-mcg</a>. You can run MCG locally for development and testing, or deploy it to a cloud environment for team access.</p> <h2 id="running-locally">Run locally</h2> <p>To run MCG from its source directory for local development and testing, use Bazel. Bazel must be installed. You must enable in-memory caching by setting <code translate="no" dir="ltr">MCG_LOCALCACHE=true</code> when running locally. This supports storage of <a href="vehicle-signals">Vehicle Signal Catalogs</a>. To build and run the service locally, use the following commands from the source directory:</p> 
+<pre># Build and run on default port 8005
+MCG_LOCALCACHE=true bazel run //:mcg
+
+# Or, to change the port, use:
+MCG_LOCALCACHE=true bazel run //:mcg -- --listen :9000
+</pre> <h2 id="cloud-deployment">Deploy to Google Cloud</h2> <p>The MCG codebase includes Terraform and <a href="https://cloud.google.com/build">Google Cloud Build</a> files to deploy MCG to Google Cloud as a <a href="https://cloud.google.com/run">Google Cloud Run</a> service. The following sections guide you through the deployment process, which includes creating a variables file, deploying the infrastructure, building and deploying the application, and granting access and verifying deployment.</p> <aside class="note"><strong>Note:</strong><span> The Terraform deployment process described in the following sections provisions cloud infrastructure and deploys MCG. For subsequent application updates, you only need to follow the instructions in <a href="#build-deploy-mcg">Build and deploy the MCG application</a>.</span></aside> <p>As Cloud Run is a serverless platform, it conserves resources by only running containers when processing requests, rather than keeping a server active 24/7. This means in-memory data is lost when container instances shut down between requests; therefore, <a href="https://cloud.google.com/memorystore/docs/redis">Redis</a> is required to provide persistent storage for catalog data across service invocations. This approach provides a scalable deployment suitable for team or production use.</p> <h3 id="prerequisites">Prerequisites</h3> <p>Before you begin deployment to Google Cloud, verify you have the following prerequisites:</p> <ul> <li>A Google Cloud Project with billing enabled and sufficient permissions to provision resources and IAM roles</li> <li>
+<a href="https://learn.hashicorp.com/tutorials/terraform/install-cli">Terraform (v1.0.0 and higher)</a> installed</li> <li>The <a href="https://cloud.google.com/sdk/docs/install">Google Cloud CLI (<code translate="no" dir="ltr">gcloud</code>)</a> installed and authenticated</li> </ul> <h3 id="file-structure">File structure</h3> <p>Deploying to Google Cloud involves running Terraform commands from the <code translate="no" dir="ltr">infrastructure/</code> subdirectory and Cloud Build commands from the repository root. The main files and directories you interact with are:</p> 
+<pre>repository-root/
+├── cloudbuild.yaml
+└── infrastructure/
+    └── terraform.tfvars  &lt;-- you create this file
+</pre> <h3 id="create-terraform-vars">Create a Terraform variables file</h3> <p>In the <code translate="no" dir="ltr">infrastructure/</code> directory, create a file named <code translate="no" dir="ltr">terraform.tfvars</code> to provide values for <a href="https://developer.hashicorp.com/terraform/language/values/variables">variables</a> defined in <code translate="no" dir="ltr">variables.tf</code> and customize your deployment. You need to define values for <code translate="no" dir="ltr">project_id</code> and <code translate="no" dir="ltr">region</code> in this file; all other variables are optional. Add the following to <code translate="no" dir="ltr">terraform.tfvars</code>:</p> 
+<pre>project_id        = "your-gcp-project-id"
+region            = "your-gcp-region" # For example, us-central1 or europe-west1</pre> <p>See <code translate="no" dir="ltr">variables.tf</code> for all available variables and their default values. You can override default values by setting them in <code translate="no" dir="ltr">terraform.tfvars</code>.</p> <h3 id="deploy-infrastructure">Deploy the infrastructure</h3> <p>After you create <code translate="no" dir="ltr">terraform.tfvars</code>, you can initialize and apply the Terraform configuration. This step provisions all required Google Cloud resources, including Artifact Registry, <a href="https://cloud.google.com/memorystore/docs/redis">Redis</a>, and Cloud Run. When complete, Terraform creates the Google Cloud Run service, which runs a placeholder container image. This step might take several minutes.</p> 
+<pre># Run from the infrastructure/ directory
+terraform init
+terraform apply
+</pre> <p>When prompted by <code translate="no" dir="ltr">terraform apply</code>, review the plan and type <code translate="no" dir="ltr">yes</code> to confirm.</p> <h3 id="build-deploy-mcg">Build and deploy the MCG application</h3> <p>After the infrastructure is provisioned, the next step is to build the MCG source code and deploy it to Google Cloud Run. This is done by submitting the source code to Google Cloud Build, which builds the Docker image, pushes it to Artifact Registry, and updates the Google Cloud Run service to use the new image.</p> <p>Google Cloud Build uses the <code translate="no" dir="ltr">COMMIT_SHA</code> substitution variable to tag the built image. You can use a version number (for example, <code translate="no" dir="ltr">v1.0.0</code>), or the commit SHA of your repository. Tagging helps you distinguish between versions in Artifact Registry, manage deployments, and roll back to a previous version if needed.</p> <p>Run the following <code translate="no" dir="ltr">gcloud</code> command to trigger the build and deployment:</p> 
+<pre># Run from the repository root
+#
+# The command tags the image with the Git commit SHA.
+# To tag with a version number, replace '$(git rev-parse --short HEAD)' with the version number.
+gcloud builds submit . \
+  --config=cloudbuild.yaml \
+  --substitutions=COMMIT_SHA=$(git rev-parse --short HEAD)
+</pre> <p>This command performs the initial deployment of the application code. To deploy updates to the MCG source code, run this command again.</p> <h3 id="verify-deployment">Grant access and verify deployment</h3> <p>To let users or service accounts call the MCG API, you must grant them the <a href="https://cloud.google.com/run/docs/reference/iam/roles#run.invoker">Cloud Run Invoker</a> (<code translate="no" dir="ltr">roles/run.invoker</code>) IAM role:</p> 
+<pre>gcloud run services add-iam-policy-binding mcg-service \
+  --member=MEMBER_TYPE:EMAIL_ADDRESS \
+  --role=roles/run.invoker \
+  --region=your-gcp-region</pre> <p>You can get the service URL by running the following command. The URL remains stable across deployments.</p> 
+<pre>SERVICE_URL=$(gcloud run services describe mcg-service \
+  --region your-gcp-region \
+  --format='value(status.url)')</pre> <p>After granting permissions, confirm that the service is running and accessible by calling its <code translate="no" dir="ltr">/health</code> endpoint. Because Google Cloud Run services require authentication, you must include an authorization token from <code translate="no" dir="ltr">gcloud</code> in the request header when calling the endpoint:</p> 
+<pre>curl -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
+  $SERVICE_URL/health
+</pre> <p>If the service is running, this command returns <code translate="no" dir="ltr">OK</code>, and you can now call any of the API endpoints as described in <a href="api#call-api">Call the API</a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/telemetry/metrics-configuration-generator/deployment" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/telemetry/metrics-configuration-generator/deployment</a>
+  </p>
+</div>

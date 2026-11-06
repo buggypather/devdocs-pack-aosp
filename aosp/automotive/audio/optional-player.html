@@ -1,0 +1,99 @@
+<h1>Connect an input device in AAOS</h1>  <p>You can use these mechanisms to play audio in Android:</p> <ul> <li><a href="https://developer.android.com/guide/topics/media/platform/mediaplayer">Media player</a></li> <li><a href="https://developer.android.com/guide/topics/media/exoplayer">Exo player</a></li> <li><a href="https://developer.android.com/reference/android/media/AudioTrack">Audio track</a></li> <li><a href="https://developer.android.com/ndk/guides/audio/aaudio/aaudio">AAudio</a></li> </ul> <p>Each mechanism allows for audio playback to be performed in Android. For radio playback or playback from input devices, these options might not suffice, although each could be coupled with audio capture or the <a href="https://developer.android.com/guide/topics/media/platform/mediarecorder"><code translate="no" dir="ltr">MediaRecorder</code></a> class to first capture the audio and then play it back from Android. For system apps in particular, the following information can used to connect an input device to an output mixer in AAOS.</p> <h2 id="hwaudiosource_player">HwAudioSource player</h2> <p><code translate="no" dir="ltr">HwAudioSource</code> connects the audio source device directly to an Android mixer.</p> <h3 id="motivations">Motivations</h3> <p>Several limitations may arise when using a device-to-device or hardware audio patch with Android. Each option is unable to receive media key events such as <strong>PLAY</strong>, <strong>PAUSE</strong>, and <strong>STOP</strong> and, because they circumvent Android's audio stack, each require hardwares to mix the patch into other audio from Android.</p> <h3 id="use_hwaudiosource">Use HwAudioSource</h3> <p><code translate="no" dir="ltr">HwAudioSource</code> is a new type of player designed as a software patch. This enables apps that use this player to receive media key events and the output stream to be mixed and routed by Android.</p> 
+<pre>mHwAudioSource = new HwAudioSource.Builder()
+                .setAudioDeviceInfo(AudioDeviceInfo: info)
+                .setAudioAttributes(new AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .build())
+                .build();
+mHwAudioSource.play();
+mHwAudioSource.stop();
+</pre> <h3 id="changes_to_the_audio_hal">Changes to the audio HAL</h3> <p>With this new player, consider these expectations for the audio HAL. For example, <code translate="no" dir="ltr">device/generic/car/emulator/audio/driver/audio_hw.c</code>.</p> <ul> <li><p><code translate="no" dir="ltr">adev_create_audio_patch</code> expects the request to establish an audio patch from a device to a mixer.</p></li> <li><p><code translate="no" dir="ltr">adev_open_input_stream</code> expects the <code translate="no" dir="ltr">audio_source</code> to be <code translate="no" dir="ltr">AUDIO_SOURCE_FM_TUNER</code>.</p></li> <li><p><code translate="no" dir="ltr">in_read</code> fills the audio buffer with broadcast radio audio data.</p></li> </ul> <p>We recommend you configure a tuner device with type <code translate="no" dir="ltr">AUDIO_DEVICE_IN_FM_TUNER</code> in <code translate="no" dir="ltr">audio_policy_configuration.xml</code>:</p> 
+<pre>&lt;devicePort
+    tagName="Tuner_source"
+    type="AUDIO_DEVICE_IN_FM_TUNER"
+    role="source"
+    address="tuner0"&gt;
+    &lt;profile
+        name=""
+        format="AUDIO_FORMAT_PCM_16_BIT"
+        samplingRates="48000"
+        channelMasks="AUDIO_CHANNEL_IN_STEREO"/&gt;
+&lt;/devicePort&gt;
+</pre> <p>With this device configuration, you can facilitate finding the FM radio input device by using the <code translate="no" dir="ltr">AudioManager.getDevices(AudioManager.GET_DEVICES_INPUTS</code> in conjunction with <code translate="no" dir="ltr">AudioDeviceInfo.TYPE_FM_TUNER</code>.</p> <h2 id="create_audio_patches">Create audio patches</h2> <p>You can create an audio patch between two audio ports, either a mix port or a device port. Typically, an audio patch from mix port to device port is for playback while the reverse direction is for capture.</p> <p>For example, an audio patch that routes audio samples from <code translate="no" dir="ltr">FM_TUNER</code> source directly to the media sink bypasses the software mixer. You must then use a hardware mixer to mix the audio samples from Android and <code translate="no" dir="ltr">FM_TUNER</code> for the sink. When creating an audio patch directly from <code translate="no" dir="ltr">FM_TUNER</code> source to the media sink:</p> <ul> <li><p>Volume control applies to the media sink and should affect both the Android and <code translate="no" dir="ltr">FM_TUNER</code> audio.</p></li> <li><p>Users can switch between Android and <code translate="no" dir="ltr">FM_TUNER</code> audio through a simple app switch (no explicit media source choice is needed).</p></li> </ul> <p>Automotive implementations might also need to create an audio patch between two device ports. To do so, you must first declare the device ports and possible routes in <code translate="no" dir="ltr">audio_policy_configuration.xml</code> and then associate mixports with the device ports.</p> <h3 id="sample_configuration">Sample configuration</h3> <p>See this sample configuration, <code translate="no" dir="ltr">device/generic/car/emulator/audio/audio_policy_configuration.xml</code>.</p> 
+<pre>&lt;audioPolicyConfiguration&gt;
+    &lt;modules&gt;
+        &lt;module name="primary" halVersion="3.0"&gt;
+            &lt;attachedDevices&gt;
+                &lt;item&gt;bus0_media_out&lt;/item&gt;
+                &lt;item&gt;bus1_audio_patch_test_in&lt;/item&gt;
+            &lt;/attachedDevices&gt;
+            &lt;mixPorts&gt;
+                &lt;mixPort name="mixport_bus0_media_out" role="source"
+                        flags="AUDIO_OUTPUT_FLAG_PRIMARY"&gt;
+                    &lt;profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
+                            samplingRates="48000"
+                            channelMasks="AUDIO_CHANNEL_OUT_STEREO"/&gt;
+                &lt;/mixPort&gt;
+                &lt;mixPort name="mixport_audio_patch_in" role="sink"&gt;
+                    &lt;profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
+                           samplingRates="48000"
+                           channelMasks="AUDIO_CHANNEL_IN_STEREO"/&gt;
+                &lt;/mixPort&gt;
+            &lt;/mixPorts&gt;
+            &lt;devicePorts&gt;
+                &lt;devicePort tagName="bus0_media_out" role="sink" type="AUDIO_DEVICE_OUT_BUS"
+                        address="bus0_media_out"&gt;
+                    &lt;profile balance="" format="AUDIO_FORMAT_PCM_16_BIT"
+                            samplingRates="48000" channelMasks="AUDIO_CHANNEL_OUT_STEREO"/&gt;
+                    &lt;gains&gt;
+                        &lt;gain name="" mode="AUDIO_GAIN_MODE_JOINT"
+                                minValueMB="-8400" maxValueMB="4000" defaultValueMB="0" stepValueMB="100"/&gt;
+                    &lt;/gains&gt;
+                &lt;/devicePort&gt;
+                &lt;devicePort tagName="bus1_audio_patch_test_in" type="AUDIO_DEVICE_IN_BUS" role="source"
+                        address="bus1_audio_patch_test_in"&gt;
+                    &lt;profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
+                            samplingRates="48000" channelMasks="AUDIO_CHANNEL_IN_STEREO"/&gt;
+                    &lt;gains&gt;
+                        &lt;gain name="" mode="AUDIO_GAIN_MODE_JOINT"
+                                minValueMB="-8400" maxValueMB="4000" defaultValueMB="0" stepValueMB="100"/&gt;
+                    &lt;/gains&gt;
+                &lt;/devicePort&gt;
+            &lt;/devicePorts&gt;
+            &lt;routes&gt;
+                &lt;route type="mix" sink="bus0_media_out" sources="mixport_bus0_media_out,bus1_audio_patch_test_in"/&gt;
+                &lt;route type="mix" sink="mixport_audio_patch_in" sources="bus1_audio_patch_test_in"/&gt;
+            &lt;/routes&gt;
+        &lt;/module&gt;
+    &lt;/modules&gt;
+&lt;/audioPolicyConfiguration&gt;
+</pre> <h3 id="audio_driver_api">Audio driver API</h3> <p>You can use <code translate="no" dir="ltr">getExternalSources()</code> to retrieve a list of available sources (identified by address), then create audio patches between these sources and the sink ports by audio usages. The corresponding entry points on the Audio HAL appear in <code translate="no" dir="ltr">IDevice.hal</code>:</p> 
+<pre>Interface IDevice {
+...
+/
+*   Creates an audio patch between several source and sink ports.  The handle
+*   is allocated by the HAL and must be unique for this audio HAL module.
+*
+*   @param sources patch sources.
+*   @param sinks patch sinks.
+*   @return retval operation completion status.
+*   @return patch created patch handle.
+*/
+createAudioPatch(vec&lt;AudioPortConfig&gt; sources, vec&lt;AudioPortConfig&gt; sinks)
+       generates (Result retval, AudioPatchHandle patch);
+
+*   Release an audio patch.
+*
+*   @param patch patch handle.
+*   @return retval operation completion status.
+*/
+releaseAudioPatch(AudioPatchHandle patch) generates (Result retval);
+...
+}
+</pre>
+<aside class="note"><strong>Note:</strong><span> These API hooks have been available since <code translate="no" dir="ltr">AUDIO_DEVICE_API_VERSION_3_0</code>. For details, refer to <code translate="no" dir="ltr">device/generic/car/emulator/audio/driver/audio_hw.c</code>.</span></aside> <h3 id="radio_tuner">Radio tuner</h3> <p>When building a radio app, we recommend you use the <code translate="no" dir="ltr">HwAudioSource</code> as it handles both creating the patch as well as a media session to handle media key events. Multiple audio sources can be created for the same source and audio attributes. It's possible to have one for regular radio usage as well as a second one for traffic announcements.</p> <p>If recording the <code translate="no" dir="ltr">FM_TUNER</code>, in Android 11 the permission for doing was changed to <code translate="no" dir="ltr">android.permission.CAPTURE_AUDIO_OUTPUT</code>. It no longer goes through the <code translate="no" dir="ltr">OP_RECORD_AUDIO</code> permission check, which applies to microphones only. This shouldn't impact apps since <code translate="no" dir="ltr">FM_TUNER</code> already requires <code translate="no" dir="ltr">SYSTEM_API</code> permission for access.</p> <p>See <a href="../radio/radio-control-implementation">Implement radio</a> for details about building a radio app.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/audio/optional-player" class="_attribution-link">https://source.android.com/docs/automotive/audio/optional-player</a>
+  </p>
+</div>

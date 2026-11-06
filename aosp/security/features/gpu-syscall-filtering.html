@@ -1,0 +1,29 @@
+<h1>GPU syscall filtering</h1>  <p>Android 16 QPR2 adds an SELinux macro to harden kernel drivers. This macro blocks restricted IOCTLs in production, such as deprecated IOCTLs or those for kernel driver development. It also limits IOCTLs for driver profiling to shell or debuggable apps. Use this macro to enhance your device's security.</p> <h2 id="implementation">Implementation</h2> <p>To harden your device with fine-grained syscall filtering, call the <code translate="no" dir="ltr">set_xperm_filter</code> macro in your device's SEPolicy, for example:</p> 
+<pre># set_xperm_filter(target_context, allowed_target, unpriv_ioctls, restricted_ioctls, instrumentation_ioctls)
+# Allow targets to harden their IOCTL interfaces by specifying
+# unprivileged, blocked, and instrumentation-specific IOCTLs for appdomain.
+#
+# Parameters:
+#   target_context: The target context to apply the filter to.
+#   allowed_target: Additional `appdomain` target to exempt from hardened policy.
+#     Allows for an allowlist of services, or gating by a target SDK.
+#   unpriv_ioctls: IOCTLs to allow across appdomain.
+#   restricted_ioctls: IOCTLs to deny across appdomain.
+#   instrumentation_ioctls: IOCTLs intended to be used in development.
+#     IOCTLs will be allowed from `shell` or `debuggable` applications.
+
+define(`unpriv_gpu_ioctls', `0x0000, 0x0001, 0x0002')
+define(`restricted_ioctls', `0x1110, 0x1111, 0x1112')
+define(`instrumentation_gpu_ioctls', `0x2220, 0x2221, 0x2222')
+set_xperm_filter(
+  gpu_device,
+  untrusted_app_sdk_gate,
+  unpriv_ioctls,
+  restricted_ioctls,
+  instrumentation_ioctls)
+</pre> <p>The macro definition for <code translate="no" dir="ltr">set_xperm_filter</code> is in <code translate="no" dir="ltr">system/sepolicy/public/te_macros</code>.</p> <p>The macro allows <code translate="no" dir="ltr">unpriv_ioctls</code>, blocks <code translate="no" dir="ltr">restricted_ioctls</code>, and limits <code translate="no" dir="ltr">instrumentation_ioctls</code> to the <code translate="no" dir="ltr">shell</code> process or <code translate="no" dir="ltr">debuggable</code> apps. The filter applies to applications that start from a specified <code translate="no" dir="ltr">target_sdk</code>.</p> <p>This feature has been implemented on Pixel devices utilizing the Mali GPU (Pixel 6-9). Arm has provided official categorization of their IOCTLs in <code translate="no" dir="ltr">Documentation/ioctl-categories.rst</code> of their <a href="https://developer.arm.com/downloads/-/Mali%205th%20Gen%20GPU%20Architecture">r54p2 release</a>. This list will continue to be maintained in future driver releases.</p> <h3 id="testing">Test</h3> <p>Do the following to verify the kernel driver's behavior:</p> <ul> <li><p>Check that the driver doesn't block legitimate application IOCTLs and,</p></li> <li><p>Verify that untrusted applications can't execute instrumentation and restricted IOCTLs.</p></li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/security/features/gpu-syscall-filtering" class="_attribution-link">https://source.android.com/docs/security/features/gpu-syscall-filtering</a>
+  </p>
+</div>

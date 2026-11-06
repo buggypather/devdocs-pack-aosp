@@ -1,0 +1,143 @@
+<h1>Obtain system health information</h1>  <p>When an Android 16 (or higher) device boots, it's put in <em>trade-in mode</em>, which lets you connect to the device using adb and use a command to obtain information about the device. The following preconditions must exist for the device to enter trade-in mode:</p> <ul> <li>The device must be factory reset.</li> <li>The device must not have cellular service.</li> <li>The device must not have connectivity or an account established.</li> <li>The device must be running a nondebuggable build.</li> </ul> <p>Trade-in mode lets you query basic diagnostic information, or enter <em>evaluation mode</em>, which lets you perform a full range of adb commands and run additional diagnostics on the device.</p> <h2 id="gather">Gather general health information</h2> <p>To gather general health information for your device, such as information about the battery, storage health, and international mobile equipment identity (IMEI) numbers, follow these steps:</p> <ol> <li><p>Ensure your device meets the preconditions for trade-in mode.</p></li> <li><p>Plug the device into a workstation.</p></li> <li>
+<p>From the workstation, run the following command:</p> 
+<pre>adb shell tradeinmode getstatus</pre> <p>This command returns a JSON object with information about the device. The following is example output from a Pixel 7:</p> 
+<pre>{
+  "battery": {
+    "cycle_count": 16,
+    "health": 100,
+    "state": 2,
+    "manufacturing_date": 1653004800,
+    "first_usage_date": 0
+  },
+  "storage": {
+    "useful_lifetime_remaining": 99,
+    "capacity_bytes": "128000000000"
+  },
+  "launch_level": 33,
+  "locks": {
+    "factory_reset_protection": false
+  },
+  "product": {
+    "brand": "google",
+    "device": "panther",
+    "manufacturer": "Google",
+    "model": "Pixel 7",
+    "name": "panther"
+  },
+  "imeis": [
+    "353644930127905",
+    "353644930127913"
+  ],
+  "serial": "26061FDH2000AP",
+  "cameras": [
+    {
+      "num_physical": 3,
+      "lens_facing": "back"
+    },
+    {
+      "num_physical": 2,
+      "lens_facing": "front"
+    }
+  ],
+  "uiccs": [
+    {
+      "eid": "89033023427100000000007982221521",
+      "removable": false,
+      "physical_slot_index": 0
+    },
+    {
+      "removable": true,
+      "physical_slot_index": 1
+    }
+  ]
+}
+</pre> <p>If <code translate="no" dir="ltr">factory_reset_protection</code> is set to <code translate="no" dir="ltr">true</code>, the device is secure and can't be reset. If the device can't be reset, it can't be evaluated.</p> <p>The <code translate="no" dir="ltr">cameras</code> and <code translate="no" dir="ltr">uiccs</code> fields are present in Android 17 or higher.</p>
+</li> </ol> <h2 id="state">Identify Android OS state</h2> <p>To gather information about the state of the Android operating system, such as if it an approved build, follow these steps:</p> <ol> <li>Plug the device into a workstation.</li> <li>Make sure the device has Internet connectivity.</li> <li>
+<p>From the workstation, run the following command:</p> 
+<pre>adb shell tradeinmode getstatus --challenge CHALLENGE</pre> <p>The <var translate="no">CHALLENGE</var> is a randomly generated alphanumeric string, such as <code translate="no" dir="ltr">p4tRsuHjWB</code>. This command returns JSON including an attestation field containing a base64 attestation record.</p> <p>This command appends an attestation information to the information returned by the <code translate="no" dir="ltr">getstatus</code> command. The attestation information looks like this:</p> 
+<pre>"attestation": {
+  "certificates": "AAAC\/DCCAvgwggKeoAMCAQICAQEwCgYIKoZIzj0EAwIwOTEMMAoGA1UEDAwDVEVFMSkwJwYDVQQF\n
+    EyBmOTIyZTZhOWFkZmRjNjU0NmZiOWU1YmNlNzhiMDUzMzAeFw03MDAxMDEwMDAwMDBaFw00ODAx\n
+    MDEwMDAwMDBaMB8xHTAbBgNVBAMTFEFuZHJvaWQgS2V5c3RvcmUgS2V5MFkwEwYHKoZIzj0CAQYI\n
+    KoZIzj0DAQcDQgAEz9un3HpDJQy\/j7l0bWzw6WnRRMjFjvu6rg7+dCzFW93u+otCPK4VjmSjyYw
+    ...
+}
+</pre> <p>Devices launching with Android 16 or higher require Internet connectivity to create an attestation record. Attestation should be performed in evaluation mode, after configuring a connection, as it fails if performed in the setup wizard.</p>
+</li> <li>
+<p>Parse the attestation information using one of the following methods:</p> <ul> <li>Use the <code translate="no" dir="ltr">parse_tim_attestation</code> tool that is built when you build AOSP.</li> <li>Use an <a href="https://android.googlesource.com/platform/external/android-key-attestation/">Android key attestation library</a>.</li> </ul> <p>For example, to use the <code translate="no" dir="ltr">parse_tim_attestation</code> tool, run:</p> 
+<pre>parse_tim_attestation --challenge CHALLENGE output_file</pre> <p>The <var translate="no">CHALLENGE</var> must be the same challenge you used to obtain the attestation information.</p> <p>If you saved the output of step 2 to an <var translate="no">output_file</var>, you can provide that filename. Otherwise, the attestation information is read from stdin.</p> <p>A JSON object with the Android OS information is returned:</p> 
+<pre>"record": {
+  "keymaster_version": "400",
+  "keymaster_security_level": "TRUSTED_ENVIRONMENT",
+  "attributes": {
+    "imeis": [
+      "353644930125669",
+      "353644930125677"
+    ],
+    "vendor_patch_level": 20250305,
+    "serial": "26161FDH2000NV",
+    "os_version": 160000,
+    "source": "hardware",
+    "boot_patch_level": 20250305
+  },
+  "bootloader_locked": false,
+  "verified_boot": false,
+  "security_level": "TRUSTED_ENVIRONMENT"
+},
+"certificate": "verified",
+"trustworthy": "verified boot disabled"
+</pre> <p>If <code translate="no" dir="ltr">trustworthy</code> is equal to <code translate="no" dir="ltr">yes</code>, the operating system is considered trusted; the build is signed and the IMEI isn't forged.</p> <p>Note that Internet connectivity is needed to perform attestation, both on the device and on the host.</p>
+</li> </ol> <h2 id="debug">Test trade-in mode</h2> <p>During development, you should test your device to ensure that your device properly enters and exists trade-in mode. Follow these steps to test your device's ability to enter and exit trade-in mode:</p> <aside class="note"><strong>Note:</strong><span> These commands work only on devices with <code translate="no" dir="ltr">userdebug</code>, <code translate="no" dir="ltr">eng</code>, or <code translate="no" dir="ltr">user</code> builds. The <code translate="no" dir="ltr">user</code> build must have <code translate="no" dir="ltr">ro=debuggable=1</code> set.</span></aside> <ol> <li><p>Plug the device into a workstation.</p></li> <li>
+<p>From the workstation, reboot the device into trade-in mode:</p> 
+<pre>adb shell tradeinmode testing start</pre> <p>The device is rebooted and enters into trade-in mode. After entering trade-in mode, you can use any <code translate="no" dir="ltr">adb shell tradein</code> command.</p>
+</li> <li>
+<p>Ensure trade-in mode is active:</p> 
+<pre>adb shell tradeinmode testing status</pre> <p>The device identifies that trade-in mode testing is active.</p>
+</li> <li>
+<p>Exit trade-in mode and restore full adb access:</p> 
+<pre>adb shell tradeinmode testing stop</pre>
+</li> </ol> <h2 id="custom">Custom setup wizard integration</h2> <p>The <code translate="no" dir="ltr">evaluate</code> command won't work on devices with custom setup wizards unless a broadcast receiver is added. To add a broadcast receiver to the custom setup wizard app:</p> <ol> <li>
+<p>Declare a receiver in the apps manifest:</p> 
+<pre>&lt;receiver android:name=".EnterEvaluationModeReceiver"
+          android:exported="true"
+          android:permission="android.permission.ENTER_TRADE_IN_MODE"&gt;
+  &lt;intent-filter&gt;
+    &lt;action android:name="com.google.android.setupwizard.ENTER_TRADE_IN_MODE" /&gt;
+    &lt;category android:name="android.intent.category.DEFAULT" /&gt;
+  &lt;/intent-filter&gt;
+&lt;/receiver&gt;
+</pre>
+</li> <li>
+<p>Create a broadcast receiver similar to:</p> 
+<pre>public class EnterEvaluationModeReceiver extends BroadcastReceiver {
+  private static final String TRADE_IN_MODE_PROPERTY = "persist.adb.tradeinmode";
+  private static final int TIM_EVALUATION_MODE = 2;
+
+  @Override
+  public void onReceive(Context context, Intent intent) {
+    if (SystemProperties.getInt(TRADE_IN_MODE_PROPERTY, 0) != TIM_EVALUATION_MODE) {
+      return;
+    }
+
+    // Check if any factory reset protection is enabled.
+    // Provision the device.
+    // End the setup wizard activity.
+ }
+}
+</pre>
+</li> </ol> <p>The receiver must perform the following actions in order.</p> <ol> <li>Check that <code translate="no" dir="ltr">persist.adb.tradeinmode</code> is <code translate="no" dir="ltr">2</code>.</li> <li>Check that there are no factory reset protection or antitheft locks present.</li> <li>Provision the device, ensuring that <code translate="no" dir="ltr">Settings.Secure.USER_SETUP_COMPLETE</code> and <code translate="no" dir="ltr">Settings.Global.DEVICE_PROVISIONED</code> are <code translate="no" dir="ltr">1</code>.</li> <li>Dismiss the setup wizard activity so the device is at the home screen.</li> </ol> <h2 id="trade-in-mode_reference">Trade-in-mode reference</h2> <p>This section explains all of the trade-in-mode commands.</p> <h3 id="evaluate">evaluate</h3> 
+<pre>adb shell tradeinmode evaluate</pre> <p>Enters evaluation mode by skipping the setup wizard as though every setup screen was manually skipped by the user.</p> <p>After skipping the setup wizard, you can run additional ADB commands or functional tests on the device.</p> <p>After you leave evaluation mode, a factory reset occurs to ensure that no artifacts from testing are accidentally transferred to any customers.</p> <h3 id="getstatus">getstatus</h3> 
+<pre>adb shell tradeinmode getstatus [--challenge CHALLENGE]</pre> <p>Returns a JSON string with system information, including battery and storage health information, for the device.</p> <p>Include the <code translate="no" dir="ltr">--challenge</code> parameter followed by a randomly generated alphanumeric challenge key to return an additional attestation field. Parse this response to identify key operating system information, such as the status of the bootloader (locked or unlocked) and validity of IMEI serial numbers.</p> <h3 id="off">poweroff</h3> 
+<pre>adb shell tradeinmode poweroff</pre> <p>Powers off the device. Use this command to prevent battery drain while the device isn't being actively tested or evaluated.</p> <h3 id="reboot">reboot</h3> 
+<pre>adb shell tradeinmode reboot</pre> <p>Reboots the device.</p> <h3 id="teststart">testing start</h3> 
+<pre>adb shell tradeinmode testing start</pre> <p>Reboots the device into trade-in mode. This command works only within the setup wizard. Upon issuing this command, authorization is bypassed and only trade-in mode commands work.</p> <p>This command works only on devices with <code translate="no" dir="ltr">userdebug</code>, <code translate="no" dir="ltr">eng</code>, or <code translate="no" dir="ltr">user</code> builds. The <code translate="no" dir="ltr">user</code> build must have <code translate="no" dir="ltr">ro=debuggable=1</code> set.</p> <h3 id="status">testing status</h3> 
+<pre>adb shell tradeinmode testing status</pre> <p>Identifies if trade-in mode testing is active.</p> <p>This command works only on devices with <code translate="no" dir="ltr">userdebug</code>, <code translate="no" dir="ltr">eng</code>, or <code translate="no" dir="ltr">user</code> builds. The <code translate="no" dir="ltr">user</code> build must have <code translate="no" dir="ltr">ro=debuggable=1</code> set.</p> <h3 id="testingstop">testing stop</h3> 
+<pre>adb shell tradeinmode testing stop</pre> <p>Returns the device to whatever mode it was in before you issued the <code translate="no" dir="ltr">adb shell tradeinmode testing start</code> command.</p> <p>This command works only on devices with <code translate="no" dir="ltr">userdebug</code>, <code translate="no" dir="ltr">eng</code>, or <code translate="no" dir="ltr">user</code> builds. The <code translate="no" dir="ltr">user</code> build must have <code translate="no" dir="ltr">ro=debuggable=1</code> set.</p> <h3 id="wipe">testing wipe</h3> 
+<pre>adb shell tradeinmode testing wipe</pre> <p>Factory resets the device.</p> <p>This command works only on devices with <code translate="no" dir="ltr">userdebug</code>, <code translate="no" dir="ltr">eng</code>, or <code translate="no" dir="ltr">user</code> builds. The <code translate="no" dir="ltr">user</code> build must have <code translate="no" dir="ltr">ro=debuggable=1</code> set.</p> <h3 id="wait">wait-until-ready</h3> 
+<pre>adb shell tradeinmode wait-until-ready</pre> <p>Waits until system services are ready so that trade-in mode can function fully. Use this command within your automation to ensure trade-in mode commands are successful.</p> <p>You can add <code translate="no" dir="ltr">wait-until-ready</code> before other trade-in mode commands. For example, here is <code translate="no" dir="ltr">wait-until-ready</code> chained to <code translate="no" dir="ltr">getstatus</code>:</p> 
+<pre>adb shell tradeinmode wait-until-ready getstatus</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/perf/trade-in-mode" class="_attribution-link">https://source.android.com/docs/core/perf/trade-in-mode</a>
+  </p>
+</div>

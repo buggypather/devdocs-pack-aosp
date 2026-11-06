@@ -1,0 +1,15 @@
+<h1>Use Trade Federation with Scripting Layer for Android</h1>  <p>Scripting Layer for Android, SL4A, is an automation toolset for calling Android APIs in a platform-independent manner. It supports both remote automation via <code translate="no" dir="ltr">adb</code> and execution of scripts from on-device via a series of lightweight translation layers.</p> <p>The project is located at <a href="https://android.googlesource.com/platform/external/sl4a/">platform/external/sl4a</a>.</p> <h2 id="use">Use</h2> <p>You can follow the <a href="https://android.googlesource.com/platform/external/sl4a/+/refs/heads/android17-release/README.md">SL4A README</a> to build and install it manually. And when running through Tradefed, you can take advantage of some of the harness utilities to make use easier.</p> <h3 id="download_and_install">Download and install</h3> <p>You can start by reviewing <a href="https://android.googlesource.com/platform/tools/tradefederation/contrib/+/refs/heads/android17-release/res/config/google/example/BT-discovery-sl4a.xml">BT-discovery-sl4a.xml</a>, an example Tradefed configuration that uses two devices. The <code translate="no" dir="ltr">SL4A.apk</code> is available in most device builds within their <code translate="no" dir="ltr">tests</code> folder.</p> <p>The Tradefed example above automatically fetches the builds, flashes both devices and installs <code translate="no" dir="ltr">SL4A.apk</code> on both devices. You can run it like so:</p> 
+<pre>source build/envsetup.sh
+lunch
+make sl4a
+tradefed.sh run google/example/BT-discovery-sl4a
+</pre> <p>Or once built:</p> 
+<pre>./tradefed.sh run google/example/BT-discovery-sl4a
+</pre> <h3 id="write_a_test_in_tradefed_using_sl4a">Write a test in Tradefed using SL4A</h3> <p>You can follow the test sample describe above: <a href="https://android.googlesource.com/platform/tools/tradefederation/contrib/+/refs/heads/android17-release/src/com/android/tradefed/Sl4aBluetoothDiscovery.java">Sl4aBluetoothDiscovery.java</a>. This gives a good example of the flow to use SL4A within a Tradefed test.</p> <h3 id="sl4a_api_documentation">SL4A API documentation</h3> <p>The complete list of callbacks available through SL4A can be generated. From the SL4A source directory, <code translate="no" dir="ltr">platform/external/sl4a/</code>, run this command:</p> 
+<pre>python Docs/generate_api_reference_md.py
+</pre> <p>In the Docs directory there will be an <code translate="no" dir="ltr">ApiReference.md</code> file that contains the RPC functions available in SL4A, as well as documentation for the RPC functions.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/tradefed/architecture/advanced/scripting-sl4a" class="_attribution-link">https://source.android.com/docs/core/tests/tradefed/architecture/advanced/scripting-sl4a</a>
+  </p>
+</div>

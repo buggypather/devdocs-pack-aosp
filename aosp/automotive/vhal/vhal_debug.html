@@ -1,0 +1,24 @@
+<h1>Debug VHAL</h1>  <p>You can use the following instructions to dump VHAL debug information. This calls the <code translate="no" dir="ltr">dump()</code> method in the VHAL interface, which isn't listed in the interface but is implicitly inherited for all AIDL services, with all the additional arguments provided in the command.</p> 
+<pre>
+adb root &amp;&amp; adb shell dumpsys android.hardware.automotive.vehicle.IVehicle/default
+</pre> <p>Use the following command to list the supported debug commands for the reference VHAL:</p> 
+<pre>
+adb root &amp;&amp; adb shell dumpsys android.hardware.automotive.vehicle.IVehicle/default --help
+</pre> <p>For example, the reference VHAL supports reading a property value (such as <code translate="no" dir="ltr">INFO_VIN</code>) through:</p> 
+<pre>
+adb root &amp;&amp; adb shell dumpsys android.hardware.automotive.vehicle.IVehicle/default --get INFO_VIN
+</pre> or 
+<pre>
+adb root &amp;&amp; adb shell dumpsys android.hardware.automotive.vehicle.IVehicle/default --get 0x11100100
+</pre> <p>To set a property value, use <code translate="no" dir="ltr">--set</code>, for example, to set <code translate="no" dir="ltr">SEAT_MEMORY_SELECT</code> for the area ID: <code translate="no" dir="ltr">ROW_1_LEFT</code> to value <code translate="no" dir="ltr">1</code>:</p> 
+<pre>
+adb root &amp;&amp; adb shell dumpsys android.hardware.automotive.vehicle.IVehicle/default --set SEAT_MEMORY_SELECT -a ROW_1_LEFT -i 1
+</pre> <p>For the HIDL VHAL, use:</p> 
+<pre>
+adb root &amp;&amp; adb shell lshal debug android.hardware.automotive.vehicle@2.0::IVehicle/default
+</pre> <p>You can also use the VTS test, <a href="https://android.googlesource.com/platform/hardware/interfaces/+/refs/heads/android17-release/automotive/vehicle/vts/src/VtsHalAutomotiveVehicle_TargetTest.cpp"><code translate="no" dir="ltr">VtsHalAutomotiveVehicle_TargetTest</code></a>, to verify your VHAL implementation. Either test case, <code translate="no" dir="ltr">useAidlBackend</code> or <code translate="no" dir="ltr">useHidlBackend</code>, is skipped if the specific backend isn't available. Some tests can also be skipped for the AIDL or HIDL backend if the backend doesn't support this feature.</p> <p>The VTS test verifies all supported system properties has correct configurations. It also verifies basic VHAL operations for supported properties. </p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/vhal/vhal_debug" class="_attribution-link">https://source.android.com/docs/automotive/vhal/vhal_debug</a>
+  </p>
+</div>

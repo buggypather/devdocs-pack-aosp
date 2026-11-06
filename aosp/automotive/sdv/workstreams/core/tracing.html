@@ -1,0 +1,106 @@
+<h1>Use tracing to gain insights into system performance</h1>  <p>Use tracing to record events and counters on the system and to visualize each on a timeline. The standard tracing tool in Android is <a href="https://perfetto.dev/">Perfetto</a>. To learn more, see <a href="https://perfetto.dev/docs/tracing-101">Tracing 101</a>.</p> <h2 id="instrument-your-code">Instrument your code</h2> <p>To get events from the app it needs to be instrumented by adding tracepoints into the code. Sections that are not instrumented won't show up in traces.</p> <p>SDV tracing sample is a demo of tracing integration, along with instructions and an example of tracing config. It is located in <code translate="no" dir="ltr">system/software_defined_vehicle/core_services/samples/tracing/</code>.</p> <h3 id="rust">Rust</h3> <p>The recommended approach for Rust is to use the <a href="https://docs.rs/tracing/latest/tracing/">tracing</a> crate to emit <a href="https://perfetto.dev/docs/data-sources/atrace">ATrace</a> events. Perfetto supports ATrace as a data source. We plan to switch to Perfetto SDK when Rust bindings are available and depending on how the use cases evolve.</p> <p>Add the tracing defaults to <code translate="no" dir="ltr">Android.bp</code>:</p> 
+<pre>rust_binary {
+...
+    defaults: [
+        ...
+        "sdv_tracing@rust_defaults",
+    ],
+...
+}
+</pre> <p>Initialize the subscriber. This can only be done once per process:</p> 
+<pre>fn main() {
+    // Initialize the subscriber, panic if it fails.
+    // sdv_tracing::try_init_tracing() is the version that returns a Result.
+    sdv_tracing::init_tracing()
+    ...
+}
+</pre> <p>You can omit the initialization call. Doing so leaves tracing uninitialized and Perfetto won't collect instrumentation events from the app.</p> <p>Add tracepoints. You can find more samples in <code translate="no" dir="ltr">system/software_defined_vehicle/core_services/samples/tracing/rust_tracing_api_demo/tracing.rs</code>.</p> 
+<pre>use tracing::{instrument, info_span};
+
+// #[tracing::instrument] wraps the method into a tracing span and records arguments.
+// Use #[instrument(skip(num))] if you don't want to record the argument.
+#[instrument]
+fn mul_by_100(num: i32) -&gt; i32 {
+    // Create and enter a span with INFO verbosity, name, and a debug field annotation.
+    // The span will exit when dropped.
+    let _span = info_span!("This is a span", var=123).entered();
+    let result = num * 100;
+    // Emit an instant INFO event that records the result value.
+    // We recommend to fully qualify the crate when using events to avoid confusion with log records.
+    tracing::info!(result, "Completed");
+    result
+}
+</pre> <h3 id="c">C++</h3> <p>C++ tracing uses <a href="https://perfetto.dev/docs/instrumentation/tracing-sdk#getting-started">Perfetto SDK</a> to <a href="https://perfetto.dev/docs/instrumentation/tracing-sdk#track-events">track events</a>. Add the tracing defaults to <code translate="no" dir="ltr">Android.bp</code>:</p> 
+<pre>cc_binary {
+...
+    defaults: [
+...
+        "sdv_tracing@cc_defaults",
+    ],
+...
+}
+</pre> <p>Define the categories. If you use the categories across multiple modules, move them into a common library. For example, <code translate="no" dir="ltr">system/software_defined_vehicle/core_services/samples/tracing/cpp_service/tracing_categories.h</code>.</p> <p>In the header:</p> 
+<pre>#include "perfetto/tracing/tracing.h"
+#include "perfetto/tracing/track_event.h"
+
+PERFETTO_DEFINE_CATEGORIES(
+        perfetto::Category("sample")
+                .SetTags("tag")
+                .SetDescription("Sample events"));
+</pre> <p>Put the static storage macro in a <code translate="no" dir="ltr">.cpp</code> source file not in a method. If you're sharing the categories across components, use the source file that corresponds to the header with categories.</p> 
+<pre>PERFETTO_TRACK_EVENT_STATIC_STORAGE();
+
+int main() {
+    ...
+}
+</pre> <p>To initialize Perfetto, initialize the system backend and register the track events:</p> 
+<pre>
+#include &lt;sdv/tracing_init.h&gt;
+
+int main() {
+  ...
+  android::sdv::InitPerfettoWithTrackEvents&lt;perfetto::TrackEvent&gt;();
+  ...
+}
+</pre> <p>Add instrumentation. See more samples in <code translate="no" dir="ltr">system/software_defined_vehicle/core_services/samples/tracing/cpp_service/client.cpp</code>.</p> 
+<pre>int32_t mulBy100(int32_t num) {
+    // Start a slice that will get closed at the end of the scope.
+    TRACE_EVENT("client", "mulBy100", "num", num);
+
+    TRACE_EVENT("client", "This is a slice", "var", 123);
+    int32_t result = num * 100;
+
+    // Instant events have zero duration. They are drawn as markers on the track.
+    TRACE_EVENT_INSTANT("client", "Completed", "result", result);
+    return result;
+}
+</pre> <p>As in the Rust example, this code produces two nested slices and a marker for the instant event in the UI. The debug argument values are shown when an event is selected.</p> <h2 id="collect_a_trace">Collect a trace</h2> <p>Use the <code translate="no" dir="ltr">record\_android\_trace</code> command line script to record a trace and <a href="https://ui.perfetto.dev/">Perfetto web UI</a> to view it.</p> <h3 id="configure_the_capture">Configure the capture</h3> <p>You need to provide a config for <code translate="no" dir="ltr">record_android_trace</code> in textproto format. See <a href="https://perfetto.dev/docs/concepts/config">Perfetto doc</a> to learn more.</p> <p>SDV repository contains a sample configuration (<code translate="no" dir="ltr">system/software_defined_vehicle/core_services/samples/tracing/config/trace_cfg.pbtx</code>). This file includes several data sources and can be customized or used as is.</p> <div>  <h4 class="showalways" id="use-perfetto-ui-to-generate-a-config">Use Perfetto UI to generate a config</h4> <p> You can configure a custom config and explore available options by going to <a href="https://ui.perfetto.dev/#!/record">Record new trace</a> in Perfetto UI, adjusting recording settings and probes. Then you can open the "Recording command" view to see the generated command and get the config contents from there. </p>  </div> <div>  <h4 class="showalways" id="configure-in-app-instrumentation-visibility">Configure in-app instrumentation visibility</h4> <p> Rust instrumentation uses <a href="https://perfetto.dev/docs/data-sources/atrace">ATrace</a>. It is configured in the <code translate="no" dir="ltr">ftrace_config</code> section of the doc. SDV components have the <code translate="no" dir="ltr">ATRACE_TAG_APP</code> tag and can be enabled on a per-app basis. The sample config enables all the apps. </p> 
+<pre>data_sources: {
+    config {
+        name: "linux.ftrace"
+        ftrace_config {
+            # Setting atrace_apps to "*" enable ATrace events for all apps.
+            # You can set it to a pattern to match specific processes by name.
+            # Use multiple atrace_apps entries to enable multiple processes.
+            atrace_apps: "*"
+        }
+    }
+}</pre> <p> We use track events in the C++ Perfetto SDK. This is a <code translate="no" dir="ltr">track_event</code> data source (<a href="https://perfetto.dev/docs/instrumentation/track-events#category-configuration">doc</a>). </p> <p> You can enable or disable categories and tags in the <code translate="no" dir="ltr">track_event_config</code> field. Every category end tag is enabled by default, except for special <code translate="no" dir="ltr">slow</code> and <code translate="no" dir="ltr">debug</code> tags. If you only want to enable specific categories, you need to disable all others, for example with <code translate="no" dir="ltr">disabled_categories: "*"</code> like here: </p> 
+<pre>data_sources: {
+    config {
+        name: "track_event"
+        track_event_config {
+            enabled_categories: "the_best_category_in_the_world"
+            disabled_categories: "*"
+        }
+    }
+}</pre>  </div> <h3 id="record_a_trace">Record a trace</h3> <p>Open a terminal in the Android repository root. No need to do <code translate="no" dir="ltr">envsetup</code>. The recording script is in <code translate="no" dir="ltr">external/perfetto/tools/record_android_trace</code>.</p> <aside class="tip"><strong>Tip:</strong><span> If you're using VSCode remotely, forward the port 9001 (<a href="https://code.visualstudio.com/docs/editor/port-forwarding">doc</a>) to open Perfetto traces in your local browser.</span></aside> <p>Run the script with the sample config:</p> 
+<pre>external/perfetto/tools/record_android_trace --config system/software_defined_vehicle/core_services/samples/tracing/config/trace_cfg.pbtx
+</pre> <p>To stop the recording early, select Ctrl + C.</p> <p>Doing so triggers <a href="https://developer.android.com/tools/perfetto">adb shell perfetto</a> to record a trace and then pull the trace to the host, usually in <code translate="no" dir="ltr">~/traces</code>. When the trace is collected, the tool opens a browser window to display the trace.</p> <p>Helpful arguments:</p> <ul> <li><p><code translate="no" dir="ltr">-s SERIAL</code> to use the device with a given serial. For example <code translate="no" dir="ltr">-s 0.0.0.0:6520</code></p></li> <li><p><code translate="no" dir="ltr">--no-open-browser</code> would make a URL to serve the trace but won't open the browser. It is useful for remote sessions when you have port forwarding set up (usually 9001).</p></li> <li><p><code translate="no" dir="ltr">-n, --no-open</code> won't open the browser or make the URL to serve the trace after the tracing session. You can still open files in the Perfetto UI by clicking on "Open trace file" and selecting the file.</p></li> <li><p><code translate="no" dir="ltr">-o &lt;path&gt;</code> to set the output path.</p></li> </ul> <h3 id="usage_details">Usage details</h3> <p>This section provides details that may be helpful when using the tracing system.</p> <h4 id="trace_instrumentation_in_sdv_components">Trace instrumentation in SDV components</h4> <p>In agents with tracing instrumentation, tracing is available by default on debuggable builds (<code translate="no" dir="ltr">-eng</code>, <code translate="no" dir="ltr">-userdebug</code>), unless otherwise specified. When you collect a trace, you should see the events for the processes without extra configuration.</p> <p>Libraries typically don't automatically initialize tracing. In Rust the binary that uses the library needs to initialize tracing for the process using <code translate="no" dir="ltr">sdv_tracing::init_tracing()</code>. Refer to <a href="#instrument-your-code">Instrument your code</a> to learn more.</p> <h5 id="middleware">Middleware</h5> <p><strong>Publishing/Subscribing Library</strong>: <code translate="no" dir="ltr">libsdv_middleware_dt</code></p> <p>Events:</p> <ul> <li>Publisher: Publishing and registering topics.</li> <li>Subscriber: Subscribing and polling.</li> </ul> <p>Enabling: Call <code translate="no" dir="ltr">sdv_tracing::init_tracing()</code> or <code translate="no" dir="ltr">sdv_tracing::try_init_tracing()</code> in the binary.</p> <p><strong>gRPC Library</strong>: <code translate="no" dir="ltr">libsdvmiddleware_rpc_grpc_transport</code></p> <p>Events:</p> <ul> <li>RPC client: Starting, connecting to server, and RPC method calls.</li> <li>RPC server: Starting, registering with Service Discovery, adding and calling RPC methods.</li> </ul> <p>Enabling: Call <code translate="no" dir="ltr">sdv_tracing::init_tracing()</code> or <code translate="no" dir="ltr">sdv_tracing::try_init_tracing()</code> in binary.</p> <h5 id="someip">SOME/IP</h5> <ul> <li>Process: <code translate="no" dir="ltr">sdv_someip_broker_agent</code>. \</li> <li>Events: Message processing and translation, event subscription.</li> </ul> <h5 id="lifecycle_manager">Lifecycle manager</h5> <ul> <li>Process: <code translate="no" dir="ltr">sdv_lifecycle_agent</code>. \</li> <li>Events: Service operations - launching, stopping, registering, unregistering.</li> </ul> <h5 id="vehicle_power_mode">Vehicle power mode</h5> <ul> <li>Process: <code translate="no" dir="ltr">sdv_vpm_agent</code>. \</li> <li>Events: Power state changes and subscriptions.</li> </ul> <h5 id="data_tunnel">Data Tunnel</h5> <p>We plan to support tracing integration at a future time.</p> <h4 id="performance_overhead_of_tracing">Performance overhead of tracing</h4> <p>The overhead measurements come with the usual caveat that the performance may differ across different systems and especially between the emulator and real hardware.</p> <h5 id="rust_2">Rust</h5> <p>Raw benchmark data is <a href="https://cs.android.com/android/platform/superproject/main/+/main:system/extras/libatrace_rust/benchmark/">available in AOSP</a>. The data was collected on a Cuttlefish VM.</p> <ul> <li>Single span: <code translate="no" dir="ltr">tracing::info_span!()</code>, <code translate="no" dir="ltr">#[tracing::instrument]</code> and similar: <ul> <li>Tracing uninitialized: 1ns.</li> <li>Tracing initialized and disabled (no trace recording happening): 30ns.</li> <li>Tracing enabled: 3 µs. <a href="https://docs.rs/tracing/latest/tracing/#recording-fields">Debug field annotations</a> can add 1-2 µs, depending on stringification complexity.</li> </ul>
+</li> <li>Single event: <code translate="no" dir="ltr">tracing::info!()</code> and similar: <ul> <li>Tracing uninitialized: 1ns.</li> <li>Tracing initialized and disabled: 30ns.</li> <li>Tracing enabled: 1.5 µs. Debug field annotations can add 0.5-1 µs, depending on <code translate="no" dir="ltr">stringification</code> complexity.</li> </ul>
+</li> </ul> <h5 id="c_2">C++</h5> <p>Performance numbers are from the <a href="https://perfetto.dev/docs/instrumentation/track-events#performance">Performance section</a> of the Track events doc in Perfetto. The times for Pixel 3 in the table are consistent with our observations on Cuttlefish VM.</p> <p>Single slice: <code translate="no" dir="ltr">TRACE_EVENT()</code> and similar. Tracing:</p> <ul> <li>Disabled: 2ns.</li> <li>Enabled: 300ns. Using debug field annotations can add 50-100ns.</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/core/tracing" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/core/tracing</a>
+  </p>
+</div>

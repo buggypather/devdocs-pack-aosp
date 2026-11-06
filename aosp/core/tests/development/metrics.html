@@ -1,0 +1,26 @@
+<h1>Metric tests</h1>  <p>Metric tests are typically used for exercising hardware abstraction layers (HALs) or interacting directly with lower-level system services. To leverage continuous testing service, metric tests should be built with the <a href="https://github.com/google/benchmark">google-benchmark</a> framework.</p> <h2 id="example">Example</h2> <p>See a sample metric test module setup at: <a href="https://android.googlesource.com/platform/bionic/+/android17-release/benchmarks/bionic_benchmarks.cpp">bionic/benchmarks/bionic-benchmarks</a></p> <h2 id="summary_of_steps">Summary of steps</h2> <ol> <li>Test module configuration file should use the <code translate="no" dir="ltr">BUILD_NATIVE_BENCHMARK</code> build rule so that google-benchmark dependencies are included automatically.</li> <li>
+<p>Build the test module with make:</p> 
+<pre>make -j40 bionic-benchmarks
+</pre>
+</li> <li>
+<p>Automatic installation and run with the Trade Federation test harness:</p> 
+<pre>make tradefed-all -j
+tradefed.sh run template/local_min --template:map test=bionic-benchmarks
+</pre>
+</li> <li>
+<p>Manually install and run like so:</p> <ol> <li>
+<p>Push the generated test binary onto device:</p> 
+<pre>adb push ${OUT}/data/benchmarktest/bionic-benchmarks/bionic-benchmarks32 \
+  /data/benchmarktest/bionic-benchmarks/bionic-benchmarks32
+</pre>
+</li> <li>
+<p>Execute the test by invoking test binary on device:</p> 
+<pre>adb shell /data/benchmarktest/bionic-benchmarks/bionic-benchmarks32
+</pre>
+</li> </ol>
+</li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/development/metrics" class="_attribution-link">https://source.android.com/docs/core/tests/development/metrics</a>
+  </p>
+</div>

@@ -1,0 +1,89 @@
+<h1>Customize apps</h1>  <p> Now that Car UI library components and resources into the apps, in order to customize these apps, OEMs must provide two overlays: </p> <ul> <li> <p><strong>Build-time overlay</strong> adds any resources needed for the runtime resource overlay (RROs). This includes:</p> <ul> <li>Drawables</li> <li>Styles (for example, text appearances)</li> <li>Shared resources (for example, colors) </li> </ul> </li> <li> <p>The <strong>RRO overlay</strong> folder contains the resources used to generate one RRO per target app. These resources can only refer to:</p> <ul> <li>Values defined within the same RRO (for example, for a color this would be a hexadecimal value).</li> <li>Android framework resources (for example, <code translate="no" dir="ltr">@android:color/accent</code>).</li> <li>A resource defined in the above <em>build-time overlay.</em>
+</li> </ul> </li> </ul> <h2 id="gs">General structure</h2> <p> The proposed customization overlay structure is as follows: </p> <ul> <li> <p><code translate="no" dir="ltr">&lt;path-to-OEM-overlays&gt;/</code></p> <ul> <li> <p><code translate="no" dir="ltr">overlay/framework/base/core/res/</code>. Build-time overlay resources</p> </li> <li> <p><code translate="no" dir="ltr">rro/</code></p> <ul> <li> <p><code translate="no" dir="ltr">Android.mk</code>. Makefile used to generate the RROs for each target package based on the resources contained in this folder.</p> </li> <li> <p><code translate="no" dir="ltr">AndroidManifest.xml</code>. A manifest file template used by the above makefile.</p> </li> <li> <p><code translate="no" dir="ltr">res/</code>. Runtime overlays to apply to all target apps.</p> </li> </ul> </li> </ul> </li> </ul> <p> OEMs may have more than one of these structures, depending on the number of brands they want to handle in a single build target (see <a href="customize#hmb">Handle multiple brands</a>). </p> <h2 id="overlay">Runtime resource overlays</h2> <p> RRO folder in the OEM overlay folder should contain resources to be applied to all target apps. RROs have limitations affecting their ability to overlay compound resources. In summary, an RRO: </p> <ul> <li> <p><em>Can't</em> refer to resource <em>identifiers</em> defined in the target APK, or in the RRO itself. This means that RROs can not add new identifiers such as new drawables, colors, or styles.</p> </li> <li> <p><em>Can</em>refer to resource <em>identifiers</em> defined in the framework, whether those resources are defined in <code translate="no" dir="ltr">/frameworks/base/core/res</code> or by means of a build-time overlay. These identifiers must be referred using the <code translate="no" dir="ltr">android:</code> name-space:</p> <ul> <li> <p>For <em>public</em> DeviceDefault RROs, use <strong><code translate="no" dir="ltr">android</code></strong>.<br> For example, <code translate="no" dir="ltr">@android:style/TextAppearance.DeviceDefault.Large</code>.</p> </li> <li> <p>For <em>all</em> others (non-public or resources added through build-time overlay), <strong><em>use</em> <code translate="no" dir="ltr">*android</code></strong>.<br> For example, <code translate="no" dir="ltr">@*android/style:TextAppearance.OEM.Brand1.Title</code>.</p> </li> </ul> </li> </ul> <p> In addition to resources, the RRO folder must contain: </p> <ul> <li> <p><code translate="no" dir="ltr">AndroidManifest.xml</code>. In the sample below, <code translate="no" dir="ltr">RRO_PACKAGE_NAME</code> and <code translate="no" dir="ltr">TARGET_PACKAGE_NAME</code> are placeholders for the makefiles:</p> 
+<pre>&lt;?xml version=“1.0” encoding=“utf-8”?&gt;
+&lt;manifest xmlns:android=“http://schemas.android.com/apk/res/android”
+    package=“{{RRO_PACKAGE_NAME}}” /&gt;
+    &lt;application android:hasCode=“false” /&gt;
+    &lt;overlay android:priority=“10”
+        android:targetPackage=“{{TARGET_PACKAGE_NAME}}”
+        android:requiredSystemPropertyName=“ro.product.sku”
+        android:requiredSystemPropertyValue=“&lt;your-product-sku&gt;” /&gt;
+&lt;/manifest&gt;</pre> </li> <li>
+<code translate="no" dir="ltr">Android.mk</code> in which <code translate="no" dir="ltr">oem</code> in the following makefile defines the prefix that all generated RROs would have. 
+<pre>  LOCAL_PATH := $(call my-dir)
+  include $(CLEAR_VARS)
+  CAR_UI_RRO_SET_NAME := oem
+  CAR_UI_RESOURCE_DIR := $(LOCAL_PATH)/res
+  CAR_UI_RRO_TARGETS := $(CAR_UI_RRO_PACKAGE_NAMES)
+  include packages/apps/Car/libs/car-ui-lib/generate_rros.mk
+  </pre> </li> </ul> <h2 id="configure-rros">
+Configure RROs</h2> <p> A new configuration file is supported, <code translate="no" dir="ltr">overlayable.xml</code>, which you can use to define access controls. For example, you can specify who can overlay resources as well as which resources can be overlaid. As a result, resources can now be grouped in different ways to make them available to be overlaid by different RROs. </p> <p>To set up RRO access control:</p> <ol> <li>In the <code translate="no" dir="ltr">res/values</code> folder, create <code translate="no" dir="ltr">overlayable.xml</code>.</li> <li>Create the <code translate="no" dir="ltr">&lt;overlayable&gt;</code> resource tags.</li> <li>Define the <code translate="no" dir="ltr">name</code> attribute for the <code translate="no" dir="ltr">&lt;overlayable&gt;</code> tag, which must be unique in the package. Each overlay can target <em>only</em> one overlayable group. </li>
+<li>Define the <code translate="no" dir="ltr">&lt;policy&gt;</code> tag inside <code translate="no" dir="ltr">&lt;overlayable&gt;</code>. </li>
+<li>Define the groups of resources that can be overlaid. For example: 
+<pre>  &lt;resources&gt;
+      &lt;overlayable name="OverlayableResources"&gt;
+          &lt;policy type="public"&gt;
+              &lt;item type="string" name="app_title" /&gt;
+          &lt;/policy&gt;
+      &lt;/overlayable&gt;
+  &lt;/resources&gt;
+  </pre> </li> </ol> <p> To apply the following changes to your RRO project: </p> <ol> <li>In the <code translate="no" dir="ltr">res/xml</code> folder, create <code translate="no" dir="ltr">overlays.xml</code>. See the entry in the code sample below for <code translate="no" dir="ltr">overlay</code>. </li> <li>Define the resources to be overridden.</li> <li>Add <code translate="no" dir="ltr">android:resourcesMap="@xml/overlays"</code> to the <code translate="no" dir="ltr">&lt;overlay&gt;</code> tag in <code translate="no" dir="ltr">AndroidManifest.xml</code>. For example, in the code sample below, see the entry for <code translate="no" dir="ltr">&lt;overlay&gt;</code> .</li> <li>Set <code translate="no" dir="ltr">android:isStatic=”true”</code> for a static overlay. Each overlay can target only one of the groups that can be overlaid.</li> </ol> <p> Consider the following example. The first section belongs to <code translate="no" dir="ltr">AndroidManifest.xml</code> while the second section pertains to <code translate="no" dir="ltr">overlays.xml</code>. </p> 
+<pre>  &lt;manifest xmlns:android="http://schemas.android.com/apk/res/android"
+      package="com.android.car.ui.rro"
+      android:versionCode="1"
+      android:versionName="1.0"&gt;
+      &lt;overlay android:targetName="OverlayableResources"
+               android:resourcesMap="@xml/overlays"
+               android:targetPackage="com.android.car.ui"
+               android:priority="1"
+               android:isStatic="false" /&gt;
+  &lt;/manifest&gt;
+  &lt;overlay&gt;
+      &lt;item target="string/app_title" value="@ string/app_title" /&gt;
+  &lt;/overlay&gt;
+  </pre> <p> With one caveat, previously existing RROs work in Android 10. The caveat being that to be installed with the PackageManagerRRO, packages must be either pre-installed or signed with the same key as the target app. In Android 10, layout files can be overlaid. However, doing so requires the use of <code translate="no" dir="ltr">requireViewById()</code> while getting the view instead of <code translate="no" dir="ltr">findViewById()</code>. In Android 10, this change has been implemented to car-ui-lib to support layout overlays. </p> <p class="note"> The next major release of Android will enable you to overlay a layout file and define new resources in the RRO package and refer to them internally. </p> <h3 id="resources">Add OEM-specific resources</h3> <p> To overcome the RRO limitations that prevent OEM resources from being added: </p> <ul> <li>Extend frameworks/base using a <em>build-time</em> overlay, adding any necessary resources.</li> <li>Refer to these resources from the OEM RROs using <code translate="no" dir="ltr">*android:</code> namespacing.</li> </ul> <p> For example, the following is a way to add a OEM specific drawable and use it in an RRO: </p> <ul> <li> <p><code translate="no" dir="ltr">&lt;path-to-OEM-overlays&gt;</code></p> <ul> <li> <p><strong><code translate="no" dir="ltr">overlay/framework/base/core/res/res/drawable/</code></strong></p> <ul> <li> <p><code translate="no" dir="ltr">oem_background_drawable.xml</code></p> </li> </ul> </li> <li> <p><strong><code translate="no" dir="ltr">rro/res/values</code></strong></p> <ul> <li> <p><code translate="no" dir="ltr">drawables.xml</code></p> 
+<pre>&lt;resources&gt;
+    &lt;item type="drawable" name="car_ui_toolbar_background"&gt;
+        @*android:drawable/oem_background_drawable
+    &lt;/item&gt;
+&lt;/resources&gt;</pre> </li> </ul> </li> </ul> </li> </ul> <h2 id="handle-multiple-brands">
+Handle multiple brands</h2> <p> RRO manifest files have a syntax to allow them be conditionally applied based on system properties. To handle multiple brands in a single system image, OEMs can use this as follows (see <a href="customize#gs">General structure</a>). </p> 
+<pre>&lt;?xml version=“1.0” encoding=“utf-8”?&gt;
+&lt;manifest xmlns:android=“http://schemas.android.com/apk/res/android”
+    package=“{{RRO_PACKAGE_NAME}}”/&gt;
+    &lt;application android:hasCode=“false”/&gt;
+    &lt;overlay android:priority=“10”
+        android:targetPackage=“{{TARGET_PACKAGE_NAME}}”
+        android:requiredSystemPropertyName=“ro.product.sku”
+        android:requiredSystemPropertyValue=“&lt;your-product-sku&gt;”/&gt;
+&lt;/manifest&gt;</pre> <p> The syntax for <code translate="no" dir="ltr">android:requiredSystemPropertyName</code> and <code translate="no" dir="ltr">android:requiredSystemPropertyValue</code> would cause this RRO to be enabled <em>only </em> if the corresponding system property matches the provided value. OEMs can then define multiple of these RROs, all of them statically enabled, and have only one active at a time. </p> <h2 id="target">Add Car UI library to a target</h2> <p> To incorporate Car UI library to an Android target, you must include the following code snippet: </p> 
+<pre># Include build-time overlays
+    PRODUCT_PACKAGE_OVERLAYS += \
+      &lt;path-to-oem-overlays&gt;/overlay
+    # Define package names to generate RROs for
+    CAR_UI_RRO_PACKAGE_NAMES += \
+      com.android.car.ui.paintbooth \
+      com.android.car.media \
+      com.android.car.dialer \
+      com.android.car.linkviewer \
+      com.android.car.settings \
+      com.android.car.systemupdater \
+      com.google.android.apps.automotive.inputmethod \
+      com.google.android.apps.automotive.templates.host \
+      ...
+    # Include generated RROs
+    PRODUCT_PACKAGES += \
+      oem-com-android-car-ui-paintbooth \
+      oem-com-android-car-media \
+      oem-com-android-car-dialer \
+      oem-com-android-car-linkviewer \
+      oem-com-android-car-settings \
+      oem-com-android-car-systemupdater \
+      oem-com-google-android-apps-automotive-inputmethod \
+      oem-com-google-android-apps-automotive-templates-host \
+      ...</pre> <aside class="note"> <strong>Note: </strong>The <code translate="no" dir="ltr">oem-</code> prefix must match the <code translate="no" dir="ltr">CAR_UI_RRO_SET_NAME</code> variable defined in RRO <code translate="no" dir="ltr">Android.mk</code>. The above code: </aside> <ul> <li> <p>Causes <code translate="no" dir="ltr">&lt;path-to-OEM-overlays&gt;/rro/Android.mk</code> generate one RRO for each of the packages named in <code translate="no" dir="ltr">CAR_UI_RRO_PACKAGE_NAMES</code>.</p> </li> <li> <p>Includes the generated RROs in <code translate="no" dir="ltr">PRODUCT_PACKAGES</code>.</p> </li> <li> <p>Includes a build-time overlay in <code translate="no" dir="ltr">PRODUCT_PACKAGE_OVERLAYS</code> to add OEM-specific resources.</p> </li> </ul> <p> To learn which packages support <code translate="no" dir="ltr">car-ui-lib</code>, see <a href="applist">List of packages containing car-ui-lib</a>. </p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/hmi/car_ui/customize" class="_attribution-link">https://source.android.com/docs/automotive/hmi/car_ui/customize</a>
+  </p>
+</div>

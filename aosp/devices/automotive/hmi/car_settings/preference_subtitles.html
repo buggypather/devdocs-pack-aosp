@@ -1,0 +1,148 @@
+<h1>Preference subtitles</h1>  <p>For the most part, adding preference summaries is relatively straightforward as it involves just adding the <code translate="no" dir="ltr">android:summary</code> attribute to the respective preference with the appropriate string resource. However, if the subtitles should update dynamically then a custom preference controller may be necessary.</p> <h2 id="static-subtitles">Static subtitles</h2> <p>To add a static subtitle to a preference:</p> <ol> <li>Add the <code translate="no" dir="ltr">android:summary</code> attribute to the preference. For example, to add a summary to the L0 display settings preference, add something like the following to the preference attributes: 
+<pre>
+android:summary="@string/display_settings_summary"
+</pre> <p>For example, consider this full preference code sample:</p> 
+<pre>
+&lt;Preference
+        android:fragment="com.android.car.settings.display.DisplaySettingsFragment"
+        android:icon="@drawable/ic_settings_display"
+        android:key="@string/pk_display_settings_entry"
+        android:title="@string/display_settings"
+        android:summary="@string/display_settings_summary"
+        settings:controller="com.android.car.settings.common.DefaultRestrictionsPreferenceController"/&gt;
+</pre> </li> </ol> <h2 id="dynamic-subtitles">Dynamic subtitles</h2> <p>Subtitles specified with the <code translate="no" dir="ltr">android:summary</code> attribute are static so cannot update based on certain conditions. For dynamic subtitles, you need to modify the preference controller for the preference. The following example modifies the L0 location preference to have a subtitle that specifies if location is on or off and, if on, state how many apps currently have location access.</p> <ol> <li>Define the new strings: 
+<pre>
+&lt;!-- Summary for Location settings when location is off [CHAR LIMIT=NONE] --&gt;
+    &lt;string name="location_settings_summary_location_off"&gt;Off&lt;/string&gt;
+    &lt;!-- Summary for Location settings when location is on, explaining how many apps have location permission [CHAR LIMIT=NONE]--&gt;
+    &lt;plurals name="location_settings_summary_location_on"&gt;
+        &lt;item quantity="one"&gt;On - &lt;xliff:g id="count"&gt;%1$d&lt;/xliff:g&gt; app has access to location&lt;/item&gt;
+        &lt;item quantity="other"&gt;On - &lt;xliff:g id="count"&gt;%1$d&lt;/xliff:g&gt; apps have access to location&lt;/item&gt;
+    &lt;/plurals&gt;
+    &lt;!-- Location settings, loading the number of apps which have location permission [CHAR LIMIT=30] --&gt;
+    &lt;string name="location_settings_loading_app_permission_stats"&gt;Loading\u2026&lt;/string&gt;
+</pre> </li> <li>Create a new PreferenceController, <code translate="no" dir="ltr">LocationEntryPreferenceController</code>, to dynamically set and change the location preference summary text: 
+<pre>
+public class LocationEntryPreferenceController extends PreferenceController&lt;Preference&gt; {
+
+    private static final Logger LOG = new Logger(LocationEntryPreferenceController.class);
+    private static final IntentFilter INTENT_FILTER_LOCATION_MODE_CHANGED =
+            new IntentFilter(LocationManager.MODE_CHANGED_ACTION);
+
+    private final Context mContext;
+    private final LocationManager mLocationManager;
+    /** Total number of apps that have location permissions. */
+    private int mNumTotal = -1;
+    private int mNumTotalLoading = 0;
+    private AtomicInteger mLoadingInProgress = new AtomicInteger(0);
+
+    private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            refreshUi();
+        }
+    };
+
+    public LocationEntryPreferenceController(Context context, String preferenceKey,
+            FragmentController fragmentController, CarUxRestrictions uxRestrictions) {
+        super(context, preferenceKey, fragmentController, uxRestrictions);
+        mContext = context;
+        mLocationManager = (LocationManager) getContext().getSystemService(
+                Service.LOCATION_SERVICE);
+    }
+
+    @Override
+    protected Class&lt;Preference&gt; getPreferenceType() {
+        return Preference.class;
+    }
+
+    @Override
+    protected void onStartInternal() {
+        getContext().registerReceiver(mReceiver, INTENT_FILTER_LOCATION_MODE_CHANGED);
+    }
+
+    @Override
+    protected void onStopInternal() {
+        getContext().unregisterReceiver(mReceiver);
+    }
+
+    @Override
+    protected void updateState(Preference preference) {
+        super.updateState(preference);
+        updateSummary(preference);
+        if (!mLocationManager.isLocationEnabled() || mLoadingInProgress.get() != 0) {
+            return;
+        }
+        mNumTotalLoading = 0;
+        // Retrieve a list of users inside the current user profile group.
+        List&lt;UserHandle&gt; users = mContext.getSystemService(
+                UserManager.class).getUserProfiles();
+        mLoadingInProgress.set(users.size());
+        for (UserHandle user : users) {
+            Context userContext = createPackageContextAsUser(mContext, user.getIdentifier());
+            if (userContext == null) {
+                if (mLoadingInProgress.decrementAndGet() == 0) {
+                    setLocationAppCount(preference, mNumTotalLoading);
+                }
+                continue;
+            }
+            PermissionControllerManager permController =
+                    userContext.getSystemService(PermissionControllerManager.class);
+            permController.countPermissionApps(
+                    Arrays.asList(ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION),
+                    PermissionControllerManager.COUNT_ONLY_WHEN_GRANTED,
+                    (numApps) -&gt; {
+                        mNumTotalLoading += numApps;
+                        if (mLoadingInProgress.decrementAndGet() == 0) {
+                            setLocationAppCount(preference, mNumTotalLoading);
+                        }
+                    }, null);
+        }
+    }
+
+    @VisibleForTesting
+    void setLocationAppCount(Preference preference, int numApps) {
+        mNumTotal = numApps;
+        updateSummary(preference);
+    }
+
+    private void updateSummary(Preference preference) {
+        String summary = "";
+        if (mLocationManager.isLocationEnabled()) {
+            if (mNumTotal == -1) {
+                summary = mContext.getString(R.string.location_settings_loading_app_permission_stats);
+            } else {
+                summary = mContext.getResources().getQuantityString(
+                        R.plurals.location_settings_summary_location_on,
+                        mNumTotal, mNumTotal);
+            }
+        } else {
+            summary = mContext.getString(R.string.location_settings_summary_location_off);
+        }
+        preference.setSummary(summary);
+    }
+
+    private Context createPackageContextAsUser(Context context, int userId) {
+        try {
+            return context.createPackageContextAsUser(
+                    context.getPackageName(), 0 /* flags */, UserHandle.of(userId));
+        } catch (PackageManager.NameNotFoundException e) {
+            LOG.e("Failed to create user context", e);
+        }
+        return null;
+    }
+}
+</pre> <p>For this sample controller:</p> <ul> <li>If location is disabled, summary text is set to the <code translate="no" dir="ltr">location_settings_summary_location_off</code> string.</li> <li>If location is enabled, the number of apps that have location permission is added. While this is loading, the <code translate="no" dir="ltr">location_settings_loading_app_permission_stats</code> string is shown. When the data is loaded, the controller sets the summary to the <code translate="no" dir="ltr">location_settings_summary_location_on</code> string with the number of apps with access specified.</li> <li>When the preference controller is started, the controller registers a receiver and refreshes the preference state when the location state changes.</li> </ul> </li> <li>Modify the fragment XML file to attach the new controller to the relevant preference: 
+<pre>
+&lt;Preference
+        android:fragment="com.android.car.settings.location.LocationSettingsFragment"
+        android:icon="@drawable/ic_settings_location"
+        android:key="@string/pk_location_settings_entry"
+        android:title="@string/location_settings_title"
+        settings:controller="com.android.car.settings.location.LocationEntryPreferenceController"/&gt;
+</pre> </li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/devices/automotive/hmi/car_settings/preference_subtitles" class="_attribution-link">https://source.android.com/docs/devices/automotive/hmi/car_settings/preference_subtitles</a>
+  </p>
+</div>

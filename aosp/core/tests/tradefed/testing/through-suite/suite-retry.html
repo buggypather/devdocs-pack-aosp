@@ -1,0 +1,25 @@
+<h1>Use suite retry</h1>  <p>A suite tends to include several test modules and can reach quite a large test corpus size. For example, the <a href="../../../../../compatibility/cts">Android Compatibility Test Suite (CTS)</a> includes hundreds of modules and hundreds of thousands test cases.</p> <p>It becomes possible for a large amount of tests to fail due to poor isolation or devices going into a bad state.</p> <p>The suite retry feature is meant to address those cases: It lets you retry the failures only instead of the full suites in order to rule out flakiness and poor isolation. If a test is consistently failing, the retry also fails; and you get a much stronger signal that there's a real issue.</p> <h2 id="implement_suite_retry">Implement suite retry</h2> <p>The retry of results involves reading the previous results and rerunning the previous invocation.</p> <p>The main interface driving the retry is <a href="https://android.googlesource.com/platform/tools/tradefederation/+/refs/heads/android17-release/src/com/android/tradefed/testtype/suite/retry/ITestSuiteResultLoader.java"><code translate="no" dir="ltr">ITestSuiteResultLoader</code></a>, which lets you load a previous result, and the previous command line.</p> <p><a href="https://android.googlesource.com/platform/tools/tradefederation/+/refs/heads/android17-release/src/com/android/tradefed/testtype/suite/retry/RetryRescheduler.java"><code translate="no" dir="ltr">RetryRescheduler</code></a> then uses this information to recreate the previous command and populate some filters in order to rerun only the previous failures or not executed tests.</p> <h2 id="example_suite_retry_cts">Example suite retry: CTS</h2> <p>The retry configuration in CTS is:</p> 
+<pre>&lt;configuration description="Runs a retry of a previous CTS session."&gt;
+    &lt;object type="previous_loader" class="com.android.compatibility.common.tradefed.result.suite.PreviousResultLoader" /&gt;
+    &lt;test class="com.android.tradefed.testtype.suite.retry.RetryRescheduler" /&gt;
+
+    &lt;logger class="com.android.tradefed.log.FileLogger"&gt;
+        &lt;option name="log-level-display" value="WARN" /&gt;
+    &lt;/logger&gt;
+&lt;/configuration&gt;
+</pre> <p>This is applicable to most of the suites that extend it, for example <a href="../../../vts">VTS</a>.</p> <p>It would be invoked with:</p> 
+<pre>cts-tradefed run retry --retry &lt;session&gt;
+</pre> <p>The session would be found by listing the previous results in the CTS console:</p> 
+<pre>cts-tf &gt; l r
+Session  Pass  Fail  Modules Complete  Result Directory     Test Plan  Device serial(s)  Build ID   Product
+0        2092  30    148 of 999        2018.10.29_14.12.57  cts        [serial]          P          Pixel
+</pre> <p>The exact original command will be reloaded and rerun with extra filters. This means that if your original command included some options, they are also part of the retry.</p> <p>For example:</p> 
+<pre>cts-tradefed run cts-dev -m CtsGestureTestCases
+</pre> <p>The retry of the above is always bound to <code translate="no" dir="ltr">CtsGestureTestCases</code> because we are retrying a command that involved only it.</p> <h2 id="configure_retry_for_cts-style_suite">Configure retry for CTS-style suite</h2> <p>In order for the retry to work, the previous results need to be exported in proto format. The following needs to be added:</p> 
+<pre>&lt;result_reporter class="com.android.compatibility.common.tradefed.result.suite.CompatibilityProtoResultReporter" /&gt;
+</pre> <p>This needs to be added to the XML configuration of the main command, and it results in a <code translate="no" dir="ltr">test-record.pb</code> file being created in the result folder.</p> <p>The CTS retry then loads data from a combination of the <code translate="no" dir="ltr">test-record.pb</code> and the existing <code translate="no" dir="ltr">test_result.xml</code> to prepare the retry invocation.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/tradefed/testing/through-suite/suite-retry" class="_attribution-link">https://source.android.com/docs/core/tests/tradefed/testing/through-suite/suite-retry</a>
+  </p>
+</div>

@@ -1,0 +1,226 @@
+<h1>Event and frame notification mechanism</h1>  <p>In the previous release of Exterior View System (EVS), the <code translate="no" dir="ltr"><a href="https://source.android.com/reference/hidl/android/hardware/automotive/evs/1.0/IEvsCameraStream">IEvsCameraStream</a></code> interface defined a single callback method to deliver captured video frames <em>only</em>. While this simplified EVS service client implementations, it also made it difficult for clients to identify any streaming incidents and, therefore, to handle them properly. To enhance the EVS development experience, AOSP now contains an additional callback to deliver streaming events.</p> 
+<pre>package android.hardware.automotive.evs@1.1;
+
+import @1.0::IEvsCameraStream;
+
+/**
+ * Implemented on client side to receive asynchronous video frame deliveries.
+ */
+interface IEvsCameraStream extends @1.0::IEvsCameraStream {
+    /**
+     * Receives calls from the HAL each time a video frame is ready for inspection.
+     * Buffer handles received by this method must be returned via calls to
+     * IEvsCamera::doneWithFrame_1_1(). When the video stream is stopped via a call
+     * to IEvsCamera::stopVideoStream(), this callback may continue to happen for
+     * some time as the pipeline drains. Each frame must still be returned.
+     * When the last frame in the stream has been delivered, STREAM_STOPPED
+     * event must be delivered. No further frame deliveries may happen
+     * thereafter.
+     *
+     * @param buffer a buffer descriptor of a delivered image frame.
+     */
+    oneway deliverFrame_1_1(BufferDesc buffer);
+
+    /**
+     * Receives calls from the HAL each time an event happens.
+     *
+     * @param  event EVS event with possible event information.
+     */
+    oneway notify(EvsEvent event);
+};</pre> <p>This method delivers <code translate="no" dir="ltr">EvsEventDesc</code> that consists of three fields:</p> <ul> <li>Type of the event.</li> <li>String to identify the origin of the event.</li> <li>4x 32-bit word data to contain possible event information.</li> </ul> 
+<pre>/**
+ * Structure that describes informative events occurred during EVS is streaming
+ */
+struct EvsEvent {
+    /**
+     * Type of an informative event
+     */
+    EvsEventType aType;
+    /**
+     * Device identifier
+     */
+    string deviceId;
+    /**
+     * Possible additional information
+     */
+    uint32_t[4] payload;
+};</pre> <p>And, to avoid any divergence in the graphics buffer description between EVS and other Android graphical components, <code translate="no" dir="ltr">BufferDesc</code> has been redefined to use <code translate="no" dir="ltr">HardwareBuffer</code> imported from android.hardware.graphics.common@1.2 interface. <code translate="no" dir="ltr">HardwareBuffer</code> contains <code translate="no" dir="ltr">HardwareBufferDescription</code>, which is the HIDL counterpart of <a href="https://developer.android.com/ndk">Android NDK's</a> <code translate="no" dir="ltr">AHardwareBuffer_Desc</code>, with a buffer handle.</p> 
+<pre>/**
+ * HIDL counterpart of AHardwareBuffer_Desc.
+ *
+ * An AHardwareBuffer_Desc object can be converted to and from a
+ * HardwareBufferDescription object by memcpy().
+ *
+ * @sa +ndk libnativewindow#AHardwareBuffer_Desc.
+ */
+typedef uint32_t[10] HardwareBufferDescription;
+
+/**
+ * HIDL counterpart of AHardwareBuffer.
+ *
+ * AHardwareBuffer_createFromHandle() can be used to convert a HardwareBuffer
+ * object to an AHardwareBuffer object.
+ *
+ * Conversely, AHardwareBuffer_getNativeHandle() can be used to extract a native
+ * handle from an AHardwareBuffer object. Paired with AHardwareBuffer_Desc,
+ * AHardwareBuffer_getNativeHandle() can be used to convert between
+ * HardwareBuffer and AHardwareBuffer.
+ *
+ * @sa +ndk libnativewindow#AHardwareBuffer".
+ */
+struct HardwareBuffer {
+    HardwareBufferDescription description;
+    handle nativeHandle;
+}
+
+/**
+ * Structure representing an image buffer through our APIs
+ *
+ * In addition to the handle to the graphics memory, need to retain
+ * the properties of the buffer for easy reference and reconstruction of
+ * an ANativeWindowBuffer object on the remote side of API calls.
+ * Not least because OpenGL expect an ANativeWindowBuffer* for us as a
+ * texture via eglCreateImageKHR().
+ */
+struct BufferDesc {
+    /**
+     * HIDL counterpart of AHardwareBuffer_Desc. Please see
+     * hardware/interfaces/graphics/common/1.2/types.hal for more details.
+     */
+    HardwareBuffer buffer;
+    /**
+     * The size of a pixel in the units of bytes
+     */
+    uint32_t pixelSize;
+    /**
+     * Opaque value from driver
+     */
+    uint32_t bufferId;
+    /**
+     * Unique identifier of the physical camera device that produces this buffer.
+     */
+    string deviceId;
+    /**
+     * Time that this buffer is being filled
+     */
+    int64_t timestamp;
+    /**
+     * Frame metadata. This is opaque to EVS manager
+     */
+    vec&lt;uint8_t&gt; metadata
+};</pre> <p class="note"><strong>Note: </strong><code translate="no" dir="ltr">HardwareBufferDescription</code> is defined as an array of ten 32-bit words. You may want to cast it as <code translate="no" dir="ltr">AHardwareBuffer_Desc</code> type and fill in the contents.</p> <p><code translate="no" dir="ltr">EvsEventDesc</code> is a struct of <code translate="no" dir="ltr">enum EvsEventType</code>, which lists several streaming events and a 32-bit word payload, in which the developer can place possible additional information. For example, the developer can place an error code for the streaming error event. </p> 
+<pre>/**
+ * Types of informative streaming events
+ */
+enum EvsEventType : uint32_t {
+    /**
+     * Video stream is started
+     */
+    STREAM_STARTED = 0,
+    /**
+     * Video stream is stopped
+     */
+    STREAM_STOPPED,
+    /**
+     * Video frame is dropped
+     */
+    FRAME_DROPPED,
+    /**
+     * Timeout happens
+     */
+    TIMEOUT,
+    /**
+     * Camera parameter is changed; payload contains a changed parameter ID and
+     * its value
+     */
+    PARAMETER_CHANGED,
+    /**
+     * Master role has become available
+     */
+    MASTER_RELEASED,
+};</pre> <h2 id="frame-delivery">
+Frame delivery</h2> <p>With a new <code translate="no" dir="ltr">BufferDesc</code>, <code translate="no" dir="ltr">IEvsCameraStream</code> also introduces new callback methods to receive the frames and streaming events from the service implementations.</p> 
+<pre>/**
+ * Implemented on client side to receive asynchronous streaming event deliveries.
+ */
+interface IEvsCameraStream extends @1.0::IEvsCameraStream {
+   /**
+    * Receives calls from the HAL each time video frames are ready for inspection.
+    * Buffer handles received by this method must be returned via calls to
+    * IEvsCamera::doneWithFrame_1_1(). When the video stream is stopped via a call
+    * to IEvsCamera::stopVideoStream(), this callback may continue to happen for
+    * some time as the pipeline drains. Each frame must still be returned.
+    * When the last frame in the stream has been delivered, STREAM_STOPPED
+    * event must be delivered. No further frame deliveries may happen
+    * thereafter.
+    *
+    * A camera device delivers the same number of frames as number of
+    * backing physical camera devices; it means, a physical camera device
+    * sends always a single frame and a logical camera device sends multiple
+    * frames as many as the number of backing physical camera devices.
+    *
+    * @param buffer Buffer descriptors of delivered image frames.
+    */
+   oneway deliverFrame_1_1(vec&lt;BufferDesc&gt; buffer);
+
+   /**
+    * Receives calls from the HAL each time an event happens.
+    *
+    * @param  event EVS event with possible event information.
+    */
+   oneway notify(EvsEventDesc event);
+};</pre> <p>A newer version of a frame callback method is designed to deliver multiple buffer descriptors. Therefore, EVS camera implementations can forward multiple frames by a single call if it manages multiple sources.</p> <p>Also, the previous protocol to notify of the end of the stream, which was sending the null frame, has been deprecated and replaced with <code translate="no" dir="ltr">STREAM_STOPPED</code> event.</p> <p><img src="https://source.android.com/static/docs/automotive/images/evs_01.png" class="android-image-dark-theme-background" alt="Event notification sequence diagram"></p> <p><strong>Figure 1. </strong> Event notification sequence diagram</p> <h2 id="use-event-and-frame-notification-mechanism">
+Use event and frame notification mechanism</h2> <h3 id="identify-version-of-ievscamerastream-implemented-by-client">
+Identify version of IEvsCameraStream implemented by client</h3> <p>The service can identify the version of the incoming IEvsCameraStream interface implemented by the client by attempting to downcast:</p> 
+<pre>using IEvsCameraStream_1_0 =
+    ::android::hardware::automotive::evs::V1_0::IEvsCameraStream;
+using IEvsCameraStream_1_1 =
+    ::android::hardware::automotive::evs::V1_1::IEvsCameraStream;
+
+Return&lt;EvsResult&gt; EvsV4lCamera::startVideoStream(
+    const sp&lt;IEvsCameraStream_1_0&gt;&amp; stream)  {
+
+    IEvsCameraStream_1_0 aStream = stream;
+    // Try to downcast. This succeeds if the client implements
+    // IEvsCameraStream v1.1.
+    IEvsCameraStream_1_1 aStream_1_1 =
+        IEvsCameraStream_1_1::castFrom(aStream).withDefault(nullptr);
+    if (aStream_1_1 == nullptr) {
+        ALOGI("Start a stream for v1.0 client.");
+    } else {
+        ALOGI("Start a stream for v1.1 client.");
+    }
+
+    // Start a video stream
+    ...
+}</pre> <h3 id="notify-callback">
+notify() callback</h3> <p><code translate="no" dir="ltr">EvsEvent</code> is passed through <code translate="no" dir="ltr">notify()</code> callback and the client can then identify its type based on the discriminator, as shown below: </p> 
+<pre>Return&lt;void&gt; StreamHandler::notify(const EvsEvent&amp; event) {
+    ALOGD("Received an event id: %u", event.aType);
+    // Handle each received event.
+    switch(event.aType) {
+        case EvsEventType::ERROR:
+            // Do something to handle an error
+            ...
+            break;
+        [More cases]
+    }
+    return Void();
+}</pre> <h3 id="use-bufferdesc">
+Use BufferDesc</h3> <p><code translate="no" dir="ltr"><a href="https://developer.android.com/ndk/reference/struct/a-hardware-buffer-desc">AHardwareBuffer_Desc</a></code> is Android NDK's data type to represent a native hardware buffer that can be bound to EGL/OpenGL and Vulkan primitives. It contains most of the buffer metadata from the previous EVS BufferDesc and, therefore, replaces it in the new BufferDesc definition. However, as this is defined as an array in HIDL interface, it is not possible to index member variables directly. Instead, you can cast the array as a type of <code translate="no" dir="ltr">AHardwareBuffer_Desc</code>, as shown below:</p> 
+<pre>BufferDesc bufDesc = {};
+AHardwareBuffer_Desc* pDesc =
+    reinterpret_cast&lt;AHardwareBuffer_Desc *&gt;(&amp;bufDesc.buffer.description);
+pDesc-&gt;width  = mVideo.getWidth();
+pDesc-&gt;height = mVideo.getHeight();
+pDesc-&gt;layers = 1;
+pDesc-&gt;format = mFormat;
+pDesc-&gt;usage  = mUsage;
+pDesc-&gt;stride = mStride;
+bufDesc_1_1.buffer.nativeHandle = mBuffers[idx].handle;
+bufDesc_1_1.bufferId = idx;</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/camera/evs/event_frame" class="_attribution-link">https://source.android.com/docs/automotive/camera/evs/event_frame</a>
+  </p>
+</div>

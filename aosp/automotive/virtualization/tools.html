@@ -1,0 +1,19 @@
+<h1>Tools</h1>  <p>In virtualized systems, the device can have multiple VMs with each running its own ADB daemon. In this case, the host VM can export an RNDIS Ethernet gadget, which can be used for the TCP/IP-based communications over the USB physical link. The development machine can then use ADB over TCP/IP to access multiple VMs on the device. The ADB daemon on the host side can announce the ADB presence on the guest VMs over mDNS by publishing ADB services. In addition, the development machine can browse these services with ADB tool, which supports mDNS device discovery (ADB version <a href="https://developer.android.com/studio/releases/platform-tools#3102_april_2021">31.0.2 or later</a>) to get the IP address and the port number on which adb daemon is listening and then connect to the guest VMs.</p> <p>The following commands can be used on the development machine to browse and connect to the ADB services.</p> <ol> <li>To enable mDNS discovery, run: <aside class="note">Because ADB 31.0.2 disables mDNS discovery, you must enable mDNS discovery and then restart the ADB server.</aside> 
+<pre>export ADB_MDNS_OPENSCREEN=1
+adb kill-server
+adb start-server</pre> </li> <li>To discover ADB services, run: 
+<pre>adb mdns services
+
+List of discovered mdns services
+driver_vm	_adb._tcp	192.168.1.49:4444
+device_vm	_adb._tcp	192.168.1.49:3333</pre> </li> <li>To connect to the device, run: 
+<pre>adb connect driver_vm._adb._tcp</pre> </li> <li>To list the connected devices, run: 
+<pre>adb devices
+
+List of devices attached
+driver_vm._adb._tcp device</pre> </li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/virtualization/tools" class="_attribution-link">https://source.android.com/docs/automotive/virtualization/tools</a>
+  </p>
+</div>

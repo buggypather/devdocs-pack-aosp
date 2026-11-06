@@ -1,0 +1,113 @@
+<h1>Cuttlefish: Environment control</h1>  <p>This page describes how to control the environment in a Cuttlefish device using the REST API or the command line interface. For example, you can modify the Wi-Fi signal or update the GPS location of the Cuttlefish device.</p> <h2 id="services">Services</h2> <p>The <code translate="no" dir="ltr">cvd env</code> command provides the following services for controlling the Cuttlefish environment:</p> <table> <thead> <tr> <th>Services</th> <th>Description</th> </tr> </thead> <tbody> <tr> <td>
+<code translate="no" dir="ltr">GnssGrpcProxy</code> </td> <td>Controls GNSS for the Cuttlefish geolocation feature.</td> </tr> <tr> <td>
+<a href="wifi#openwrt_control_service"><code translate="no" dir="ltr">OpenwrtControlService</code></a> </td> <td> Controls <code translate="no" dir="ltr">Openwrt</code>, a virtualized Wi-Fi AP provider for the Cuttlefish Wi-Fi feature.</td> </tr> <tr> <td>
+<a href="wifi#wmediumd_service"><code translate="no" dir="ltr">WmediumdService</code></a> </td> <td> Controls <code translate="no" dir="ltr">Wmediumd</code>, a wireless medium simulator for the Cuttlefish Wi-Fi feature.</td> </tr> <tr> <td>
+<a href="nfc#casimir_control_service"><code translate="no" dir="ltr">CasimirControlService</code></a> </td> <td> Controls <code translate="no" dir="ltr">Casimir</code>, a simulator for external NFC devices.</td> </tr> </tbody> </table> <h2 id="control-environment-rest-api">Control the environment using the REST API</h2> <p>This section describes how to control the environment using the Rest API through the <code translate="no" dir="ltr">&lt;https://localhost:1443&gt;</code> service endpoint.</p> <h3 id="rest-api-ls">List available services or methods</h3> <p>To get a list of all services, send a <code translate="no" dir="ltr">GET</code> request to the following URL with a device ID.</p> 
+<pre>https://localhost:1443/devices/DEVICE_ID/services
+</pre> <p>To get a list of all the methods for a service, send a <code translate="no" dir="ltr">GET</code> request to the following URL with a device ID and the service name.</p> 
+<pre>https://localhost:1443/devices/DEVICE_ID/services/SERVICE_NAME
+</pre> <p>To get detailed information for a method, such as the request or response message types, send a <code translate="no" dir="ltr">GET</code> request to the following URL with a device ID, a service name, and the method name.</p> 
+<pre>https://localhost:1443/devices/DEVICE_ID/services/SERVICE_NAME/METHOD_NAME
+</pre> <h3 id="rest-api-type">Get detailed information on request and response types</h3> <p>To get detailed information of a request or response message type, send a <code translate="no" dir="ltr">GET</code> request to the following URL with a device ID, a service name, and the request or response message type. This prints all the names and types of each field in the message. You can then use this information to write a JSON-formatted proto message for sending a RPC request.</p> 
+<pre>https://localhost:1443/devices/DEVICE_ID/services/SERVICE_NAME/REQUEST_OR_RESPONSE_TYPE_NAME/type
+</pre> <h3 id="rest-api-call">Send RPC request to make changes to the environment</h3> <p>To send a RPC request to call a method of a service with a JSON-formatted proto, send a <code translate="no" dir="ltr">POST</code> request to the following URL with a device ID, a service name, and the method name. The JSON-formatted proto must be included in the body.</p> 
+<pre>https://localhost:1443/devices/DEVICE_ID/services/SERVICE_NAME/METHOD_NAME
+</pre> <h3 id="rest-api-example">Example use case</h3> <p>The following is an example use case of the Rest API for modifying the Wi-Fi signal strength by calling <code translate="no" dir="ltr">SetTxpower</code>.</p> <ol> <li>
+<p>Determine the service name, method name, and the request message type name for modifying the Wi-Fi signal strength.</p> <ol> <li>
+<p>Get a list of all available services by sending a <code translate="no" dir="ltr">GET</code> request to the following URL.</p> 
+<pre>https://localhost:1443/devices/cvd-1/services
+</pre> <p>This is an example response.</p> 
+<pre>{"services":["OpenwrtControlService","EchoService","GnssGrpcProxy","WmediumdService"]}
+</pre>
+</li> <li>
+<p>Get a list of methods for <code translate="no" dir="ltr">WmediumdService</code> by sending a <code translate="no" dir="ltr">GET</code> request to the following URL.</p> 
+<pre>https://localhost:1443/devices/cvd-1/services/WmediumdService
+</pre> <p>This is an example response.</p> 
+<pre>{"methods":["ListStations","LoadConfig","ReloadConfig","SetCivicloc","SetLci","SetPosition","SetSnr","SetTxpower","StartPcap","StopPcap"]}
+</pre>
+</li> <li>
+<p>Get information on the request and response message types for the <code translate="no" dir="ltr">SetTxpower</code> method by sending a <code translate="no" dir="ltr">GET</code> request to the following URL.</p> 
+<pre>https://localhost:1443/devices/cvd-1/services/WmediumdService/SetTxpower
+</pre> <p>This is an example response.</p> 
+<pre>{"request_type_name":"wmediumdserver.SetTxpowerRequest","response_type_name":"google.protobuf.Empty"}
+</pre>
+</li> </ol>
+</li> <li>
+<p>Get detailed information for the <code translate="no" dir="ltr">wmediumdserver.SetTxpowerRequest</code> request message type by sending a <code translate="no" dir="ltr">GET</code> request to the following URL.</p> 
+<pre>https://localhost:1443/devices/cvd-1/services/WmediumdService/wmediumdserver.SetTxpowerRequest/type
+</pre> <p>This is an example response.</p> 
+<pre>message SetTxpowerRequest {
+  string mac_address = 1;
+  int32 tx_power = 2;
+}
+</pre>
+</li> <li>
+<p>Send a RPC request to the <code translate="no" dir="ltr">WmediumdService</code> service to modify the Wi-Fi signal strength to the desired level by sending a <code translate="no" dir="ltr">POST</code> request to this URL with the following request body.</p> 
+<pre>https://localhost:1443/devices/cvd-1/services/WmediumdService/SetTxpower
+</pre>
+
+<pre>{"mac_address":"42:00:00:00:00:00", "tx_power":1}
+</pre> <p>This is an example response.</p> 
+<pre>{}
+</pre>
+</li> </ol> <h2 id="control-environment-cli">Control the environment using the command line</h2> <p>This section describes the subcommands available for the <code translate="no" dir="ltr">cvd env</code> CLI command. For further details, print the help message using <code translate="no" dir="ltr">cvd help env</code>.</p> <h3 id="cli-ls">List available services or methods</h3> <p>To get a list of all services, use <code translate="no" dir="ltr">cvd env ls</code> without any arguments.</p> 
+<pre>cvd env ls</pre> <p>To get a list of all the methods for a service, include the name of the service as an argument.</p> 
+<pre>cvd env ls SERVICE_NAME</pre> <p>To get detailed information such as the request or response message types of a method, include the service name and method name.</p> 
+<pre>cvd env ls SERVICE_NAME METHOD_NAME</pre> <h3 id="cli-type">Get detailed information on request and response types</h3> <p>To get detailed information of a request or response message type, use the <code translate="no" dir="ltr">cvd env type</code> command. This command prints all names and types of each field in the message. You can then use this information to write a JSON-formatted proto message for sending a RPC request.</p> 
+<pre>cvd env type SERVICE_NAME REQUEST_OR_RESPONSE_TYPE_NAME</pre> <h3 id="cli-call">Send RPC request to make changes to the environment</h3> <p>To send a RPC request to call a method of a service with a JSON-formatted proto, use the <code translate="no" dir="ltr">cvd enc call</code> command. When the RPC request terminates, the interface prints the message <code translate="no" dir="ltr">Rpc succeeded with OK status</code> and, if available, a response message including values.</p> 
+<pre>cvd env call SERVICE_NAME METHOD_NAME JSON_FORMATTED_PROTO</pre> <h3 id="cli-example">Example use case</h3> <p>The following is an example use case of the <code translate="no" dir="ltr">cvd env</code> CLI command for modifying the Wi-Fi signal strength by calling <code translate="no" dir="ltr">SetTxpower</code>.</p> <ol> <li>
+<p>Determine the service name, method name, and the request message type name for modifying the Wi-Fi signal strength.</p> <p>Get a list of all available services.</p> 
+<pre>cvd env ls
+(Omitted)
+{
+  "services" :
+  [
+    "OpenwrtControlService",
+    "EchoService",
+    "GnssGrpcProxy",
+    "WmediumdService"
+  ]
+}</pre> <p>Get a list of methods for <code translate="no" dir="ltr">WmediumdService</code>.</p> 
+<pre>cvd env ls WmediumdService
+(Omitted)
+{
+  "methods" :
+  [
+    "ListStations",
+    "LoadConfig",
+    "ReloadConfig",
+    "SetCivicloc",
+    "SetLci",
+    "SetPosition",
+    "SetSnr",
+    "SetTxpower",
+    "StartPcap",
+    "StopPcap"
+  ]
+}</pre> <p>Get information on the request and response message types for the <code translate="no" dir="ltr">SetTxpower</code> method.</p> 
+<pre>cvd env ls WmediumdService SetTxpower
+(Omitted)
+{
+  "request_type" : "wmediumdserver.SetTxpowerRequest",
+  "response_type" : "google.protobuf.Empty"
+}</pre>
+</li> <li>
+<p>Get detailed information for the <code translate="no" dir="ltr">wmediumdserver.SetTxpowerRequest</code> request message type.</p> 
+<pre>cvd env type WmediumdService wmediumdserver.SetTxpowerRequest
+(Omitted)
+message SetTxpowerRequest {
+  string mac_address = 1;
+  int32 tx_power = 2;
+}</pre>
+</li> <li>
+<p>Send RPC request to the <code translate="no" dir="ltr">WmediumdService</code> service to modify the Wi-Fi signal strength to the desired level.</p> 
+<pre>cvd env call WmediumdService SetTxpower "{mac_address:'42:00:00:00:00:00', tx_power:1}"
+(Omitted)
+Rpc succeeded with OK status
+{}</pre>
+</li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/devices/cuttlefish/control-environment" class="_attribution-link">https://source.android.com/docs/devices/cuttlefish/control-environment</a>
+  </p>
+</div>

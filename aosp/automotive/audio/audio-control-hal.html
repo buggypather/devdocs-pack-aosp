@@ -1,0 +1,358 @@
+<h1>Audio control HAL</h1>  <p>Audio control HAL was introduced in Android 9 to support audio use cases relevant to automotive. As of Android 14, Audio control HAL supports:</p> <ul> <li>Fade and balance</li> <li>HAL audio focus request</li> <li>Device muting and ducking</li> <li>Audio device gain changes</li> <li>Audio port configuration changes</li> </ul> <p>Figure 1 shows a high-level overview of the car audio service architecture, in which the car audio service communicates with the audio control HAL.</p> <p><img src="https://source.android.com/static/docs/automotive/images/audio-control-hal-01.png" alt="Configure multi-zone audio" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> Configure multi-zone audio.</p> <h2 id="audio_fade_and_balance">Audio fade and balance</h2> <p>HIDL audio control HAL version 1 was introduced in Android 9 to support audio fade and balance in automotive use cases. Separate from the generic audio effects already provided in Android, this mechanism allows for system apps to set the audio balance and fade through <code translate="no" dir="ltr">CarAudioManager</code> APIs:</p> 
+<pre>class CarAudioManager {
+       /**
+       *   Adjust the relative volume in the front vs back of the vehicle cabin.
+       *
+       *   @param value in the range -1.0 to 1.0 for fully toward the back through
+       *   fully toward the front. 0.0 means evenly balanced.
+       */
+       @SystemApi
+       @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME)
+       public void setFadeTowardFront(float value);
+
+       /**
+       *   Adjust the relative volume on the left vs right side of the vehicle cabin.
+       *
+       *   @param value in the range -1.0 to 1.0 for fully toward the left through
+       *   fully toward the right. 0.0 means evenly balanced.
+       */
+       @SystemApi
+       @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME)
+       public void setBalanceTowardRight(float value);
+}
+</pre> <p>Once these APIs are called, the respective audio control HAL APIs are called from the car audio service:</p> 
+<pre>interface IAudioControl {
+       /**
+       *   Control the right/left balance setting of the car speakers.
+       */
+       oneway setBalanceTowardRight(float value);
+
+       /**
+       *   Control the fore/aft fade setting of the car speakers.
+       */
+       oneway setFadeTowardFront(float value);
+}
+</pre> <p>The API is available on all versions of the audio control HAL, including the new AIDL HAL interface.</p> <h2 id="hal-request">Audio focus request from HAL</h2> <p>AAOS, similar to Android, relies on the active participation of apps on audio focus to manage audio playback in cars. The focus information is used to manage which streams to control for volume and ducking. As such, to further expand on the audio focus and to provide a better integration of car specific sounds into the Android experience, the following audio attributes were introduced in Android 11:</p> <ul> <li><code translate="no" dir="ltr">EMERGENCY</code></li> <li><code translate="no" dir="ltr">SAFETY</code></li> <li><code translate="no" dir="ltr">VEHICLE_STATUS</code></li> <li><code translate="no" dir="ltr">ANNOUNCEMENT</code></li> </ul> <p>In addition to this change, a mechanism was added for sounds that originate from outside Android to participate in audio focus requests. Thus, the HIDL audio control HAL version 2 was introduced to allow for focus requests that originate from outside Android:</p> 
+<pre>interface IAudioControl {
+       /**
+       *   Registers focus listener to be used by HAL for requesting and
+       *   abandoning audio focus.
+       *   @param listener the listener interface
+       *   @return closeHandle A handle to unregister observer.
+       */
+       registerFocusListener(IFocusListener listener)
+       generates (ICloseHandle closeHandle);
+
+       /**
+       *   Notifies HAL of changes in audio focus status for focuses requested
+       *   or abandoned by the HAL.
+       *
+       *   @param usage The audio usage associated with the focus change
+       *   @param zoneId The identifier for the audio zone that the HAL is
+       *   playing the stream in
+       *   @param focusChange the AudioFocusChange that has occurred
+       */
+       oneway onAudioFocusChange(bitfield&lt;AudioUsage&gt; usage, int32_t zoneId,
+       bitfield&lt;AudioFocusChange&gt; focusChange);
+}
+</pre> <p>Where the <code translate="no" dir="ltr">IFocusListener</code> is defined as:</p> 
+<pre>interface IFocusListener {
+       /**
+       *   Called whenever HAL is requesting focus as it is starting to play
+       *   audio of a given usage in a specified zone.
+       *
+       *   @param usage The audio usage associated with the focus request
+       *    {@code AttributeUsage}
+       *   @param zoneId The identifier for the audio zone where the HAL is
+       *    requesting focus
+       *   @param focusGain The AudioFocusChange associated with this request.
+       */
+       oneway requestAudioFocus(bitfield&lt;AudioUsage&gt; usage,
+       int32_t zoneId, bitfield&lt;AudioFocusChange&gt; focusGain);
+       /**
+       *   Called whenever HAL is abandoning focus as it is finished playing audio
+       *   of a given usage in a specific zone.
+       *
+       *   @param usage The audio usage for which the HAL is abandoning focus
+       *    {@code AttributeUsage}
+       *   @param zoneId The identifier for the audio zone that the HAL
+       *    abandoning focus
+       */
+       oneway abandonAudioFocus(bitfield&lt;AudioUsage&gt; usage, int32_t zoneId);
+}
+</pre> <p>The APIs above can be used to request and abandon audio focus from the HAL, respectively. In response, the car audio service considers the audio focus request and forwards the results asynchronously to the <code translate="no" dir="ltr">IAudioControl#onAudioFocusChange</code> method.</p> <p>This API can also be used to monitor changes for the audio focus request that originates from the audio control HAL. In general, any standing audio focus request from the HAL is considered <em>active</em>, which differs from an audio focus request from Android, in which only a corresponding active audio track playback is regarded as active.</p> <h2 id="migrate_hidl_to_aidl_audio_control_hal">Migrate HIDL to AIDL audio control HAL</h2> <p>With the advent of AIDL and the required migration in Android 12 (to learn more, see <a href="../../core/architecture/aidl/aidl-hals">AIDL for HALs</a>), the audio control HAL was migrated to AIDL. For existing HIDL audio control version 2 APIs, the migration required minor updates to the existing methods:</p> 
+<pre>interface IAudioControl {
+       /**
+       *   Notifies HAL of changes in audio focus status for focuses requested
+       *   or abandoned by the HAL.
+       *
+       *   @param usage The audio usage associated with the focus change
+       *        {@code AttributeUsage}. See {@code audioUsage} in
+       *        audio_policy_configuration.xsd for the list of allowed values.
+       *   @param zoneId The identifier for the audio zone that the HAL is
+       *        playing the stream in
+       *   @param focusChange the AudioFocusChange that has occurred.
+       */
+       oneway void onAudioFocusChange(in String usage, in int zoneId,
+              in AudioFocusChange focusChange);
+       /**
+       *   Registers focus listener to be used by HAL for requesting and
+       *   abandoning audio focus.
+       *   @param listener the listener interface.
+       */
+       oneway void registerFocusListener(in IFocusListener listener);
+       /**
+       *   Control the right/left balance setting of the car speakers.
+       */
+       oneway void setBalanceTowardRight(in float value);
+       /**
+       *   Control the fore/aft fade setting of the car speakers.
+       */
+       oneway void setFadeTowardFront(in float value);
+}
+</pre> <p>And the corresponding <code translate="no" dir="ltr">IFocusListener</code>:</p> 
+<pre>       interface IFocusListener {
+       /**
+       *   Called whenever HAL is abandoning focus as it is finished playing audio
+       *   of a given usage in a specific zone.
+       *
+       *   @param usage The audio usage for which the HAL is abandoning focus
+       *        {@code AttributeUsage}. See {@code audioUsage} in
+       *        audio_policy_configuration.xsd for the list of allowed values.
+       *   @param zoneId The identifier for the audio zone that the HAL
+       *        abandoning focus
+       */
+       oneway void abandonAudioFocus(in String usage, in int zoneId);
+       /**
+       *   Called whenever HAL is requesting focus as it is starting to play audio
+       *        of a given usage in a specified zone.
+       *
+       *   @param usage The audio usage associated with the focus request
+       *        {@code AttributeUsage}. See {@code audioUsage} in
+       *        audio_policy_configuration.xsd for the list of allowed values.
+       *   @param zoneId The identifier for the audio zone where the HAL is
+       *        requesting focus
+       *   @param focusGain The AudioFocusChange associated with this request.
+       */
+       oneway void requestAudioFocus(in String usage, in int zoneId,
+              in AudioFocusChange focusGain);
+}
+</pre>
+<aside class="note"><strong>Note:</strong><span> Existing APIs changes are largely syntactical due to the differences between AIDL and HIDL. Actual behavior and response in car audio service between HIDL and AIDL is the same. As such, unless newer features are needed, OEMs can continue to use version 2 of the audio control HAL. For newer features introduced with AIDL migration, see the next section.</span></aside> <h2 id="volume_group_muting">Volume group muting</h2> <p>Android 12 introduced volume group muting to allow for a more comprehensive mute control during the user's audio interactions. This allows for the audio control HAL to receive muting events as intercepted by car audio service.</p> <p>To enable the feature, OEMs must set the <code translate="no" dir="ltr">audioUseCarVolumeGroupMuting</code> config to <code translate="no" dir="ltr">true</code> in the car service <code translate="no" dir="ltr">config.xml</code>:</p> 
+<pre>&lt;!-- Configuration to enable muting of individual volume groups.
+If this is set to false, muting of individual volume groups is disabled,
+instead muting will toggle master mute. If this is set to true, car volume
+group muting is enabled and each individual volume group can be muted separately. --&gt;
+&lt;bool name="audioUseCarVolumeGroupMuting"&gt;true&lt;/bool&gt;
+</pre> <p>Before Android 13, the config had to be overwritten with a runtime resource overlay for <code translate="no" dir="ltr">packages/services/Car/service/res/values/config.xml</code> (to learn more, see <a href="../../setup/create/new-device#use-resource-overlays">Customizing the build with resource overlays</a>). From Android 13, you can use runtime resource overlays to change a configuration value. To learn more, see <a href="../../core/runtime/rros">Change the value of an app's resources at runtime</a>.</p> <p>System apps can determine if the feature is enabled by using the <code translate="no" dir="ltr">CarAudioManager#isAudioFeatureEnabled</code> API. The parameter passed in must be the <code translate="no" dir="ltr">CarAudioManager.AUDIO_FEATURE_VOLUME_GROUP_MUTING</code> constant. The method returns <code translate="no" dir="ltr">true</code> if the feature is enabled on the device, otherwise <code translate="no" dir="ltr">false</code>.</p> <p>In addition to enabling the <code translate="no" dir="ltr">audioUseCarVolumeGroupMuting</code> feature, the AIDL audio control HAL <strong>must</strong> implement the volume group muting mechanism:</p> 
+<pre>interface IAudioControl {
+       /**
+       *   Notifies HAL of changes in output devices that the HAL should apply
+       *   muting to.
+       *
+       *   This will be called in response to changes in audio mute state for each
+       *   volume group and will include a {@link MutingInfo} object per audio
+       *   zone that experienced a mute state event.
+       *
+       *   @param mutingInfos an array of {@link MutingInfo} objects for the audio
+       *   zones where audio mute state has changed.
+       */
+       oneway void onDevicesToMuteChange(in MutingInfo[] mutingInfos);
+}
+</pre> <p>Where muting info contains the pertinent mute information for the audio system:</p> 
+<pre>parcelable MutingInfo {
+       /**
+       *   ID of the associated audio zone
+       */
+       int zoneId;
+       /**
+       *   List of addresses for audio output devices that should be muted.
+       */
+       String[] deviceAddressesToMute;
+       /**
+       *   List of addresses for audio output devices that were previously be
+       *   muted and should now be unmuted.
+       */
+       String[] deviceAddressesToUnmute;
+}
+</pre>
+<aside class="note"><strong>Note:</strong><span> The information passed is based on the set-up for each volume group as defined in <code translate="no" dir="ltr">car_audio_configuration.xml</code>. Specifically, for each device address defined for the car audio volume group configuration.</span></aside> <p>AAOS has two different mechanisms for muting, based on:</p> <ul> <li><p>Key events using the audio <a href="https://developer.android.com/reference/android/view/KeyEvent#KEYCODE_VOLUME_MUTE">KEYCODE_VOLUME_MUTE</a>.</p></li> <li><p>Direct calls to the car audio service using the car audio manager mute API, <code translate="no" dir="ltr">CarAudioManager#setVolumeGroupMute</code>.</p></li> </ul> <p>When enabled, both mechanisms trigger a call mute to the audio control HAL.</p> <h2 id="car_audio_ducking">Car audio ducking</h2> <p>Android 12 introduced car audio ducking to optimize control of concurrent playback of audio streams. This allows OEMs to implement their own ducking behavior based on a car’s physical audio configuration and current playback state, as determined by the car audio service.</p> <p>The ducking mechanism is based on the audio focus stack changes. Whenever a focus change occurs (whether a focus request or focus abandon), the audio control HAL is informed. Similar to the car volume group muting support, car audio ducking can be enabled with the <code translate="no" dir="ltr">audioUseHalDuckingSignals</code> config flag:</p> 
+<pre>&lt;!-- Configuration to enable IAudioControl#onDevicesToDuckChange API to
+inform HAL when to duck. If this is set to true, the API will receive signals
+indicating which output devices to duck as well as what usages are currently
+holding focus. If set to false, the API will not be called. --&gt;
+&lt;bool name="audioUseHalDuckingSignals"&gt;true&lt;/bool&gt;
+</pre> <p>To enable the feature, the AIDL audio control HAL must implement the relevant logic with the signal received from the car audio service:</p> 
+<pre>interface IAudioControl {
+       /**
+       *   Notifies HAL of changes in output devices that the HAL should apply
+       *   ducking to.
+       *
+       *   This will be called in response to changes in audio focus, and will
+       *   include a {@link DuckingInfo} object per audio zone that experienced
+       *   a change in audo focus.
+       *
+       *   @param duckingInfos an array of {@link DuckingInfo} objects for the
+       *   audio zones where audio focus has changed.
+       */
+       oneway void onDevicesToDuckChange(in DuckingInfo[] duckingInfos);
+}
+</pre> <p>The relevant audio system information is contained in the audio ducking information:</p> 
+<pre>parcelable DuckingInfo {
+       /**
+       *   ID of the associated audio zone
+       */
+       int zoneId;
+       /**
+       *   List of addresses for audio output devices that should be ducked.
+       */
+       String[] deviceAddressesToDuck;
+       /**
+       *   List of addresses for audio output devices that were previously be
+       *   ducked and should now be unducked.
+       */
+       String[] deviceAddressesToUnduck;
+       /**
+       *   List of usages currently holding focus for this audio zone.
+       */
+       String[] usagesHoldingFocus;
+}
+</pre> <p>Aside from car audio configuration information contained in the device addresses to (un)duck, ducking information also contains information about which audio attribute usages are holding focus. The intention for this data is to inform the audio system which audio attributes usages are active.</p> <p>This is required since, in the car audio configuration, multiple audio attributes can be assigned to a single device and, without the extra information, it's not clear which usages are active.</p> <aside class="note"><strong>Note:</strong><span> The function of the ducking signal is to inform the car’s audio system about ducking changes. Details specific to ducking ramps or actual ducking behavior in the presence of audio sounds generated below the car (presumably by the other car’s components) are not imposed. For safety sounds, we recommend that a car’s audio system sounds have a higher priority. Therefore, ducking should be used as a recommendation and not a rule. The audio ducking cue, coupled with the audio focus request from the HAL, generates a good signal, which includes sounds generated below the HAL by a car’s systems.</span></aside> <h1 id="aidl_audio_control_hal_20" class="page-title">AIDL audio control HAL 2.0</h1> <p>To update APIs and to facilitate new functionality, the AIDL audio control HAL was updated to version 2.0 in Android 13:</p> <ul> <li>Audio focus with <code translate="no" dir="ltr">PlaybackTrackMetadata</code>
+</li> <li>Audio gains callback</li> </ul> <p>Playback metadata is defined in <code translate="no" dir="ltr">android.hardware.audio.common</code> as follows:</p> 
+<pre>parcelable PlaybackTrackMetadata {
+       AudioUsage usage = INVALID;
+       AudioContentType contentType = UNKNOWN;
+       float gain;
+       AudioChannelLayout channelMask;
+       AudioDevice sourceDevice;
+       String[] tags;
+}
+</pre> <p>All other functionality from AIDL audio control version 1.0 remained and can be used. An exception pertains to the audio focus change method, as described in <a href="#change-method">On audio focus change method</a>.</p> <h2 id="audio_control_focus_with_playback_track_metadata">Audio control focus with playback track metadata</h2> <p>To expose more information to the audio system below the HAL, updates now expose <code translate="no" dir="ltr">PlaybackTrackMetadata</code>. Specifically, the audio control HAL was expanded with a new method:</p> 
+<pre>interface IAudioControl {
+       /**
+       *   Notifies HAL of changes in audio focus status for focuses requested
+       *   or abandoned by the HAL.
+       *
+       *   The HAL is not required to wait for a callback of AUDIOFOCUS_GAIN
+       *   before playing audio, nor is it required to stop playing audio in the
+       *   event of a AUDIOFOCUS_LOSS callback is received.
+       *
+       *   @param playbackMetaData The output stream metadata associated with
+       *    the focus request
+       *   @param zoneId The identifier for the audio zone that the HAL is
+       *    playing the stream in
+       *   @param focusChange the AudioFocusChange that has occurred.
+       */
+       oneway void onAudioFocusChangeWithMetaData(
+       in PlaybackTrackMetadata playbackMetaData, in int zoneId,
+       in AudioFocusChange focusChange);
+}
+</pre> <p>A similar, corresponding, change is made to <code translate="no" dir="ltr">IFocusListener</code>:</p> 
+<pre>       /**
+       *   Called to indicate that the audio output stream associated with
+       *   {@link android.hardware.audio.common.PlaybackTrackMetadata} is
+       *   abandoning focus as playback has stopped.
+       *
+       *   @param playbackMetaData The output stream metadata associated with
+       *    the focus request
+       *   @param zoneId The identifier for the audio zone that the HAL
+       *    abandoning focus
+       */
+       oneway void abandonAudioFocusWithMetaData(
+       in PlaybackTrackMetadata playbackMetaData, in int zoneId);
+       /**
+       *   Called to indicate that the audio output stream associated with
+       *   {@link android.hardware.audio.common.PlaybackTrackMetadata} has taken
+       *   the focus as playback is starting for the corresponding stream.
+       *
+       *   @param playbackMetaData The output stream metadata associated with
+       *    the focus request
+       *   @param zoneId The identifier for the audio zone that the HAL
+       *    abandoning focus
+       *   @param focusGain The focus type requested.
+       */
+       oneway void requestAudioFocusWithMetaData(
+       in PlaybackTrackMetadata playbackMetaData, in int zoneId,
+       in AudioFocusChange focusGain);
+}
+</pre> <h3 id="change-method">On audio focus change method</h3> <p>The focus operations above perform in the same way as those described in <a href="#hal-request">Audio focus request from HAL</a>. Only the playback track metadata has more information along with the audio attributes usages. In general, unless the extra information provided by playback track metadata is needed, the updated android control HAL can continue to use previous methods.</p> <p>If HAL developers decide not to support <code translate="no" dir="ltr">IAudioControl#onAudioFocusChangeWithMetaData</code>, the method should return results with the <code translate="no" dir="ltr">UNKNOWN_TRANSACTION</code> error as described <a href="../../core/architecture/aidl/stable-aidl#using-versioned-interface-methods">Using Versioned Interface Methods</a>.</p> <p>The audio service first calls <code translate="no" dir="ltr">onAudioFocusChangeWithMetaData</code> and then retries with the <code translate="no" dir="ltr">onAudioFocusChange</code> method if a <code translate="no" dir="ltr">UNKNOWN_TRANSACTION</code> failure results.</p> <h2 id="car_audio_ducking_with_playback_track_metadata">Car audio ducking with playback track metadata</h2> <p>Version 2.0 of the AIDL audio control HAL added the playback track metadata to the audio ducking info:</p> 
+<pre>parcelable DuckingInfo {
+       /**
+       *   ID of the associated audio zone
+       */
+       int zoneId;
+       /**
+       *   List of addresses for audio output devices that should be ducked.
+       */
+       String[] deviceAddressesToDuck;
+       /**
+       *   List of addresses for audio output devices that were previously be
+       *   ducked and should now be unducked.
+       */
+       String[] deviceAddressesToUnduck;
+       /**
+       *   List of usages currently holding focus for this audio zone.
+       */
+       String[] usagesHoldingFocus;
+       /**
+       *   List of output stream metadata associated with the current focus
+       *   holder for this audio zone
+       */
+       @nullable PlaybackTrackMetadata[] playbackMetaDataHoldingFocus;
+}
+</pre> <p><code translate="no" dir="ltr">usagesHoldingFocus</code> is deprecated. Developers should now use <code translate="no" dir="ltr">playbackMetaDataHoldingFocus</code> to determine the audio attribute usage and other audio information. That said, the <code translate="no" dir="ltr">usagesHoldingFocus</code> parameter still contains the required information until this option is formally removed.</p> <h2 id="audio_gain_callback">Audio gain callback</h2> <p>To make audio changes below the HAL more visible to the AAOS in Android 13, we added a mechanism you can use to communicate audio gains changes from the car’s audio system to the car audio service. The mechanism exposes audio gain volume index changes with a respective reason why the gain was changed:</p> <ul> <li>Blocked or muted restrictions</li> <li>Limitations restrictions</li> <li>Attenuation restrictions</li> </ul> <p>These changes expose these restrictions from below the HAL to the car audio service and, finally, to a system UI app to inform the user. The latter part, exposure to a possible system UI, was further expanded in Android 14 to allow for system UI apps to more readily get this information through a volume group information callback mechanism.</p> <p>The audio control HAL API registers the gain callback as follows:</p> 
+<pre>interface IAudioControl {
+       /**
+       *   Registers callback to be used by HAL for reporting unexpected gain(s)
+       *    changed and the reason(s) why.
+       *
+       *   @param callback The {@link IAudioGainCallback}.
+       */
+       oneway void registerGainCallback(in IAudioGainCallback callback);
+}
+</pre> <p>The <code translate="no" dir="ltr">IAudioGainCallback</code> is defined as follows:</p> 
+<pre>interface IAudioGainCallback {
+       /**
+       *   Used to indicate that one or more audio device port gains have changed,
+       *   i.e. initiated by HAL, not by CarAudioService.
+       *   This is the counter part of the
+       *   {@link onDevicesToDuckChange}, {@link onDevicesToMuteChange} and,
+       *   {@link setAudioDeviceGainsChanged} APIs.
+       *
+       *   @param reasons List of reasons that triggered the given gains changed.
+       *   @param gains List of gains affected by the change.
+       */
+       void onAudioDeviceGainsChanged(in Reasons[] reasons,
+       in AudioGainConfigInfo[] gains);
+}
+</pre> <p>As highlighted in the API documentation, the gain callback is registered by the car audio service to the audio control HAL. When the API is called from the audio control HAL, the car audio service responds with a corresponding action (such as block, limit, or attenuate gain index) .</p> <p>The HAL determines when the API is called, primarily to report changes to the gain index status. Specific to regulation requirements, the car’s audio system should take the required action and use the callback to report information to the car audio service to allow for user consumption. For example, to show a UI to the user.</p> <h1 id="aidl_audio_control_hal_30" class="page-title">AIDL audio control HAL 3.0</h1> <p>The Android 14 AIDL audio control HAL version is updated to version 3.0 to update the APIs to provide more robust audio gain index functionality. The audio control HAL API allows for the audio service to set and unset an <code translate="no" dir="ltr">IModuleChangeCallback</code>:</p> 
+<pre>interface IAudioControl {
+       /**
+       *   Sets callback with HAL for notifying changes to hardware module
+       *   (that is: {@link android.hardware.audio.core.IModule}) configurations.
+       *
+       *   @param callback The {@link IModuleChangeCallback} interface to use
+       *    use when new updates are available for
+       */
+       void setModuleChangeCallback(in IModuleChangeCallback callback);
+       /**
+       *   Clears module change callback
+       */
+       void clearModuleChangeCallback();
+}
+</pre> <p>The <code translate="no" dir="ltr">setModuleChangeCallback</code> is registered by the car audio service when the service starts or when recovering from an error. For example, an audio control HAL binder death notification received by the car audio service. The audio control HAL implementation should replace any existing module change callback when the API is called.</p> <p>For the <code translate="no" dir="ltr">clearModuleChangeCallback</code> API, the implementation should clear the existing callback or do nothing if one does not exist. It's a good practice for the audio control implementation to register a death observer for the callback and to then clear the callback if the on binder death is triggered.</p> <p><code translate="no" dir="ltr">IModuleChangeCallback</code> is defined as follows:</p> 
+<pre>oneway interface IModuleChangeCallback {
+       /**
+       *   Used to indicate that one or more {@link AudioPort} configs have
+       *   changed. Implementations MUST return at least one AudioPort.
+       *
+       *   @param audioPorts list of {@link AudioPort} that are updated
+       */
+       void onAudioPortsChanged(in AudioPort[] audioPorts);
+}
+</pre> <p>When the module change callback is registered by the car audio service, it's ready to receive audio port changes through the <code translate="no" dir="ltr">onAudioPortChanged</code> API. The API can be used to initialize volume gains for the audio system as soon as the callback is registered. For other dynamic gain changes, the API can be called anytime. Corresponding changes are applied and the car audio service is updated accordingly.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/audio/audio-control-hal" class="_attribution-link">https://source.android.com/docs/automotive/audio/audio-control-hal</a>
+  </p>
+</div>

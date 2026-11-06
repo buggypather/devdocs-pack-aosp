@@ -1,0 +1,162 @@
+<h1>Quick start: Create and execute SDV service bundles</h1>  <p>This page shows you how to create an <a href="../../core-areas/what-service">SDV service bundle</a>, pack it into the <a href="../../../../core/ota/apex">APEX file format</a>, and execute it on a virtual Cuttlefish device. The primary units of code execution on the SDV system are the service bundles. Service bundles provide lifecycle methods that the system executes when the system state changes.</p> <aside class="note"><strong>Note:</strong><span> You can find this sample in the repository under <code translate="no" dir="ltr">system/software_defined_vehicle/samples/quickstart</code>.</span></aside> <ol> <li>
+<p>Set up your build environment</p> <p>From within your working directory, source the <code translate="no" dir="ltr">envsetup.sh</code> script to set up your build environment, set Cuttlefish as build target, and build the <a href="../../core-areas/vsidl"><code translate="no" dir="ltr">vsidlc</code></a> code generator:</p> 
+<pre>source build/envsetup.sh
+lunch sdv_core_cf-aosp_current-userdebug
+m vsidlc
+</pre>
+<aside class="note"><strong>Note:</strong><span> Because <code translate="no" dir="ltr">lunch</code> is defined by <code translate="no" dir="ltr">envsetup.sh</code>, you must run <code translate="no" dir="ltr">source
+envsetup.sh</code> once per shell and before the <code translate="no" dir="ltr">lunch</code> command.</span></aside>
+</li> <li>
+<p>Define your architecture by creating a folder named <code translate="no" dir="ltr">my_catalog</code> with these files:</p> <ul> <li>
+<p><code translate="no" dir="ltr">tire.proto</code>: Defines the data structure you are sending:</p> 
+<pre>syntax = "proto3";
+
+package com.android.sdv.sample.quickstart;
+
+import "google/protobuf/empty.proto";
+import "sdv/vsidl/v1/annotations.proto";
+
+message TirePressure {
+  uint32 pressure = 1;
+}
+
+message TireInfoResponse {
+  string serial_number = 1;
+  uint32 max_pressure = 2;
+}
+
+service TireService {
+  rpc GetTireInfo(google.protobuf.Empty) returns (TireInfoResponse);
+}
+</pre>
+</li> <li>
+<p><code translate="no" dir="ltr">architecture.vsidl</code>: Defines the service bundles and their communication (for syntax highlighting, validation, and autocompletion in Android Studio for Platform, see <a href="../../getting-started/ide-setup#vsidl">Edit VSIDL files</a>):</p> 
+<pre>package: "com.android.sdv.sample.quickstart"
+
+service_bundle {
+  name: "Manager"
+
+  publisher {
+    message: "TirePressure"
+    topic: "pressure"
+    capacity: 8
+  }
+
+  server {
+    service: "TireService"
+    channel: "tire-service"
+  }
+}
+
+service_bundle {
+  name: "Monitor"
+
+  subscriber {
+    message: "TirePressure"
+    topic: "pressure"
+  }
+
+  client {
+    service: "TireService"
+    channel: "tire-service"
+  }
+}
+</pre>
+</li> <li>
+<p><code translate="no" dir="ltr">Android.bp</code>: Defines the build process:</p> 
+<pre>rust_protobuf {
+    name: "libquickstart_sample_tire_proto",
+    crate_name: "quickstart_sample_tire_proto",
+    protos: [
+        "tire.proto",
+    ],
+    source_stem: "quickstart_sample_tire_proto_source",
+    rustlibs: [
+        "libvsidl_v1_stdlib_proto_rs",
+    ],
+    proto_flags: [
+        "-I external/protobuf/src",
+    ],
+    vendor_available: true,
+    product_available: true,
+    apex_available: [
+        "//apex_available:platform",
+        "//apex_available:anyapex",
+    ],
+    min_sdk_version: "35",
+}
+
+filegroup {
+    name: "vsidl_quickstart_catalog",
+    srcs: ["**/*"],
+}
+</pre>
+<aside class="note"><strong>Note:</strong><span> We recommend defining small logically grouped <code translate="no" dir="ltr">rust_protobuf</code> libraries instead of one large library for the entire catalog. To avoid ambiguity, verify each <code translate="no" dir="ltr">.proto</code> file belongs to only one library target within the catalog.</span></aside>
+</li> </ul>
+</li> <li>
+<p>Generate a skeleton implementation and config files by running:</p> 
+<pre>vsidlc -c /path/to/catalog -o /path/to/output --services --apex
+</pre>
+</li> <li><p>For each service bundle, find the Rust implementation in <code translate="no" dir="ltr"><var class="edit" scope="/path/to/output" translate="no">/path/to/output</var>/services/<var class="edit" scope="ServiceBundleName" translate="no">ServiceBundleName</var>/src/main.rs</code>.</p></li> <li>
+<p>By default, the generated implementation creates messages with default values and sends them between publishers and subscribers or RPC clients and servers. To modify this behavior, look for the <code translate="no" dir="ltr">TODO</code> comments in <code translate="no" dir="ltr">main.rs</code> and adjust them to your preferences. For example:</p> <p> <code translate="no" dir="ltr">rust
+  async fn handle_tire_pressure_pressure_publisher(publisher: sdv::mw::Publisher&lt;TirePressure&gt;) {
+      loop {
+          // TODO: Modify the frequency of publishing messages here.
+          sleep(Duration::from_secs(1)).await;
+          // TODO: Modify the message content here.
+          let message = TirePressure::default();
+          info!("Publishing on TirePressure#PRESSURE");
+          publisher.publish(&amp;message).unwrap();
+      }
+  }</code></p>
+</li> <li>
+<p>To include your bundle in the system image, add the generated APEX module name to your product makefile.</p> <ol> <li><p>Open your product makefile (for example, <code translate="no" dir="ltr">device/google/sdv/sdv_core_base/sdv_samples_core_services.mk</code>).</p></li> <li>
+<p>Add the module to <code translate="no" dir="ltr">PRODUCT_PACKAGES</code> by adding:</p> 
+<pre>PRODUCT_PACKAGES += com.android.sdv.sample.quickstart
+PRODUCT_PACKAGES += com_android_sdv_sample_quickstart_orchestration_configurations
+</pre>
+</li> </ol>
+</li> <li>
+<p>Build the image:</p> 
+<pre>m
+</pre> <p>After the system image includes the APEX (or the key used to sign it), you can also build and deploy iterative changes directly from the <code translate="no" dir="ltr">apex/Android.bp</code> gutter icon in Android Studio for Platform. For more information, see <a href="../../getting-started/ide-setup#build-deploy-apex">Deploy SDV service bundles</a>.</p>
+</li> <li>
+<p>Run and verify the service bundle execution:</p> <ol> <li>
+<p>Start a virtual Cuttlefish device:</p> 
+<pre>sdv-cf create --instance_name=instance1
+</pre>
+</li> <li>
+<p>Run the service bundle when the system is booted:</p> <ul> <li>
+<p>Manually:</p> 
+<pre>adb wait-for-device
+adb root
+adb shell sdv_service_bundle start local-vm:com.android.sdv.sample.quickstart.Manager/instance
+adb shell sdv_service_bundle start local-vm:com.android.sdv.sample.quickstart.Monitor/instance
+</pre>
+</li> <li>
+<p>Using the orchestrator:</p> 
+<pre>adb wait-for-device
+adb root
+# Apply global orchestration configuration by setting system property
+adb shell setprop persist.sdv.orchestrator_config_path "etc/orch/vm_quickstart_orch_config.textproto"
+adb reboot
+</pre>
+<aside class="note"><strong>Note:</strong><span> The generated VM-level orchestrator configs work for only one sample at a time. Starting multiple samples at the same time this way requires manually merging the configs.</span></aside>
+</li> </ul>
+</li> <li>
+<p>Verify the execution of the service bundle:</p> 
+<pre>adb logcat *:F com_android_sdv_sample_quickstart_Manager_instance:* com_android_sdv_sample_quickstart_Monitor_instance:*
+</pre> <p>This command displays logs that show the service bundles exchanging messages:</p> 
+<pre>03-30 13:41:31.505   967   976 I com_android_sdv_sample_quickstart_Manager_instance: sdv_lm_manager: Publishing on TirePressure#PRESSURE
+03-30 13:41:31.505   983   991 I com_android_sdv_sample_quickstart_Monitor_instance: sdv_lm_monitor: Received message on TirePressure#PRESSURE: [TirePressure { pressure: 0, special_fields: SpecialFields { unknown_fields: UnknownFields { fields: None }, cached_size: CachedSize { size: 0 } } }]
+03-30 13:41:31.626   983   991 I com_android_sdv_sample_quickstart_Monitor_instance: sdv_lm_monitor: Sending request on Monitor/TireService
+03-30 13:41:31.627   967   976 I com_android_sdv_sample_quickstart_Manager_instance: sdv_lm_manager: Received request on Manager/TireService: Empty { special_fields: SpecialFields { unknown_fields: UnknownFields { fields: None }, cached_size: CachedSize { size: 0 } } }
+03-30 13:41:31.627   983   991 I com_android_sdv_sample_quickstart_Monitor_instance: sdv_lm_monitor: Received response on Monitor/TireService: TireInfoResponse { serial_number: "", max_pressure: 0, special_fields: SpecialFields { unknown_fields: UnknownFields { fields: None }, cached_size: CachedSize { size: 0 } } }
+</pre>
+</li> </ol>
+</li> </ol> <h2 id="whats-next">What's next</h2> <p>Learn more about the <a href="../../core-areas/vsidl">Vehicle Services Interface Definition Language (VSIDL)</a> and how to define your own service bundles from scratch.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/core/service-bundle-development" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/core/service-bundle-development</a>
+  </p>
+</div>

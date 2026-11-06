@@ -1,0 +1,151 @@
+<h1>VSIDL Provider for reflection</h1>  <p>The VSIDL Provider is a set of libraries and tools that allow service bundles to provide VSIDL-declared metadata to the SDV platform agents (Diagnostics, Telemetry, and SOME/IP).</p> <p>In particular, VSIDL provider enables SDV Agents to discover the following metadata:</p> <ul> <li>protobuf descriptors of messages and services used in VSIDL catalog</li> <li><a href="../../some-ip-integration/some-ip-mapping">SOME/IP mappings</a></li> <li><a href="../automotive-services/diagnostics">diagnostics declarations of Service Bundles</a></li> </ul> <h2 id="vsidl-provider-guide-for-service-bundle-developers">VSIDL Provider guide for service bundle developers</h2> <p>The VSIDL Provider library performs the following operations.</p> <ul> <li>Locates files in two specific places: <ul> <li>Within Apexes in paths defined in sdv_service_bundle_metadata.</li> <li>On the image in static paths.</li> </ul>
+</li> <li>Initiates RPC calls to query the API on agents residing on the same or different VMs.</li> </ul> <p><img src="https://source.android.com/static/docs/automotive/sdv/images/sdv-vsidl-provider-0.svg" class="diagram"> <figcaption><b>Figure 1.</b>VSIDL Provider Overview.</figcaption></p> <p>If you are developing a service bundle, you don't need to know the specifics of the VSIDL Provider library. You may just follow these steps, that enable the VSIDL Provider to find the files it needs at runtime.</p> <h3 id="generate-runtime-configs-catalog">Generate Runtime Configs for Catalog</h3> <p>All three types of files (vsidl schemas, diagnostics declarations, someip mappings) are generated from the <code translate="no" dir="ltr">vsidl_rc_generator</code> tool.</p> <p>Use the <code translate="no" dir="ltr">vsidl_rc_generator</code> host binary tool with the same parameters as used for <code translate="no" dir="ltr">vsidlc</code> and the following additional parameters:</p> <ul> <li><code translate="no" dir="ltr">--variant runtime-config-prebuilts</code></li> <li>
+<code translate="no" dir="ltr">--filegroup</code> to specify the filegroup target name that contains all files of the catalog (including the <code translate="no" dir="ltr">Android.bp</code>).</li> </ul> <p>For reference, the relevant <code translate="no" dir="ltr">vsidlc</code> parameters are the following:</p> <ul> <li>
+<code translate="no" dir="ltr">--catalog-path</code> to specify root path of catalog.</li> <li>
+<code translate="no" dir="ltr">--dependency-catalog-path</code> to specify dependent catalogs.</li> <li>
+<code translate="no" dir="ltr">-- -path</code> to specify where to write the <code translate="no" dir="ltr">Android.bp</code> with all the generated <code translate="no" dir="ltr">genrule</code> and <code translate="no" dir="ltr">prebuilt_etc</code> targets.</li> </ul> <p>The generator will create an <code translate="no" dir="ltr">Android.bp</code> file with relevant <code translate="no" dir="ltr">genrule</code> and <code translate="no" dir="ltr">prebuilt_etc</code> targets. On top of the generated target blocks in <code translate="no" dir="ltr">Android.bp</code>, there will be comments, that indicate the intended usage of their respective targets.</p> <h3 id="update-apex-bp">Update APEX's Android.bp</h3> <p>As indicated by the comments of the generated <code translate="no" dir="ltr">Android.bp</code> file, that read:</p> 
+<pre>// Usage: add the following line to ... declaration
+</pre> <p>You should add these targets (below the indicated <code translate="no" dir="ltr">Usage</code> comments) to the <code translate="no" dir="ltr">Android.bp</code> that define the Apex:</p> 
+<pre>apex {
+    name: "some_apex_name",
+    ...
+    prebuilts: [
+      // ADD THE prebuilt_etc TARGETS HERE
+    ],
+    ...
+
+}
+</pre> <h3 id="update-apex-sdv-service-bundles-manifest">Update APEX's sdv_service_bundles_manifest.textproto</h3> <p>Within the <a href="../../workstreams/core/service-bundle-metadata"><code translate="no" dir="ltr">sdv_service_bundle_metadata</code></a> blocks of the Apex's <code translate="no" dir="ltr">sdv_service_bundles_manifest.textproto</code> files, you need to define (only for applicable paths):</p> 
+<pre>sdv_service_bundle_metadata {
+    ...
+    vsidl_schemas_path: "etc/vsidl_provider/SomeFile-vsidl-config.binpb"
+    diagnostics_config_path: "etc/vsidl_provider/SomeFile-diag-config.binpb"
+    external_protocol_mapping_path: "etc/vsidl_provider/someip-config.binpb"
+    ...
+}
+</pre> <p>Don't define your own paths. Instead copy the paths shown in the generated Android.bp file's comments, found as:</p> 
+<pre>// + vsidl_schemas_path:
+// + diagnostics_config_path:
+// + external_protocol_mapping_path:
+</pre> <p>Doing this enables the VSIDL Provider instance to query from the paths specified by in the respective <code translate="no" dir="ltr">sdv_service_bundle_metadata</code> entries.</p> <h3 id="add-targets-image">Add Targets to Image</h3> <p>The generated <code translate="no" dir="ltr">Android.bp</code> files also generate targets that can be loaded on the image directly. The comments also indicate the targets that are supposed to be used in this way, by:</p> 
+<pre>// Usage: add this target to the VM image.
+</pre> <p>The generated <code translate="no" dir="ltr">prebuilt_etc</code> target will place files that are generated with the <code translate="no" dir="ltr">genrule</code>s at a pre-specified location on the image. You need to include the <code translate="no" dir="ltr">prebuilt_etc</code> targets in the respective <code translate="no" dir="ltr">*.mk</code> files (like, for example, <code translate="no" dir="ltr">device/google/sdv/sdv_core_base/sdv_samples_automotive_services.mk</code>).</p> <aside class="note"><strong>Note:</strong><span> The generated targets support only VSIDL and SOME/IP files to be written to the image, not diagnostics declarations.</span></aside> <h2 id="vsidl-provider-guide">VSIDL Provider Guide for Platform Developers</h2> <p>Generally, if you are developing SDV Agent that needs reflection capabilities, you can use VSIDL provider library.</p> <p>The VSIDL Provider library API contains the following functions:</p> 
+<pre>    async fn get_publication_descriptor(
+        &amp;self,
+        source_fqin: &amp;ServiceFqin,
+        unit_type: &amp;UnitType,
+    ) -&gt; SdvResult&lt;PublicationDescriptor&gt;;
+
+    async fn get_rpc_method_descriptor(
+        &amp;self,
+        source_fqin: &amp;ServiceFqin,
+        unit_type: &amp;UnitType,
+        method_name: &amp;str,
+    ) -&gt; SdvResult&lt;RpcMethodDescriptor&gt;;
+
+    async fn get_message_descriptor(
+        &amp;self,
+        source_fqin: &amp;ServiceFqin,
+        message_name: &amp;str,
+    ) -&gt; SdvResult&lt;MessageDescriptor&gt;;
+
+    async fn get_someip_mappings(&amp;self, source_fqin: &amp;ServiceFqin)
+        -&gt; SdvResult&lt;Vec&lt;SomeIpMapping&gt;&gt;;
+
+    async fn get_diagnostics_declaration(
+        &amp;self,
+        fqin: &amp;ServiceFqin,
+    ) -&gt; SdvResult&lt;DiagnosticsDeclaration&gt;;
+
+    async fn subscribe_availability_change_by_vm(
+        &amp;self,
+        vm_name: &amp;str,
+    ) -&gt; SdvResult&lt;AvailabilityStream&gt;;
+</pre> <p>where</p> 
+<pre>pub type AvailabilityStream = Pin&lt;Box&lt;dyn Stream&lt;Item = AvailabilityChangeEvent&gt; + Send&gt;&gt;;
+</pre> <p>All functions are queried using a <code translate="no" dir="ltr">source_fqin</code> parameter. This ensures that different FQINs using the same <code translate="no" dir="ltr">unit_type</code> or <code translate="no" dir="ltr">message_name</code> return the correct data. The parameter directs the VSIDL provider library to the specific APEX containing the most accurate message schema. This is necessary because APEXes are updated independently and may use different schemas for the same protobuf message or service.</p> <h3 id="get-message-descriptor-usage">Usage of get_message_descriptor function</h3> <p>This is returning purely the <code translate="no" dir="ltr">pub struct MessageDescriptor</code> from the external crate that is used for reflection. A <code translate="no" dir="ltr">MessageDescriptor</code> is a piece of metadata that allows for reflection, enabling dynamic inspection and manipulation of protobuf messages at runtime.</p> <h3 id="get-publication-descriptor">Usage of get_publication_descriptor function</h3> <p>This function returns a <code translate="no" dir="ltr">PublicationDescriptor</code>, which is:</p> 
+<pre>pub struct PublicationDescriptor {
+    /// Message descriptor for publication.
+    pub message_descriptor: MessageDescriptor,
+
+    /// Information about the size of the publication message.
+    pub size_metadata: SizeMetadata,
+}
+</pre> <p>The <code translate="no" dir="ltr">size_metadata</code> field contains information about the size and constraints of a publication's message. This metadata is derived from the VSIDL configuration.</p> 
+<pre>pub struct SizeMetadata {
+    /// Message size in bytes.
+    pub message_size: u32,
+
+    /// Message count.
+    pub message_count: u32,
+
+    /// VSIDL-declared size constraints for the message fields.
+    pub field_size_constraints: HashMap&lt;String, FieldSizeConstraint&gt;,
+}
+
+pub struct FieldSizeConstraint {
+    /// Max number of repeated fields allowed for the field.
+    pub repeated_max_count: Option&lt;u32&gt;,
+
+    /// Max size of variable sized types (string, bytes) in bytes.
+    pub variable_type_max_size: Option&lt;u32&gt;,
+}
+</pre> <h3 id="get-rpc-method-descriptor">Usage of get_rpc_method_descriptor function</h3> <p>This function returns a <code translate="no" dir="ltr">RpcMethodDescriptor</code>, which is:</p> 
+<pre>pub struct RpcMethodDescriptor {
+    /// Message descriptor for RPC request.
+    pub request_message: Option&lt;MessageDescriptor&gt;,
+
+    /// Message descriptor for RPC response.
+    pub response_message: Option&lt;MessageDescriptor&gt;,
+}
+</pre> <p>This struct holds the <code translate="no" dir="ltr">MessageDescriptor</code> for both the request and response messages of the RPC method.</p> <h3 id="get-someip-mappings">Usage of get_someip_mappings function</h3> <p>This is a function for retrieving local SOME/IP service mappings, which are defined in <code translate="no" dir="ltr">core_services/vsidl/protos/sdv/someip/v1/someip.proto</code>.</p> <h3 id="get-diagnostics-declaration-usage">Usage of get_diagnostics_declaration function</h3> <p>This is a function for retrieving diagnostics declarations, which are defined in <code translate="no" dir="ltr">core_services/vsidl/protos/sdv/diagnostics/v1/diagnostics_syntax.proto</code></p> <h3 id="subscribe-availability-change-by-vm-usage">Usage of subscribe_availability_change_by_vm function</h3> <p>This function returns an availability stream for a specified virtual machine, serving as a critical fallback mechanism. Use it when standard VSIDL Provider API calls fail with an <code translate="no" dir="ltr">SdvStatusCode::Unavailable</code> error, allowing the system to efficiently wait for the VSIDL provider interface to come back online.</p> <p>Key behaviors of this function include:</p> <ul> <li>
+<strong>Immediate emission:</strong> Upon subscription, the stream emits the current availability status of the target virtual machine.</li> <li>
+<strong>Behavioral parity:</strong> The resulting stream behaves identically to the <code translate="no" dir="ltr">subscribe_service_unit_change_by_name</code> function used by the <code translate="no" dir="ltr">ServiceDiscoveryManager</code>.</li> </ul> <h3 id="vsidl-agent">VSIDL Provider Agent</h3> <p>Every VM is running its own VSIDL Provider agent, which is essentially an RPC server forwarding requests on the VSIDL Provider API (of a local instance of the library within the agent). The agent is used to query the VSIDL Provider on a different VM, that is, a service on one VM can query VSIDL metadata from another VM using this agent.</p> <h3 id="usage-api-codebase">Usage of the API in the codebase</h3> <p><strong>SOMEIP:</strong></p> <ul> <li>
+<code translate="no" dir="ltr">get_publication_descriptor</code> (all struct fields are used)</li> <li>
+<code translate="no" dir="ltr">get_rpc_method_descriptor</code> (all struct fields are used)</li> <li><code translate="no" dir="ltr">get_someip_mappings</code></li> </ul> <p><strong>Telemetry:</strong></p> <ul> <li>
+<code translate="no" dir="ltr">get_publication_descriptor</code> (only the <code translate="no" dir="ltr">message_descriptor</code> field is used)</li> <li>
+<code translate="no" dir="ltr">get_rpc_method_descriptor</code> (all struct fields are used)</li> </ul> <p><strong>Diagnostics:</strong></p> <ul> <li><code translate="no" dir="ltr">get_message_descriptor</code></li> <li><code translate="no" dir="ltr">get_diagnostics_declaration</code></li> </ul> <p>The various flavors with the various data sources and source priorities can be found in <code translate="no" dir="ltr">core_services/vsidl/provider/src/vsidl_provider.rs</code>.</p> <p>The <code translate="no" dir="ltr">vsidl_provider</code> crate offers several public functions to create provider instances tailored for different SDV agents. Each configuration specifies a unique chain of data sources to resolve VSIDL-related data. The table outlines the behavior of each constructor function:</p> <table> <tr>
+<th>Constructor function</th>
+<th>Data type</th>
+<th>Data source lookup (and order)</th>
+</tr> <tr>
+<td rowspan="3"><code translate="no" dir="ltr">new_for_vsidl_provider_agent</code></td> <td><code translate="no" dir="ltr">SomeIp</code></td>
+<td>APEXes</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">Diagnostics</code></td>
+<td>APEXes</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">VsidlSchemas</code></td>
+<td>APEXes, files</td>
+</tr> <tr>
+<td rowspan="2"><code translate="no" dir="ltr">new_for_diagnostics_agent</code></td>
+<td><code translate="no" dir="ltr">Diagnostics</code></td>
+<td>Agent (remote), APEXes</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">VsidlSchemas</code></td>
+<td>Files</td>
+</tr> <tr>
+<td rowspan="2"><code translate="no" dir="ltr">new_for_someip_broker_agent</code></td> <td><code translate="no" dir="ltr">SomeIp</code></td>
+<td>APEXes</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">VsidlSchemas</code></td>
+<td>Files</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">new_for_telemetry_agent</code></td>
+<td><code translate="no" dir="ltr">VsidlSchemas</code></td>
+<td>Agent (remote and local)</td>
+</tr> <tr>
+<td rowspan="3"><code translate="no" dir="ltr">new_for_integration_test</code></td> <td><code translate="no" dir="ltr">SomeIp</code></td>
+<td>Agent (remote and local)</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">Diagnostics</code></td>
+<td>Agent (remote and local)</td>
+</tr> <tr>
+<td><code translate="no" dir="ltr">VsidlSchemas</code></td>
+<td>Agent (remote and local)</td>
+</tr> </table> <p>The table's data sources refer to calls in <a href="#vsidl-provider-guide-for-service-bundle-developers">Figure 1</a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/core-areas/vsidl/vsidl-provider-for-reflection" class="_attribution-link">https://source.android.com/docs/automotive/sdv/core-areas/vsidl/vsidl-provider-for-reflection</a>
+  </p>
+</div>

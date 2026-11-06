@@ -1,0 +1,162 @@
+<h1>Try Android development</h1>  <p>This tutorial lets you try Android operating system development for the first time.</p> <h2 id="prerequisites">Set up for Android development</h2> <p>Before you download and build the <code translate="no" dir="ltr">android-latest-release</code> manifest branch of the Android source, ensure that your hardware meets the <a href="#hardware-requirements">necessary requirements</a> and that <a href="#install-software">required software</a> is properly installed. You should also be familiar with the following terms:</p> <dl> <dt><em>Git</em></dt> <dd>Git is a free and open source distributed version control system. Android uses Git for local operations such as branching, commits, diffs, and edits. For help learning Git, refer to the <a href="https://git-scm.com/doc">Git documentation</a>.</dd> <dt><em>Repo</em></dt> <dd>Repo is a Python wrapper around Git that simplifies performing complex operations across multiple Git repositories. Repo doesn't replace Git for all version control operations; it only makes complex Git operations easier to accomplish. Repo uses manifest files to aggregate Git projects into the Android superproject.</dd> <dt><em>manifest file</em></dt> <dd>A manifest file is an XML file specifying where the various Git projects in the Android source are placed within an AOSP source tree.</dd> </dl> <aside class="note"><strong>Note:</strong><span> All commands on this page are preceded by a dollar sign ($) to differentiate them from output or entries within files. To copy a command to the clipboard, click the <strong>Copy code sample</strong> icon in the top right of each command box.</span></aside> <h3 id="hardware-requirements">Meet hardware requirements</h3> <p>Your development workstation should meet or exceed these hardware requirements:</p> <ul> <li>
+<p>A 64-bit x86 system.</p> <aside class="note"><strong>Note:</strong><span> You can compile AOSP versions previous to 2.3.x on 32-bit systems.</span></aside>
+</li> <li>
+<p>At least 400 GB of free disk space to check out and build the code (250 GB to check out + 150 GB to build).</p> <aside class="note"><strong>Note:</strong><span> If you're checking out a mirror, you need more space because the full Android Open Source Project (AOSP) mirrors contain all Git repositories that have ever been used.</span></aside>
+</li> <li><p>A minimum of 64 GB of RAM. Google uses 72-core machines with 64 GB of RAM to build Android. With this hardware configuration, it takes approximately 40 minutes for a full build of Android and only a few minutes for incremental build of Android. By contrast, it takes approximately 6 hours for a full build with a 6-core machine with 64 GB of RAM.</p></li> </ul> <h3 id="os-requirements">Meet operating system requirements</h3> <p>Your development workstation must run any 64-bit Linux distribution with GNU C Library (glibc) 2.17 or later.</p> <h3 id="install-packages">Install required packages</h3> <p>To install required packages for Ubuntu 18.04 or later, run the following command:</p> 
+<pre>sudo apt-get install git-core gnupg flex bison build-essential zip curl zlib1g-dev libc6-dev-i386 x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig</pre> <h3 id="install-software">Install required software</h3> <p>Before you can work with AOSP, you must have installations of OpenJDK, Make, Python 3, and Repo. The latest release branch of Android comes with prebuilt versions of OpenJDK, Make, and Python 3, so additional installation steps aren't required. The following section explains how to install Repo.</p> <h3 id="repo">Install Repo</h3> <p>Follow these steps to install Repo:</p> <ol> <li>
+<p>Download the current package information:</p> 
+<pre>sudo apt-get update</pre>
+</li> <li>
+<p>Run the following command to install the Repo launcher:</p> 
+<pre>sudo apt-get install repo</pre> <p>The Repo launcher provides a Python script that initializes a checkout and downloads the full Repo tool.</p> <p>If successful, skip to step 4.</p>
+</li> <li>
+<p>Optional: Manually install Repo using the following series of commands:</p> 
+<pre>export REPO=$(mktemp /tmp/repo.XXXXXXXXX)
+curl -o ${REPO} https://storage.googleapis.com/git-repo-downloads/repo
+gpg --recv-keys 8BB9AD793E8E6153AF0F9A4416530D5E920F5C65
+curl -s https://storage.googleapis.com/git-repo-downloads/repo.asc | gpg --verify - ${REPO} &amp;&amp; install -m 755 ${REPO} ~/bin/repo</pre> <p>The first three commands set up a temp file, download Repo to the file, and verify that the key provided matches the required key. If these commands are successful, the final command installs the Repo launcher.</p>
+</li> <li>
+<p>Verify the Repo launcher version:</p> 
+<pre>repo version</pre> <p>The output should indicate a version of 2.4 or higher, for example:</p> 
+<pre>repo launcher version 2.45
+</pre>
+</li> </ol> <h2 id="initialize_and_sync_the_code">Download the Android source</h2> <p>The Android source is located in a collection of Git repositories hosted by Google. Each Git repository includes the entire history of the Android source, including changes to the source and when the changes were made. To download the Android source:</p> <ol> <li>
+<p>Navigate into your home directory:</p> 
+<pre>cd ~</pre>
+</li> <li>
+<p>Create a local working subdirectory within it:</p> 
+<pre>mkdir aosp</pre>
+</li> <li>
+<p>Navigate into the directory:</p> 
+<pre>cd aosp</pre>
+</li> <li>
+<p>Initialize the AOSP repository source code latest release branch (<code translate="no" dir="ltr">android-latest-release</code>):</p> 
+<pre>repo init --partial-clone -b android-latest-release -u https://android.googlesource.com/platform/manifest</pre>
+</li> <li><p>Enter or accept your Git credentials (name, email address).</p></li> <li>
+<p>Sync the source code:</p> 
+<pre>repo sync -c -j8</pre> <p>If you have any problems during download, refer to <a href="download/troubleshoot-sync">Troubleshoot and fix sync issues</a>.</p>
+</li> </ol> <h2 id="build_the_code">Build the code</h2> <p>To build the code:</p> <ol> <li>
+<p>From within your working directory, source the <code translate="no" dir="ltr">envsetup.sh</code> script to set up your build environment:</p> 
+<pre>source build/envsetup.sh</pre>
+</li> <li>
+<p>Specify a <em>target</em> device type to build with the <code translate="no" dir="ltr">lunch</code> command. A target is a device permutation, such as a specific model or form factor. Specify this target:</p> 
+<pre>lunch aosp_cf_x86_64_only_phone-aosp_current-userdebug</pre> <p>You should see a synopsis of your target and build environment:</p> 
+<pre>============================================
+PLATFORM_VERSION_CODENAME=Baklava
+PLATFORM_VERSION=Baklava
+TARGET_PRODUCT=aosp_cf_x86_64_only_phone
+TARGET_BUILD_VARIANT=userdebug
+TARGET_ARCH=x86_64
+TARGET_ARCH_VARIANT=silvermont
+HOST_OS=linux
+HOST_OS_EXTRA=Linux-6.10.11-1rodete2-amd64-x86_64-Debian-GNU/Linux-rodete
+HOST_CROSS_OS=windows
+BUILD_ID=BP1A.250305.020
+OUT_DIR=out
+============================================
+</pre>
+</li> <li>
+<p>Build the target:</p> 
+<pre>m</pre>
+</li> </ol> <p>Expect the first build to take hours. Subsequent builds take significantly less time. The output of your build appears in <code translate="no" dir="ltr"><var translate="no">$OUT_DIR</var></code>.</p> <h2 id="launch_cuttlefish">Launch Cuttlefish</h2> <p><em>Cuttlefish</em> is the Android emulator used to test your builds.</p> <ol> <li>
+<p>Run the following commands to download, build, and install the host Debian packages:</p> 
+<pre>sudo apt install -y git devscripts equivs config-package-dev debhelper-compat golang curl
+git clone https://github.com/google/android-cuttlefish
+cd android-cuttlefish
+tools/buildutils/build_packages.sh
+sudo apt install -y ./cuttlefish-base_*.deb ./cuttlefish-user_*.deb
+sudo usermod -aG kvm,cvdnetwork,render $USER
+sudo reboot</pre> <p>The reboot triggers installing additional kernel modules and applies <code translate="no" dir="ltr">udev</code> rules.</p>
+</li> <li>
+<p>After your workstation reboots, navigate to your <code translate="no" dir="ltr">aosp</code> directory, set up your build environment, and launch Cuttlefish:</p> 
+<pre>cd ~/aosp
+source build/envsetup.sh
+lunch aosp_cf_x86_64_only_phone-aosp_current-userdebug
+launch_cvd --daemon</pre>
+</li> <li><p>Connect to the Cuttlefish device by navigating to <code translate="no" dir="ltr">https://localhost:8443</code> in your web browser. Your virtual Android-powered device is displayed.</p></li> </ol> <h2 id="make_a_change">Make a change</h2> <p>Update the source code following this example <a href="https://android-review.googlesource.com/c/platform/frameworks/native/+/1181350">changelist</a>.</p> <ol> <li>
+<p>From the root of your checkout (<code translate="no" dir="ltr">aosp/</code> directory), navigate to the <code translate="no" dir="ltr">frameworks/native</code> Git project:</p> 
+<pre>cd frameworks/native</pre>
+</li> <li>
+<p>Start a temporary branch with this command:</p> 
+<pre>repo start BRANCH_NAME .</pre>
+</li> <li>
+<p>Use your editor to edit <code translate="no" dir="ltr">SurfaceFlinger.cpp</code> at the following location:</p> 
+<pre>aosp/frameworks/native/services/surfaceflinger/SurfaceFlinger.cpp
+</pre>
+</li> <li>
+<p>Find this line:</p> 
+<pre>void SurfaceFlinger::updateColorMatrixLocked() {
+</pre>
+</li> <li>
+<p>Add this line at the start of <code translate="no" dir="ltr">updateColorMatrixLocked()</code>:</p> 
+<pre>mClientColorMatrix = mat4(vec4{1.0f, 0.0f, 0.0f, 0.0f}, vec4{0.0f, -1.0f, 0.0f, 0.0f},
+                          vec4{0.0f, 0.0f, -1.0f, 0.0f}, vec4{0.0f, 1.0f, 1.0f, 1.0f});
+</pre>
+</li> <li>
+<p>Build the code:</p> 
+<pre>m</pre>
+</li> <li>
+<p>Update the build on the device:</p> 
+<pre>adb root
+adb remount -R
+adb root
+adb sync
+adb reboot</pre>
+</li> <li><p>Verify that you see a color change on your selected device.</p></li> </ol> <h2 id="test_your_code">Fix a test</h2> <p>This portion of the codelab uses an example test that's in the source tree and is failing. To run, debug, and fix the test, follow these instructions:</p> <ol> <li>
+<p>Run:</p> 
+<pre>atest DevCodelabTest</pre> <p>The test fails.</p> <aside class="note"><strong>Note:</strong><span> <a href="../core/tests/development/atest">atest</a> is a command-line tool that lets you build, install, and run Android tests locally.</span></aside>
+</li> <li>
+<p>Examine the stack trace of the failing test:</p> 
+<pre>STACKTRACE:
+java.lang.AssertionError
+    at org.junit.Assert.fail(Assert.java:87)
+    at org.junit.Assert.assertTrue(Assert.java:42)
+    at org.junit.Assert.assertTrue(Assert.java:53)
+    at android.test.example.devcodelab.DevCodelabTest.testHelloWorld(DevCodelabTest.java:29)
+</pre> <p>The last line of the stack trace shows the test that is failing (<code translate="no" dir="ltr">testHelloWorld</code>). This test is in a file called <code translate="no" dir="ltr">DevCodelabTest.java</code>.</p>
+</li> <li><p>To determine the location of the test to fix, append <code translate="no" dir="ltr"><var translate="no">WORKING_DIRECTORY</var>/platform_testing/tests/example/devcodelab/src/</code> to the last line of the stack trace up to and including the name of the test file. So, <code translate="no" dir="ltr">android.test.example.devcodelab.DevCodelabTest</code> becomes <code translate="no" dir="ltr"><var translate="no">WORKING_DIRECTORY</var>/platform_testing/tests/example/devcodelab/src/android/test/example/devcodelab/DevCodelabTest.java</code>.</p></li> <li><p>Edit <code translate="no" dir="ltr">platform_testing/tests/example/devcodelab/src/android/test/example/devcodelab/DevCodelabTest.java</code> and replace <code translate="no" dir="ltr">Assert.assertTrue(false)</code> with <code translate="no" dir="ltr">Assert.assertTrue(true)</code>.</p></li> <li>
+<p>Run the test again to verify you fixed the issue:</p> 
+<pre>atest DevCodelabTest</pre>
+</li> </ol> <h2 id="upload_your_code_for_review">Upload your code for review</h2> <p>Repo simplifies Git usage by bundling commands such as <code translate="no" dir="ltr">git clone</code> to work across numerous Git repositories (or projects) at once. For code review of your projects in Git, use the <a href="https://gerrit-review.googlesource.com/Documentation/">Gerrit</a> web-based code review system.</p> <aside class="special"><strong>Important:</strong><span> Ensure that you're signed in to Gerrit to view and respond to changes.</span></aside> <ol> <li>
+<p>Assuming you made your changes in the <code translate="no" dir="ltr">frameworks/native</code> project, run these commands to upload your changes:</p> 
+<pre>cd frameworks/native
+repo start BRANCH_NAME .
+git add .
+git commit</pre>
+</li> <li>
+<p>For your commit message, enter the following:</p> 
+<pre>Android BRANCH_NAME change
+Test: manual atest
+</pre>
+</li> <li>
+<p>Upload your change:</p> 
+<pre>repo upload</pre> <p>If you're successful, you see a message resembling this one:</p> 
+<pre>Upload project frameworks/native/ to remote branch android17-release:
+  branch BRANCH_NAME ( 1 commit, Wed Aug 7 09:32:33 2019 -0700):
+         ff46b36d Android BRANCH_NAME change
+to https://android-review.googlesource.com/ (y/N)? y
+remote: Processing changes: refs: 1, new: 1, done
+remote:
+remote: SUCCESS
+remote:
+remote:   https://android-review.googlesource.com/c/platform/frameworks/native/+/1098432 Android BRANCH_NAME change [NEW]
+remote:
+To https://android-review.googlesource.com/platform/frameworks/native
+* [new branch]          BRANCH_NAME -&gt; refs/for/android17-release
+</pre>
+</li> </ol> <h2 id="view_your_change_in_gerrit">View your change in Gerrit</h2> <p>To view your change in Gerrit, navigate to the link output in the terminal. The link is similar to the following:</p> 
+<pre>https://android-review.googlesource.com/c/platform/frameworks/native/+/1098432
+</pre> <h2 id="revert_your_change">Revert your change</h2> <p>Normally, post-testing and upon review and approval, you submit your change in Gerrit and merge it into the repository. Instead, for the purposes of this codelab, revert your work:</p> <ol> <li><p>In Gerrit, click <strong>Abandon</strong>.</p></li> <li>
+<p>Abandon the associated temporary branch in the <code translate="no" dir="ltr">frameworks/native</code> project directory (or its subdirectories):</p> 
+<pre>repo abandon BRANCH_NAME .</pre>
+</li> <li>
+<p>Revert the changes you made to the test file. Because you didn't run <code translate="no" dir="ltr">repo
+start</code>, <code translate="no" dir="ltr">git commit</code>, and <code translate="no" dir="ltr">repo upload</code> on the test change, you can reset the file itself. Assuming you're in the <code translate="no" dir="ltr">aosp/platform_testing</code> directory, use the following commands to reset the file:</p> 
+<pre>git reset HEAD tests/example/devcodelab/src/android/test/example/devcodelab/DevCodelabTest.java
+git checkout .</pre>
+</li> </ol> <p>This completes the codelab for Android platform development.</p> <h2 id="get_help">Get help</h2> <p>If you encounter errors during this codelab, report them using the <a href="https://issuetracker.google.com/issues/new">Issue Tracker</a> link on the bottom of any page. Send questions to the <a href="https://groups.google.com/forum/">android-building</a> group.</p> <p>Type <code translate="no" dir="ltr">ps -A | grep crosvm</code> to see if <code translate="no" dir="ltr">crosvm</code> is running already. If <code translate="no" dir="ltr">crosvm</code> is running, type <code translate="no" dir="ltr">stop_cvd || true</code> or <code translate="no" dir="ltr">kill crosvm</code> process with process PID.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/setup/start" class="_attribution-link">https://source.android.com/docs/setup/start</a>
+  </p>
+</div>

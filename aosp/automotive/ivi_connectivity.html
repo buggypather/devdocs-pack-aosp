@@ -1,0 +1,111 @@
+<h1>Bluetooth</h1>  <p> Android provides a <a href="../core/connect/bluetooth">full Bluetooth implementation</a> with support for many common in-car Bluetooth profiles. There are also many enhancements that improve the performance and experience with other devices and services. </p> <h2 id="bluetooth-connection-management">Bluetooth connection management</h2> <p> Within Android, <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/services/Car/service/src/com/android/car/bluetooth/CarBluetoothService.java"> CarBluetoothService</a> maintains the current user's Bluetooth devices and priority lists for each profile connection to the IVI. Devices are connected to profiles in a defined priority order. When to enable, disable, and connect devices to a profile is driven by a default connection policy that can be overridden with the use of a <a href="../core/architecture/rros"> resource overlay</a>, if desired. </p> <h3 id="implement-connection-management">Configure automotive connection management</h3> <h4 id="disable-default-phone-policy">Disable the default phone policy</h4> <p> The Android Bluetooth stack maintains a connection policy for phones that is enabled by default. This policy must be disabled on your device so that it doesn't conflict with the intended automotive policy in <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/services/Car/service/src/com/android/car/bluetooth/CarBluetoothService.java"> CarBluetoothService</a>. While the Car product overlay should take care of this for you, you can disable the phone policy in a <a href="../core/architecture/rros"> resource overlay</a> by setting <code translate="no" dir="ltr">enable_phone_policy</code> to <code translate="no" dir="ltr">false</code> in <code translate="no" dir="ltr">MAXIMUM_CONNECTED_DEVICES</code> in <code translate="no" dir="ltr"><a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/Bluetooth/android/app/src/com/android/bluetooth/mapclient/MapClientService.java">
+            /packages/apps/Bluetooth/res/values/config.xml</a></code>. </p> <h4 id="use-default-auto-policy">Use the default automotive policy</h4> <p> <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/services/Car/service/src/com/android/car/bluetooth/CarBluetoothService.java"> CarBluetoothService</a> maintains the default profile permissions. The list of known devices and their profile re-connection priorities is in <code translate="no" dir="ltr">service/src/com/android/car/BluetoothProfileDeviceManager.java</code>. </p> <p> As well, the Bluetooth connection management policy can be found in <code translate="no" dir="ltr">
+          <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/services/Car/service/src/com/android/car/bluetooth/BluetoothDeviceConnectionPolicy.java">
+          service/src/com/android/car/BluetoothDeviceConnectionPolicy.java</a></code>. By default, this policy defines instances when Bluetooth should connect to and disconnect from bonded devices. It also manages car-specific cases for when the adapter should be turned on and off. </p> <h3 id="create-custom-policy">Create your own custom automotive connection management policy</h3> <p> If the default automotive policy is not sufficient for your needs, it can also be disabled in favor of your own custom policy. Your custom policy, at a minimum, is responsible for determining when to enable and disable the Bluetooth adapter, as well as when to connect devices. It's possible to use a variety of events to enable/disable the Bluetooth adapter and to initiate device connections, including events due to changes in specific car properties. </p> <h4 id="disable-default-auto-policy">Disable the default automotive policy</h4> <p> First, to use a custom policy, the default automotive policy must be disabled by setting <code translate="no" dir="ltr">useDefaultBluetoothConnectionPolicy</code> to <code translate="no" dir="ltr">false</code> in a <a href="../core/architecture/rros"> resource overlay</a>. This resource is originally defined as part of <code translate="no" dir="ltr">MAXIMUM_CONNECTED_DEVICES</code> in <code translate="no" dir="ltr"><a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/Bluetooth/android/app/src/com/android/bluetooth/mapclient/MapClientService.java">
+          packages/services/Car/service/res/values/config.xml</a></code>. </p> <h4 id="toggle-adapter">Enable and disable Bluetooth adapter</h4> <p> One of the core functions of your policy is to turn the Bluetooth adapter on and off at the appropriate times. You can use the <code translate="no" dir="ltr">BluetoothAdapter.enable()</code> and <code translate="no" dir="ltr">BluetoothAdapter.disable()</code> framework APIs to enable and disable the adapter. These calls should respect the persisted state the user has selected through Settings or any other means. One way to do this is as follows: </p> 
+<pre>/**
+ * Turn on the Bluetooth adapter.
+ */
+private void enableBluetooth() {
+    BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+    if (bluetoothAdapter == null) {
+        return;
+    }
+    bluetoothAdapter.enable();
+}
+
+/**
+ * Turn off the Bluetooth adapter.
+ */
+private void disableBluetooth() {
+    BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+    if (bluetoothAdapter == null) {
+        return;
+    }
+    // Will shut down _without_ persisting the off state as the desired state
+    // of the Bluetooth adapter for next start up. This does nothing if the adapter
+    // is already off, keeping the existing saved desired state for next reboot.
+    bluetoothAdapter.disable(false);
+}</pre> <h4 id="select-adapter-trigger">Determine when to turn the Bluetooth adapter on and off</h4> <p>With your custom policy you are free to determine which events indicate the best times to enable and disable the adapter. One such way to do this is by using the power states <code translate="no" dir="ltr">MAXIMUM_CONNECTED_DEVICES</code> in <code translate="no" dir="ltr"><a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/Bluetooth/android/app/src/com/android/bluetooth/mapclient/MapClientService.java">CarPowerManager</a></code>:</p> 
+<pre>private final CarPowerStateListenerWithCompletion mCarPowerStateListener =
+        new CarPowerStateListenerWithCompletion() {
+    @Override
+    public void onStateChanged(int state, CompletableFuture&lt;Void&gt; future) {
+        if (state == CarPowerManager.CarPowerStateListener.ON) {
+            if (isBluetoothPersistedOn()) {
+                enableBluetooth();
+            }
+            return;
+        }
+
+        // "Shutdown Prepare" is when the user perceives the car as off
+        // This is a good time to turn off Bluetooth
+        if (state == CarPowerManager.CarPowerStateListener.SHUTDOWN_PREPARE) {
+            disableBluetooth();
+
+            // Let CarPowerManagerService know we're ready to shut down
+            if (future != null) {
+                future.complete(null);
+            }
+            return;
+        }
+    }
+};</pre> <h4 id="determine-when-connect">Determine when to connect devices</h4> <p> Similarly, when you determine the events that should trigger device connections to begin, <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/services/Car/service/src/com/android/car/bluetooth/CarBluetoothService.java"> CarBluetoothManager</a> provides the <code translate="no" dir="ltr">connectDevices()</code> API call that proceeds to connect devices based on the priority lists defined for each Bluetooth profile. </p> <p> One example of when you might want to do this is whenever the Bluetooth adapter turns on: </p> 
+<pre>private class BluetoothBroadcastReceiver extends BroadcastReceiver {
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        String action = intent.getAction();
+        BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+        if (BluetoothAdapter.ACTION_STATE_CHANGED.equals(action)) {
+            int state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1);
+            if (state == BluetoothAdapter.STATE_ON) {
+                // mContext should be your app's context
+                Car car = Car.createCar(mContext);
+                CarBluetoothManager carBluetoothManager =
+                        (CarBluetoothManager) car.getCarManager(Car.BLUETOOTH_SERVICE);
+                carBluetoothManager.connectDevices();
+            }
+        }
+    }
+}</pre> <h3 id="verify-connection-management">Verify automotive connection management</h3> <p> The easiest way to verify the behavior of your connection policy is to enable Bluetooth on your IVI and validate that it automatically connects to the correct devices in the appropriate order. You can toggle the Bluetooth adapter through the settings UI, or with the following adb commands: </p> 
+<pre>adb shell su u$(adb shell am get-current-user)_system svc bluetooth disable</pre> 
+<pre>adb shell su u$(adb shell am get-current-user)_system svc bluetooth enable</pre> <p> In addition, the output of the following command can be used to see debug information related to Bluetooth connections: </p> 
+<pre>adb shell dumpsys car_service</pre> <p> Finally, if you have built your own automotive policy, verifying any custom connection behavior requires controlling the events that you've chosen to trigger device connections. </p> <h2 id="bluetooth-profiles">Automotive Bluetooth profiles</h2> <p> In Android, the IVI can support multiple devices connected simultaneously over Bluetooth. Multi-device Bluetooth phone services let users connect separate devices concurrently, such as a personal phone and a work phone, and make hands-free calls from either device. </p> <p> Connection limits are enforced by each individual Bluetooth profile, usually within the implementation of the profile service itself. By default, <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/services/Car/service/src/com/android/car/bluetooth/CarBluetoothService.java"> CarBluetoothService</a> makes no further judgement on the maximum number of connected devices allowed. </p> <h3 id="hands-free-profile">Hands-Free Profile</h3> <p> The Bluetooth Hands-Free Profile (HFP) allows the vehicle to make and receive phone calls via a connected remote device. Each device connection registers a separate phone account with <a href="https://developer.android.com/reference/android/telecom/TelecomManager"> TelecomManager</a>, which advertises any available phone accounts to the IVI apps. </p> <p> The IVI can connect to multiple devices via HFP. <code translate="no" dir="ltr">MAX_STATE_MACHINES_POSSIBLE</code> <code translate="no" dir="ltr">MAXIMUM_CONNECTED_DEVICES</code> in <code translate="no" dir="ltr"><a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/Bluetooth/android/app/src/com/android/bluetooth/mapclient/MapClientService.java">
+           HeadsetClientService</a></code> defines the maximum number of simultaneous HFP connections. </p> <p> When a user makes or receives a phone call from a device, the corresponding phone account creates an <code translate="no" dir="ltr">HfpClientConnection</code> object. The Dialer app interacts with the <code translate="no" dir="ltr">HfpClientConnection</code> object to manage call features, such as accepting a call or hanging up. </p> <p> It should be noted that the default Dialer app does not support multiple simultaneously connected HFP devices. In order to implement multi-device HFP, customization is required to let users select which device account to use when making a call. The app then calls <code translate="no" dir="ltr">telecomManager.placeCall</code> with the correct account. You need to verify that other multi-device functionality works as intended as well. </p> <aside class="note"><strong>Note:</strong> HFP Synchronous Connection Oriented (SCO) connections and phone call audio routing need to be done manually with <code translate="no" dir="ltr"><a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/Bluetooth/android/app/aidl/android/bluetooth/IBluetoothHeadsetClient.aidl">
+            connectAudio</a></code> in the app binder. </aside> <h4 id="verify-multi-device-hfp">Verify multi-device HFP</h4> <p> To check that multi-device connectivity works properly over Bluetooth: </p> <ol> <li>Using Bluetooth, connect a device to the IVI and stream audio from the device.</li> <li>Connect two phones to the IVI over Bluetooth.</li> <li>Pick one phone. Place an outgoing call directly from the phone, and place an outgoing call using the IVI. <ol> <li>Both times, verify the streamed audio pauses and the phone audio plays over the IVI connected speakers.</li> </ol> </li> <li>Using the same phone, receive an incoming call directly on the phone, and receive an incoming call using the IVI. <ol> <li>Both times, verify the streaming audio pauses and the phone audio plays over the IVI connected speakers.</li> </ol> </li> <li>Repeat steps 3 and 4 with the other connected phone.</li> </ol> <h4 id="emergency-calling">Emergency calling</h4> <p> The ability to make emergency calls is an important aspect of the telephony and Bluetooth functions in the car. There are a number of ways an emergency call can be initiated from the IVI, including: </p> <ul> <li>Standalone eCall solution</li> <li>eCall solution integrated into the IVI</li> <li>Relying on a connected Bluetooth phone when no built-in system is available</li> </ul> <h4 id="connecting-emergency-call">Connect an emergency call</h4> <p> While eCall equipment is safety-critical, it's currently not integrated into Android. It's possible to use <a href="https://developer.android.com/reference/android/telecom/ConnectionService"> ConnectionService</a> to expose emergency calling features through Android, which also has the benefit of introducing accessibility options for emergency calls. To learn more, see <a href="https://developer.android.com/guide/topics/connectivity/telecom/selfManaged"> Building a calling app</a>. </p> <p> Here is an example of how to establish an emergency <a href="https://developer.android.com/reference/android/telecom/ConnectionService"> ConnectionService</a>: </p> 
+<pre>public class YourEmergencyConnectionService extends ConnectionService {
+
+    @Override
+    public Connection onCreateOutgoingConnection(
+            PhoneAccountHandle connectionManagerAccount,
+            ConnectionRequest request) {
+        // Your equipment specific procedure to make ecall
+        // ...
+    }
+
+    private void onYourEcallEquipmentReady() {
+
+        PhoneAccountHandle handle =
+            new PhoneAccountHandle(new ComponentName(context, YourEmergencyConnectionService),
+                    YourEmergencyConnectionId);
+        PhoneAccount account =
+            new PhoneAccount.Builder(handle, eCallOnlyAccount)
+            .setSupportedUriSchemes(Arrays.asList(PhoneAccount.SCHEME_TEL))
+            .setCapabilities(PhoneAccount.CAPABILITY_PLACE_EMERGENCY_CALLS
+                    | PhoneAccount.CAPABILITY_MULTI_USER)
+            .build():
+        mTelecomManager.registerPhoneAccount(account);
+        mTelecomManager.enablePhoneAccount(account.getAccountHandle(), true);
+    }
+}</pre> <h4 id="enabling-bluetooth-emergency-calls">Enable Bluetooth for emergency calls</h4> <p> Calling emergency before Android 10 involved direct dialing from a phone and invoking special equipment if available (for example, auto-trigger upon detection of danger or a user action). In Android 10 and higher, the Dialer in the car can directly call an emergency number, provided this <code translate="no" dir="ltr">MAXIMUM_CONNECTED_DEVICES</code> in <code translate="no" dir="ltr"><a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/Bluetooth/android/app/src/com/android/bluetooth/mapclient/MapClientService.java">
+      apps/Bluetooth/res/values/config.xml</a></code>: </p> <p> <code translate="no" dir="ltr">&lt;!-- For supporting emergency call through the hfp client connection service --&gt;
+       &lt;bool name=”hfp_client_connection_service_support_emergency_call”&gt;true&lt;/bool&gt;</code> </p> <p> By implementing emergency calling in this way, other apps, such as voice recognition, can also call an emergency number. </p> <aside class="note"><strong>Note:</strong> Bluetooth was not designed specifically for emergency calling. As a result, this option should only be considered for cars without special eCall equipment. </aside> <h3 id="phone-book-access-profile">Phone Book Access Profile</h3> <p> The Bluetooth Phone Book Access Profile (PBAP) downloads contacts and call histories from a connected remote device. PBAP maintains an aggregated, searchable list of contacts that is updated by the PBAP client state machine. Each connected device interacts with a separate PBAP client state machine, resulting in contacts being associated with the proper device when making a call. </p> <p> PBAP is unidirectional and therefore requires the IVI to instantiate connections to any <code translate="no" dir="ltr">MAXIMUM_CONNECTED_DEVICES</code> in <code translate="no" dir="ltr"><a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/Bluetooth/android/app/src/com/android/bluetooth/mapclient/MapClientService.java">
+            PbapClientService</a></code> defines the maximum number of simultaneous PBAP device connections allowed with the IVI. The PBAP client stores the contacts for each connected device in the <a href="https://developer.android.com/guide/topics/providers/contacts-provider"> Contacts Provider</a> which can then be accessed by an app to derive the phone book for each device. </p> <p> In addition, the profile connection must be authorized by both the IVI and the mobile device in order for a connection to be made. When a PBAP client disconnects, the internal database removes all contacts and the call history associated with the previously connected device. </p> <h3 id="message-access-profile">Message Access Profile</h3> <p> The Bluetooth Message Access Profile (MAP) allows the vehicle to send and receive SMS messages via a connected remote device. Currently, messages are not stored locally on the IVI. Instead, whenever the connected remote device receives a message, the IVI receives and parses the message and broadcasts its contents in an <a href="https://developer.android.com/reference/android/content/Intent">Intent</a> instance, which can then be received by an app. </p> <p> In order to connect to a mobile device for the purpose of sending and receiving messages, the IVI must initiate the MAP connection. <code translate="no" dir="ltr">MAXIMUM_CONNECTED_DEVICES</code> in <code translate="no" dir="ltr"><a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/Bluetooth/android/app/src/com/android/bluetooth/mapclient/MapClientService.java">
+            MapClientService</a></code> defines the maximum number of simultaneous MAP device connections allowed with the IVI. Each connection must be authorized by the IVI and the mobile device before messages can be transferred. </p> <h3 id="advanced-audio-distribution-profile">Advanced Audio Distribution Profile</h3> <p> The Bluetooth Advanced Audio Distribution Profile (A2DP) allows the vehicle to receive audio streams from a connected remote device. </p> <p> Unlike other profiles, the maximum number of connected A2DP devices is enforced in the native stack and not in Java. The value is currently hardcoded to <code translate="no" dir="ltr">1</code> using the <code translate="no" dir="ltr">kDefaultMaxConnectedAudioDevices</code> variable in <code translate="no" dir="ltr"><a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:packages/modules/Bluetooth/system/btif/src/btif_av.cc">
+              packages/modules/Bluetooth/system/btif/src/btif_av.cc</a></code>. </p> <h3 id="audio-video-remote-control-profile">Audio/Video Remote Control Profile</h3> <p> The Bluetooth Audio/Video Remote Control Profile (AVRCP) allows the vehicle to control and browse media players on a connected remote device. Since the IVI plays the role of an AVRCP controller, any triggered controls that affect audio playback rely on an A2DP connection to the target device. </p> <p> For a specific media player on an Android phone to be browsable by the IVI via AVRCP, the media app on the phone must provide a <code translate="no" dir="ltr"><a href="https://developer.android.com/reference/android/service/media/MediaBrowserService">
+            MediaBrowserService</a></code> and allow <code translate="no" dir="ltr">com.android.bluetooth</code> access to that service. <a href="https://developer.android.com/guide/topics/media-apps/audio-app/building-a-mediabrowserservice"> Building a media browser service</a> explains how to do this in detail. </p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/ivi_connectivity" class="_attribution-link">https://source.android.com/docs/automotive/ivi_connectivity</a>
+  </p>
+</div>

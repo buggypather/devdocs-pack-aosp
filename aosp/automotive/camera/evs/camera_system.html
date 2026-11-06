@@ -1,0 +1,337 @@
+<h1>Changes to camera and system configuration</h1>  <p>Camera and system configuration management and usage have also been updated in Extended View System (EVS) 1.1. As EVS 1.0 does not provide methods to query camera device information and system configuration, the app developer must get that information themselves. For example, the client must have camera calibration data if it implements some computer vision apps.</p> <p>To alleviate this circumstance, EVS 1.1 extends a camera device descriptor with camera metadata and provides several methods that enables clients to get camera device and system configuration information.</p> 
+<pre>import android.frameworks.cameraservice.device@2.0::CameraMetadata;
+import android.frameworks.cameraservice.common@2.0::CameraMetadataType;
+
+/**
+ * Structure describing the basic properties of an EVS camera, extended
+ * from its v1.0 declaration.
+ *
+ * The HAL is responsible for filling out this structure for each
+ * EVS camera in the system.
+ */
+struct CameraDesc {
+    @1.0::CameraDesc v1;
+    /**
+     * Store camera metadata such as lens characteristics.
+     */
+    CameraMetadata metadata;
+};</pre> <p><code translate="no" dir="ltr">CameraDesc</code> is extended to have camera device metadata and this type is imported from <code translate="no" dir="ltr">android.frameworks.cameraservice.device@2.0</code>. This design choice allows vendors to use <code translate="no" dir="ltr">camera_metadata_t</code> in their implementations and to take advantage of APIs defined in <code translate="no" dir="ltr"><a href="https://android.googlesource.com/platform/system/media/+/android17-release/camera/include/system/camera_metadata_tags.h#299">ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS</a></code>. The EVS driver can use this type to identify which stream configurations are supported by each camera module. Also, vendors can't use their own metadata types to deliver other information not <a href="https://developer.android.com/reference/android/hardware/camera2/CameraCharacteristics">defined in Android</a> as explained in <code translate="no" dir="ltr"><a href="https://android.googlesource.com/platform/system/media/+/android17-release/camera/include/system/camera_metadata_tags.h#299">ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS</a></code>. The EVS driver can use this type to identify which stream configurations are supported by each camera module. </p>
+<h2 id="open-a-camera-device-with-desired-stream-configuration">
+Open a camera device with desired stream configuration</h2> 
+<pre>import android.hardware.camera.device@3.2::Stream;
+
+/**
+ * Get the IEvsCamera associated with a cameraId from a CameraDesc
+ *
+ * Given a camera's unique cameraId from CameraDesc, returns the
+ * IEvsCamera interface associated with the specified camera. When
+ * done using the camera, the caller may release it by calling closeCamera().
+ *
+ * @param  cameraId  A unique identifier of the camera.
+ * @param  streamCfg A stream configuration the client wants to use.
+ * @return evsCamera EvsCamera object associated with a given cameraId.
+ */
+openCamera_1_1(string cameraId, Stream streamCfg) generates (IEvsCamera evsCamera);</pre> <p>One of the metadata fields Android defines is <code translate="no" dir="ltr"><a href="https://android.googlesource.com/platform/system/media/+/android17-release/camera/include/system/camera_metadata_tags.h#299">ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS</a></code>. The EVS driver can use this type to identify which stream configurations are supported by each camera module. For example, the reference implementation provided below lists the information oforf each supported stream configuration:</p> <ul> <li>Stream ID</li> <li>Width</li> <li>Height</li> <li>Direction (input or output)</li> <li>Frame rate</li> </ul> <h3 id="multiple-clients-on-a-single-camera-hw-instance">
+Multiple clients on a single camera HW instance</h3> <p>If a client requests to open an already active camera device, the EVS manager compares a requested stream configuration with the active configuration. If they differ, the EVS manager returns a null IEvsCamera object. The client <strong>MUST</strong> handle this possible failure properly.</p> <h2 id="reference-configuration-file">
+Reference configuration file</h2> <p>The reference configuration file included in EVS 1.1 is written in XML and vendors can use the included DTD file (shown below) to validate a (modified) sample configuration file or use their own file if they want to use the same format. The DTD file also provides detailed descriptions for each element and attribute.</p> 
+<pre>&lt;?xml version='1.0' encoding='utf-8'?&gt;
+&lt;!-- Copyright (C) 2019 The Android Open Source Project
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+--&gt;
+
+&lt;!-- Author : changyeon@google.com
+     Version: 1.0
+--&gt;
+
+&lt;!ELEMENT configuration (system,camera,display)&gt;
+
+&lt;!-- System Configuration that contains below informations:
+     - The dimension of the vehicle.
+     - Number of cameras available to EVS.
+     - List of predefined use cases.
+--&gt;
+&lt;!ELEMENT system (dimension,num_cameras,supported_use_case*)&gt;
+    &lt;!-- The x, y, and z dimension of the vehicle in the unit of centimeters. Axes are defined at
+         https://source.android.com/docs/core/interaction/sensors/sensor-types#auto_axes
+    --&gt;
+    &lt;!ELEMENT dimension EMPTY&gt;
+    &lt;!ATTLIST dimension
+        x CDATA '0'
+        y CDATA '0'
+        z CDATA '0'
+    &gt;
+
+    &lt;!-- The number of cameras that are available to EVS on the vehicle.
+         This must be equal to the number of camera elements of the device element.
+    --&gt;
+    &lt;!ELEMENT num_cameras EMPTY&gt;
+    &lt;!ATTLIST num_cameras
+        value CDATA #REQUIRED
+    &gt;
+
+    &lt;!-- List of predefined use cases --&gt;
+    &lt;!ELEMENT supported_use_case (use_case)*&gt;
+        &lt;!-- Predefined configurations for each of listed use cases.
+             @attr  id       : Unique string identifier of this use case.
+             @attr  camera   : ID of either a single camera device or a camera group.
+             @attr  stream_id: Preferred stream configuration of camera device/group
+                               that is set by camera attribute.
+        --&gt;
+        &lt;!ELEMENT use_case EMPTY&gt;
+        &lt;!ATTLIST use_case
+            id        CDATA #REQUIRED
+            camera    CDATA #REQUIRED
+            stream_id CDATA #REQUIRED
+        &gt;
+
+&lt;!-- Device descriptions --&gt;
+&lt;!ELEMENT camera (group|device)*&gt;
+    &lt;!-- Camera group descriptor
+         @attr group_id    : Unique logical camera group identifier. Camera device use this to be
+                             a member of the group.
+         @attr device_id   : Comma-separated list of unique camera identifiers of member camera
+                             devices.
+         @attr synchronized: Boolean field that tells whether or not this camera is synchronized
+                             with other cameras in the same group. This is ineffective if
+                             there is a single camera in the group or a group is invalid.
+    --&gt;
+    &lt;!ELEMENT group (caps)&gt;
+    &lt;!ATTLIST group
+        group_id        CDATA #REQUIRED
+        device_id       CDATA #REQUIRED
+        synchronized    CDATA #REQUIRED
+    &gt;
+    &lt;!-- Please note that a camera may have stream configurations. If it has, all stream
+         configurations must be supported by each camera device in the group.
+    --&gt;
+
+    &lt;!-- Camera device descriptor
+         @attr id          : Unique camera identifier.
+         @attr position    : Must be one of front, rear, left, or right.
+    --&gt;
+    &lt;!ELEMENT device (caps,characteristics*)&gt;
+    &lt;!ATTLIST device
+        id              CDATA #REQUIRED
+        position        CDATA #REQUIRED
+    &gt;
+        &lt;!-- Camera metadata that contains:
+             - A list of supported controls.
+             - A list of supported stream configurations.
+        --&gt;
+        &lt;!ELEMENT caps (supported_controls|stream)*&gt;
+            &lt;!-- A list of supported controls.
+                 This must be a subset of android.hardware.automotive.evs@1.1::CameraParam.
+            --&gt;
+            &lt;!ELEMENT supported_controls EMPTY&gt;
+            &lt;!ATTLIST supported_controls
+                value CDATA #REQUIRED
+            &gt;
+
+            &lt;!-- A list of supported output sizes. --&gt;
+            &lt;!ELEMENT stream EMPTY&gt;
+            &lt;!ATTLIST stream
+                id     CDATA #REQUIRED
+                width  CDATA #REQUIRED
+                height CDATA #REQUIRED
+                format CDATA #REQUIRED
+            &gt;
+
+        &lt;!-- Camera module characteristics including its optics and imaging sensor. --&gt;
+        &lt;!ELEMENT characteristics (parameter)*&gt;
+                &lt;!ELEMENT parameter EMPTY&gt;
+                &lt;!-- A name of camera characteristic. This must be a subset of
+                     android.hardware.automotive.evs@1.1::CameraCharacteristics.
+                --&gt;
+                &lt;!ATTLIST parameter
+                    name  CDATA #REQUIRED
+                    type  CDATA #REQUIRED
+                    size  CDATA #REQUIRED
+                    value CDATA #REQUIRED
+                &gt;
+
+&lt;!-- Available display devices --&gt;
+&lt;!ELEMENT display (display_device)*&gt;
+    &lt;!-- Display device descriptor
+     @attr id      : Unique display identifier.
+     @attr position: Display mount location.
+    --&gt;
+    &lt;!ELEMENT display_device (supported_formats)*&gt;
+    &lt;!ATTLIST display_device
+        id        CDATA #REQUIRED
+        position  CDATA #REQUIRED
+    &gt;
+        &lt;!-- A list of supported input data formats.
+             @attr value: A comma separated list of input data formats
+        --&gt;
+        &lt;!ELEMENT supported_formats EMPTY&gt;
+        &lt;!ATTLIST supported_formats
+            value CDATA #REQUIRED
+        &gt;</pre> <p>A sample configuration file is shown below (the sample contains dummy numerical data).</p> 
+<pre>&lt;?xml version='1.0' encoding='utf-8'?&gt;
+&lt;!-- Copyright (C) 2019 The Android Open Source Project
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+--&gt;
+
+&lt;!-- Extended View System Example Configuration
+
+     Android Automotive axes are used to define coordinates.
+     See https://source.android.com/docs/core/interaction/sensors/sensor-types#auto_axes
+
+     Use evs_configuration.dtd with xmllint tool, to validate XML configuration file
+--&gt;
+
+&lt;configuration&gt;
+    &lt;!-- system configuration --&gt;
+    &lt;system&gt;
+        &lt;!-- reference dimension of the vehicle in the unit of centimeters --&gt;
+        &lt;dimension x='200' y='400' z='100' /&gt;
+
+        &lt;!-- number of cameras available to EVS --&gt;
+        &lt;num_cameras value='2'/&gt;
+
+        &lt;!-- list of supported use cases --&gt;
+        &lt;supported_use_case&gt;
+            &lt;!-- use case configuration --&gt;
+            &lt;use_case
+                id='rear_view'
+                camera='/dev/video1'
+                stream_id='1'
+            /&gt;
+
+            &lt;!-- use case configuration --&gt;
+            &lt;use_case
+                id='surround_view'
+                camera='group1'
+                stream_id='0'
+            /&gt;
+        &lt;/supported_use_case&gt;
+    &lt;/system&gt;
+
+    &lt;!-- camera device information --&gt;
+    &lt;camera&gt;
+        &lt;!-- camera group 0 --&gt;
+        &lt;group group_id='group0'
+               device_id='/dev/video1,/dev/video2'
+               synchronized='false'
+        &gt;
+            &lt;caps&gt;
+                &lt;stream id='0' width='640' height='360' format='V4L2_PIX_UYUV'/&gt;
+            &lt;/caps&gt;
+        &lt;/group&gt;
+
+        &lt;!-- camera device starts --&gt;
+        &lt;device id='/dev/video1' position='rear'&gt;
+            &lt;caps&gt;
+                &lt;!-- list of supported controls --&gt;
+                &lt;supported_controls
+                    value='BRIGHTNESS,
+                           CONTRAST,
+                           AUTO_WHITE_BALANCE,
+                           WHITE_BALANCE_TEMPERATURE,
+                           SHARPNESS,
+                           AUTO_EXPOSURE,
+                           ABSOLUTE_EXPOSURE,
+                           AUTO_FOCUS,
+                           ABSOLUTE_ZOOM'
+                /&gt;
+
+                &lt;!-- list of supported stream configurations --&gt;
+                &lt;stream id='0' width='1280' height='1080' format='V4L2_PIX_NV21'/&gt;
+                &lt;stream id='1' width='1280' height='1080' format='V4L2_PIX_YUYV'/&gt;
+                &lt;stream id='2' width='1280' height='1080' format='V4L2_PIX_UYUV'/&gt;
+                &lt;stream id='3' width='640'  height='360'  format='V4L2_PIX_NV21'/&gt;
+                &lt;stream id='4' width='640'  height='360'  format='V4L2_PIX_YUYV'/&gt;
+                &lt;stream id='5' width='640'  height='360'  format='V4L2_PIX_UYUV'/&gt;
+                &lt;stream id='6' width='320'  height='240'  format='V4L2_PIX_NV21'/&gt;
+                &lt;stream id='7' width='320'  height='240'  format='V4L2_PIX_YUYV'/&gt;
+                &lt;stream id='8' width='320'  height='240'  format='V4L2_PIX_UYUV'/&gt;
+            &lt;/caps&gt;
+
+            &lt;!-- list of parameters --&gt;
+            &lt;characteristics&gt;
+                &lt;!-- Lens distortion information. See
+                     https://developer.android.com/reference/android/hardware/camera2/CameraCharacteristics.html#LENS_DISTORTION
+                --&gt;
+                &lt;parameter
+                    name='LENS_DISTORTION'
+                    type='float'
+                    size='5'
+                    value='0.0,0.0,0.0,0.0,0.0'
+                /&gt;
+
+                &lt;!-- Camera intrinsic calibration matrix. See
+                     https://developer.android.com/reference/android/hardware/camera2/CameraCharacteristics.html#LENS_INTRINSIC_CALIBRATION
+                --&gt;
+                &lt;parameter
+                    name='LENS_INTRINSIC_CALIBRATION'
+                    type='float'
+                    size='5'
+                    value='0.0,0.0,0.0,0.0,0.0'
+                /&gt;
+
+                &lt;!-- Camera pose translation and rotation. See
+                     https://developer.android.com/reference/android/hardware/camera2/CameraCharacteristics.html#LENS_POSE_TRANSLATION
+                     https://developer.android.com/reference/android/hardware/camera2/CameraCharacteristics.html#LENS_POSE_ROTATION
+                --&gt;
+                &lt;parameter
+                    name='LENS_POSE_TRANSLATION'
+                    type='float'
+                    size='3'
+                    value='0.0,0.0,0.0'
+                /&gt;
+                &lt;parameter
+                    name='LENS_POSE_ROTATION'
+                    type='float'
+                    size='4'
+                    value='0.0,0.0,0.0,0.0'
+                /&gt;
+            &lt;/characteristics&gt;
+        &lt;/device&gt;
+        &lt;device id='/dev/video2' position='front'&gt;
+            &lt;caps&gt;
+                &lt;!-- list of supported stream configurations --&gt;
+                &lt;stream id='0' width='1280' height='1080' format='V4L2_PIX_NV21'/&gt;
+            &lt;/caps&gt;
+        &lt;/device&gt;
+    &lt;/camera&gt;
+
+    &lt;!-- display device starts --&gt;
+    &lt;display&gt;
+        &lt;display_device id='display0' position='driver'&gt;
+            &lt;!-- list of supported input formats
+                 This must be a subset of android_pixel_format_t enum.
+            --&gt;
+            &lt;supported_formats
+                value='RGBA_8888,
+                       YUYV,
+                       UYVY'
+            /&gt;
+        &lt;/display_device&gt;
+    &lt;/display&gt;
+&lt;/configuration&gt;</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/camera/evs/camera_system" class="_attribution-link">https://source.android.com/docs/automotive/camera/evs/camera_system</a>
+  </p>
+</div>

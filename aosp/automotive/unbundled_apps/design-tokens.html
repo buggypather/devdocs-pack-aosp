@@ -1,0 +1,38 @@
+<h1>OEM design tokens</h1>  <p>OEM design tokens are an Android Automotive OS (AAOS) implementation of the <a href="https://m3.material.io/foundations/design-tokens/overview">Material Design</a> system. Unlike the algorithmic or user selection approach for token values on mobile, OEMs designate design token values. Design tokens represent the small, repeated design decisions that make up a design system's visual style and replace static values with self-explanatory names. Tokens are analogous to those defined by the Material Design system.</p> <h2 id="token-library">OEM token library</h2> <p>OEM design tokens are referenced through the OEM token library, which consists of the three components illustrated in Figure 1. </p>
+<p><img src="https://source.android.com/static/docs/automotive/images/token-library-01.png" width="750" class="screenshot" alt text="OEM token library components"></p> <p><strong>Figure 1.</strong> OEM token library components.</p> <h3 id="static-library">Static library</h3> <p>The static library component of the OEM token library facilitates access to token values as follows.</p> <ul> <li>Provides APIs to access OEM values for tokens.</li> <li>Enables opt-in overriding of token references in theme with OEM values.</li> </ul> <h3 id="shared-library">Shared library</h3> <p>The shared library component is responsible for defining the following:</p> <ul> <li>Library name.</li> <li>Boolean opt-in for enabling for OEM token values.</li> <li>Style that provides OEM token values.</li> </ul> <p>To accommodate OEM ownership of this shared library component, including an OEM-defined package name, OEMs can create an override of the shared library implementation.</p> <p><img src="https://source.android.com/static/docs/automotive/images/token-library-02.png" class="android-image-dark-theme-background" width="750" alt text="Override a shared library implementation"></p> <p><strong>Figure 2.</strong> Override a shared library implementation.</p> <h3 id="oem-shared-library">OEM shared library</h3> <p>OEM overrides of the shared library component allow for OEM ownership of the library while maintaining compatibility with other components in the OEM token library by providing a means for the package name and signature to be set by OEMs while leaving implementation of the shared library otherwise unmodified.</p> <p>Overrides for a shared library can be defined as shown below:</p> 
+<pre>override_android_app {
+    name: "[OEM]-token-shared-lib",
+    base: "token-shared-lib-prebuilt",
+    package_name: "com.[OEM].sharedlib",
+    rename_resources_package: false,
+    certificate: …
+}</pre> <p>To set token values, see <a href="#token-values">Specify OEM token values</a>.</p> <aside class="important"> <strong>Important: </strong>Shared libraries MUST be preinstalled on a system image. </aside> <h3 id="oem-shared-library-customizations">OEM shared library customizations</h3> <p>To support varied schemes for token values (for example, model or drive mode differentiation), OEMs can provide dynamic values for tokens by targeting the OEM shared library with Runtime Resource Overlays (RROs). To learn more, see <a href="../../core/runtime/rros">Change the value of an app's resources at runtime</a>.</p> <p>To set token values, see <a href="#token-values">Specify OEM token values</a>.</p> <h2 id="token-values">Specify OEM token values</h2> <p>To specify token values, set the corresponding attribute in the style <code translate="no" dir="ltr">OemStyle</code> to the required value.</p> 
+<pre>&lt;resources&gt;
+    &lt;style name="OemStyle"&gt;
+        &lt;item name="colorPrimary"&gt;#B0C5FF&lt;/item&gt;
+        &lt;item name="colorOnPrimary"&gt;#002B76&lt;/item&gt;
+        &lt;item name="colorPrimaryContainer"&gt;#003FA4&lt;/item&gt;
+        &lt;item name="colorOnPrimaryContainer"&gt;#D9E2FF&lt;/item&gt;
+        …
+    &lt;/style&gt;
+&lt;/resources&gt;</pre> <h3 id="opt-in">Opt in to OEM values</h3> <p>So that apps can access OEM-provided token values, OEMs must first opt in to overriding default token values by configuring the <code translate="no" dir="ltr">enable_oem_tokens</code> boolean to be <code translate="no" dir="ltr">true</code>.</p> <h3 id="rro-toke-values">RRO token values</h3> <p>Similarly to how token values are set in <code translate="no" dir="ltr">OemStyle</code>, RROs can be used to modify the style to provide alternate token values.</p> 
+<pre>&lt;resources&gt;
+    &lt;style name="OemStyle"&gt;
+        &lt;item name="com.android.oem.tokens:colorPrimary"&gt;#B0C5FF&lt;/item&gt;
+        &lt;item name="com.android.oem.tokens:colorOnPrimary"&gt;#002B76&lt;/item&gt;
+        &lt;item name="com.android.oem.tokens:colorPrimaryContainer"&gt;#003FA4&lt;/item&gt;
+        &lt;item name="com.android.oem.tokens:colorOnPrimaryContainer"&gt;#D9E2FF&lt;/item&gt;
+        …
+    &lt;/style&gt;
+&lt;/resources&gt;</pre> <p>RROs should set the shared library attributes on the style by specifying the shared library name.</p> <h2 id="configure-load-last">Configure load last</h2> <p>Systems that include an OEM implementation of a token shared library must configure the system to load the shared library after the app classes. To do so, include the library name (<code translate="no" dir="ltr">com.android.oem.tokens</code>) in the <code translate="no" dir="ltr">config_sharedLibrariesLoadedAfterApp</code> config on the system. If you have access to Google Automotive Services (GAS), this is enforced as a requirement.</p> 
+<pre>
+&lt;!-- The OEM token shared library will be loaded after app classes --&gt;
+&lt;string-array name="config_sharedLibrariesLoadedAfterApp" translatable="false"&gt;
+    &lt;item&gt;com.android.oem.tokens&lt;/item&gt;
+&lt;/string-array&gt;
+</pre> <h2 id="best-practices">Best practices</h2> <p>Best practices for the OEM token library are described below.</p> <h3 id="enable-a-flexible-update-strategy">Enable a flexible update strategy</h3> <p>See the strategies below to ensure you build in flexibility with respect to updates.</p> <h4 id="oem-shared-library_1">OEM shared library</h4> <p>As system-shared libraries are required to be preinstalled on system images, devices must either ship with the library or the library must be added as part of an Over-the-Air (OTA) update (to learn more, see <a href="../../core/ota">OTA Updates</a>). However, including a stub implementation of an OEM override of an OEM token shared library on a system image allows for an update to a full working implementation to be pushed to devices at a later date without necessitating an OTA.</p> <h4 id="shared-library-rros">Shared library RROs</h4> <p>Although there is no requirement for RROs to be installed as system apps, doing so provides some update behavior that might be desired.</p> <ul> <li>Automatic updates of apps when users aren't signed in.</li> <li>Can't be uninstalled by the user (users can only <b>uninstall updates</b>).</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/unbundled_apps/design-tokens" class="_attribution-link">https://source.android.com/docs/automotive/unbundled_apps/design-tokens</a>
+  </p>
+</div>

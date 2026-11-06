@@ -1,0 +1,80 @@
+<h1>Validate SELinux</h1>  <p>Android strongly encourages OEMs to test their SELinux implementations thoroughly. As manufacturers implement SELinux, they should apply the new policy to a test pool of devices first.</p> <p>After applying a new policy, make sure SELinux is running in the correct mode on the device by issuing the command <code translate="no" dir="ltr">getenforce</code>.</p> <p>This prints the global SELinux mode: either Enforcing or Permissive. To determine the SELinux mode for each domain, you must examine the corresponding files or run the latest version of <code translate="no" dir="ltr">sepolicy-analyze</code> with the appropriate (<code translate="no" dir="ltr">-p</code>) flag, present in <a href="https://android.googlesource.com/platform/system/sepolicy/+/android17-release/tools/"> <code translate="no" dir="ltr">/platform/system/sepolicy/tools/</code></a>.</p> <h2 id="reading_denials">Read denials</h2> <p>Check for errors, which are routed as event logs to <code translate="no" dir="ltr">dmesg</code> and <code translate="no" dir="ltr">logcat</code> and are viewable locally on the device. Manufacturers should examine the SELinux output to <code translate="no" dir="ltr">dmesg</code> on these devices and refine settings prior to public release in permissive mode and eventual switch to enforcing mode. SELinux log messages contain <code translate="no" dir="ltr">avc:</code> and so may easily be found with <code translate="no" dir="ltr">grep</code>. It is possible to capture the ongoing denial logs by running <code translate="no" dir="ltr">cat /proc/kmsg</code> or to capture denial logs from the previous boot by running <code translate="no" dir="ltr">cat /sys/fs/pstore/console-ramoops</code>.</p> <p>SELinux error messages are rate-limited after boot complete to avoid swamping the logs. To make sure you see all the relevant messages you can disable this by running <code translate="no" dir="ltr">adb shell auditctl -r 0</code>. </p>
+<p>With this output, manufacturers can readily identify when system users or components are in violation of SELinux policy. Manufacturers can then repair this bad behavior, either by changes to the software, SELinux policy, or both.</p> <p>Specifically, these log messages indicate what processes would fail under enforcing mode and why. Here is an example:</p> 
+<pre>
+avc: denied  { connectto } for  pid=2671 comm="ping" path="/dev/socket/dnsproxyd"
+scontext=u:r:shell:s0 tcontext=u:r:netd:s0 tclass=unix_stream_socket
+</pre> <p>Interpret this output like so:</p> <ul> <li> The <code translate="no" dir="ltr">{ connectto }</code> above represents the action being taken. Together with the <code translate="no" dir="ltr">tclass</code> at the end (<code translate="no" dir="ltr">unix_stream_socket</code>), it tells you roughly what was being done to what. In this case, something was trying to connect to a unix stream socket. </li>
+<li> The <code translate="no" dir="ltr">scontext (u:r:shell:s0)</code> tells you what context initiated the action. In this case this is something running as the shell. </li>
+<li> The <code translate="no" dir="ltr">tcontext (u:r:netd:s0)</code> tells you the context of the action’s target. In this case, that’s a unix_stream_socket owned by <code translate="no" dir="ltr">netd</code>. </li>
+<li> The <code translate="no" dir="ltr">comm="ping"</code> at the top gives you an additional hint about what was being run at the time the denial was generated. In this case, it’s a pretty good hint. </li>
+</ul> <p>Another example:</p> 
+<pre>adb shell su root dmesg | grep 'avc: '</pre> <p>Output:</p> 
+<pre>
+&lt;5&gt; type=1400 audit: avc:  denied  { read write } for  pid=177
+comm="rmt_storage" name="mem" dev="tmpfs" ino=6004 scontext=u:r:rmt:s0
+tcontext=u:object_r:kmem_device:s0 tclass=chr_file
+</pre> <p>Here are the key elements from this denial:</p> <ul> <li>
+<em>Action</em> - the attempted action is highlighted in brackets, <code translate="no" dir="ltr">read write</code> or <code translate="no" dir="ltr">setenforce</code>. </li>
+<li>
+<em>Actor</em> - The <code translate="no" dir="ltr">scontext</code> (source context) entry represents the actor, in this case the <code translate="no" dir="ltr">rmt_storage</code> daemon. </li>
+<li>
+<em>Object</em> - The <code translate="no" dir="ltr">tcontext</code> (target context) entry represents the object being acted upon, in this case kmem. </li>
+<li>
+<em>Result</em> - The <code translate="no" dir="ltr">tclass</code> (target class) entry indicates the type of object being acted upon, in this case a <code translate="no" dir="ltr">chr_file</code> (character device). </li>
+</ul> <h2 id="dumping_user_and_kernel_stacks">Dump user and kernel stacks</h2> <p>In some cases, the information contained in the event log isn't sufficient to pinpoint the origin of the denial. It is often useful to gather the call chain, including kernel and userspace, to better understand why the denial occurred.</p> <p>Recent kernels define a tracepoint named <code translate="no" dir="ltr">avc:selinux_audited</code>. Use Android <code translate="no" dir="ltr">simpleperf</code> to enable this tracepoint and capture the callchain.</p> <h3 id="supported_configuration">Supported configuration</h3> <ul> <li>Linux kernel &gt;= 5.10, in particular Android Common Kernel branches <a href="https://android.googlesource.com/kernel/common/+/refs/heads/android-mainline">mainline</a> and <a href="https://android.googlesource.com/kernel/common/+/refs/heads/android12-5.10">android12-5.10</a> are supported. The <a href="https://android.googlesource.com/kernel/common/+/refs/heads/android12-5.4">android12-5.4</a> branch is also supported. You may use <code translate="no" dir="ltr">simpleperf</code> to determine if the tracepoint is defined on your device: <code class="devsite-terminal devsite-click-to-copy" translate="no" dir="ltr">adb root &amp;&amp; adb shell simpleperf list | grep avc:selinux_audited</code>. For other kernel versions, you may cherry pick commits <a href="https://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/commit/">dd81662</a> and <a href="https://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/commit/">30969bc</a>. </li> <li>It should be possible to reproduce the event you are debugging. Boot time events aren't supported using simpleperf; however you may still be able to restart the service to trigger the event. </li> </ul> <h3 id="capturing_callchain">Capture the call chain</h3> <p>The first step is to record the event using <code translate="no" dir="ltr">simpleperf record</code>:</p> 
+<pre>
+adb shell -t "cd /data/local/tmp &amp;&amp; su root simpleperf record -a -g -e avc:selinux_audited"
+</pre> <p>Then, the event that caused the denial should be triggered. After that, the recording should be stopped. In this example, by using <code translate="no" dir="ltr">Ctrl-c</code>, the sample should have been captured:</p> 
+<pre>
+^Csimpleperf I cmd_record.cpp:751] Samples recorded: 1. Samples lost: 0.
+</pre> <p>Finally, <code translate="no" dir="ltr">simpleperf report</code> may be used to inspect the captured stacktrace. For instance: </p> 
+<pre>
+adb shell -t "cd /data/local/tmp &amp;&amp; su root simpleperf report -g --full-callgraph"
+[...]
+Children  Self     Command  Pid   Tid   Shared Object                                   Symbol
+100.00%   0.00%    dmesg    3318  3318  /apex/com.android.runtime/lib64/bionic/libc.so  __libc_init
+       |
+       -- __libc_init
+          |
+           -- main
+              toybox_main
+              toy_exec_which
+              dmesg_main
+              klogctl
+              entry_SYSCALL_64_after_hwframe
+              do_syscall_64
+              __x64_sys_syslog
+              do_syslog
+              selinux_syslog
+              slow_avc_audit
+              common_lsm_audit
+              avc_audit_post_callback
+              avc_audit_post_callback
+</pre> <p>The call chain above is a unified kernel and userspace call chain. It gives you with a better view of the code flow by starting the trace from userspace all the way down to the kernel where the denial happens. For more information on <code translate="no" dir="ltr">simpleperf</code>, see the <a href="https://android.googlesource.com/platform/system/extras/+/android17-release/simpleperf/doc/executable_commands_reference.md">Simpleperf Executable commands reference</a> </p> <h2 id="switching_to_permissive">Switch to permissive</h2> <aside class="caution"><b>Caution:</b> Permissive mode isn't supported on production devices. CTS tests confirm enforcing mode is enabled.</aside> <p>SELinux enforcement can be disabled with adb on userdebug or eng builds. To do so, first switch ADB to root by running <code translate="no" dir="ltr">adb root</code>. Then, to disable SELinux enforcement, run:</p> 
+<pre>
+adb shell setenforce 0
+</pre> <p>Or at the kernel command line (during early device bring-up):</p> 
+<pre>
+androidboot.selinux=permissive
+androidboot.selinux=enforcing
+</pre> <p>Or through bootconfig in Android 12:</p> 
+<pre>
+androidboot.selinux=permissive
+androidboot.selinux=enforcing
+</pre> <h2 id="using_audit2allow">Use audit2allow</h2> <aside class="note"> <b>Note:</b> <code translate="no" dir="ltr">audit2allow</code> isn't provided as part of AOSP anymore. Use the package supplied by your Linux distribution (package <code translate="no" dir="ltr">policycoreutils-python-utils</code> on Debian and Ubuntu). </aside> <p>The <code translate="no" dir="ltr">audit2allow</code> tool takes <code translate="no" dir="ltr">dmesg</code> denials and converts them into corresponding SELinux policy statements. As such, it can greatly speed SELinux development. </p>
+<p>To use it, run:</p> 
+<pre>
+adb pull /sys/fs/selinux/policy
+adb logcat -b events -d | audit2allow -p policy
+</pre> <aside class="note"><b>Note:</b> Running these commands doesn't change bugreport.txt because all logs are already there, including the ones from before the last reboot. On devices running an OTA or development flash, old and new violations are mixed until another reboot. To address this, reboot the device again or filter <code translate="no" dir="ltr">console-ramoops</code> and <code translate="no" dir="ltr">LAST_LOGCAT</code> from your bugreport. </aside> <p>Nevertheless, care must be taken to examine each potential addition for overreaching permissions. For example, feeding <code translate="no" dir="ltr">audit2allow</code> the <code translate="no" dir="ltr">rmt_storage</code> denial shown earlier results in the following suggested SELinux policy statement:</p> 
+<pre>
+#============= shell ==============
+allow shell kernel:security setenforce;
+#============= rmt ==============
+allow rmt kmem_device:chr_file { read write };
+</pre> <p>This would grant <code translate="no" dir="ltr">rmt</code> the ability to write kernel memory, a glaring security hole. Often the <code translate="no" dir="ltr">audit2allow</code> statements are only a starting point. After employing these statements, you may need to change the source domain and the label of the target, as well as incorporate proper macros, to arrive at a good policy. Sometimes the denial being examined should not result in any policy changes at all; rather the offending app should be changed.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/security/features/selinux/validate" class="_attribution-link">https://source.android.com/docs/security/features/selinux/validate</a>
+  </p>
+</div>

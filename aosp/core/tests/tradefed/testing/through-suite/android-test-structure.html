@@ -1,0 +1,63 @@
+<h1>AndroidTest.xml structure</h1>  <p>The overall structure of the module configuration follows a similar pattern to the regular Tradefed XML configuration but with some restrictions due to the fact that they run as part of a suite.</p> <h2 id="list_of_allowed_tags">List of allowed tags</h2> <p><code translate="no" dir="ltr">AndroidTest.xml</code> or more broadly module configuration can contain only the following XML tags: <code translate="no" dir="ltr">target_preparer</code>, <code translate="no" dir="ltr">multi_target_preparer</code>, <code translate="no" dir="ltr">test</code> and <code translate="no" dir="ltr">metrics_collector</code>.</p> <p>Although that list looks restrictive, it allows you to precisely define test module setup needs and the test to run.</p> <p>NOTE: See <a href="../../architecture/xml-config">Tradefed XML configuration</a> if you need a refresher on the different tags.</p> <p>Objects such as <code translate="no" dir="ltr">build_provider</code> or <code translate="no" dir="ltr">result_reporter</code> will raise a <code translate="no" dir="ltr">ConfigurationException</code> if attempted to be run from inside a module configuration. This is meant to avoid the expectation of these objects actually performing some task from within a module.</p> <h2 id="example_module_configuration">Example module configuration</h2> 
+<pre>&lt;configuration description="Config for CTS Gesture test cases"&gt;
+    &lt;option name="test-suite-tag" value="cts" /&gt;
+    &lt;target_preparer class="com.android.tradefed.targetprep.suite.SuiteApkInstaller"&gt;
+        &lt;option name="cleanup-apks" value="true" /&gt;
+        &lt;option name="test-file-name" value="CtsGestureTestCases.apk" /&gt;
+    &lt;/target_preparer&gt;
+    &lt;test class="com.android.tradefed.testtype.AndroidJUnitTest" &gt;
+        &lt;option name="package" value="android.gesture.cts" /&gt;
+        &lt;option name="runtime-hint" value="10m50s" /&gt;
+    &lt;/test&gt;
+&lt;/configuration&gt;
+</pre> <p>This configuration describes a test that requires <code translate="no" dir="ltr">CtsGestureTestCases.apk</code> to be installed and will run an instrumentation against the <code translate="no" dir="ltr">android.gesture.cts</code> package.</p> <h2 id="inclusion_tags_include_and_template-include">Inclusion tags <code translate="no" dir="ltr">&lt;include&gt;</code> and <code translate="no" dir="ltr">&lt;template-include&gt;</code>
+</h2> <p>Using of <code translate="no" dir="ltr">&lt;include&gt;</code> and <code translate="no" dir="ltr">&lt;template-include&gt;</code> in module configs is discouraged. They are not guaranteed to work as expected.</p> <h2 id="special_case_for_metrics_collector_tag">Special case for metrics_collector tag</h2> <p>The <code translate="no" dir="ltr">metrics_collector</code> is allowed but limited to the <a href="https://source.android.com/reference/tradefed/com/android/tradefed/device/metric/FilePullerLogCollector"><code translate="no" dir="ltr">FilePullerLogCollector</code></a> class in order to specify a given file or directory to be pulled and logged for the module. This is useful if you are leaving logs in a particular location and would like to automatically recover them.</p> <p>Example configuration:</p> 
+<pre>&lt;configuration description="Config for CTS UI Rendering test cases"&gt;
+    &lt;target_preparer class="com.android.tradefed.targetprep.suite.SuiteApkInstaller"&gt;
+        &lt;option name="cleanup-apks" value="true" /&gt;
+        &lt;option name="test-file-name" value="CtsUiRenderingTestCases.apk" /&gt;
+    &lt;/target_preparer&gt;
+    &lt;test class="com.android.tradefed.testtype.AndroidJUnitTest" &gt;
+        &lt;option name="package" value="android.uirendering.cts" /&gt;
+        &lt;option name="runtime-hint" value="11m55s" /&gt;
+        &lt;option name="runner" value="android.uirendering.cts.runner.UiRenderingRunner" /&gt;
+        &lt;option name="isolated-storage" value="false" /&gt;
+    &lt;/test&gt;
+
+    &lt;!-- Collect the files in the dump directory for debugging --&gt;
+    &lt;metrics_collector class="com.android.tradefed.device.metric.FilePullerLogCollector"&gt;
+        &lt;option name="directory-keys" value="/sdcard/UiRenderingCaptures" /&gt;
+        &lt;option name="collect-on-run-ended-only" value="true" /&gt;
+    &lt;/metrics_collector&gt;
+&lt;/configuration&gt;
+</pre> <h2 id="what_about_build_infos_or_downloads">What about build infos or downloads?</h2> <p>The definition of the allowed tags might give the incorrect impression that a module will not get any build information. <strong>This is not true</strong>.</p> <p>The build information is provided from the suite-level setup and will be shared by <strong>all</strong> the modules of the suite. This allows a single top-level setup for the suite in order to run all the modules part of the suite.</p> <p>For example, instead of each <a href="../../../../../compatibility/cts">Compatibility Test Suite (CTS)</a> module individually querying the device information, types, etc., the CTS suite-level setup (<code translate="no" dir="ltr">cts.xml</code>) does it once and each module will receive that information if they request it.</p> <p>In order for the objects in a module to receive the build information, they need to do the same as in regular Tradefed configuration: implement the <code translate="no" dir="ltr">IBuildReceiver</code> interface to receive the <code translate="no" dir="ltr">IBuildInfo</code>. See <a href="../through-tf/new-test-runner#testing_with_a_device">testing with device</a> for more details.</p> <h2 id="metadata_fields">Metadata fields</h2> <p>A large number of test modules include some <code translate="no" dir="ltr">metadata</code> specifications, which each have a unique goal.</p> <p>Example:</p> 
+<pre>  &lt;option name="config-descriptor:metadata" key="component" value="framework" /&gt;
+  &lt;option name="config-descriptor:metadata" key="parameter" value="instant_app" /&gt;
+  &lt;option name="config-descriptor:metadata" key="parameter" value="multi_abi" /&gt;
+  &lt;option name="config-descriptor:metadata" key="parameter" value="secondary_user" /&gt;
+</pre> <h3 id="component">Component</h3> <p>The <code translate="no" dir="ltr">component</code> metadata describes the general Android component the module intends to test. It doesn't have any direct impact on the test execution; it's primarily used for organizational purposes.</p> <p>The up-to-date list of allowed components for CTS is available in <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:cts/tools/cts-tradefed/tests/src/com/android/compatibility/common/tradefed/loading/CtsConfigLoadingTest.java">CtsConfigLoadingTest</a>. This test fails in presubmit if a non-existing component is added to a CTS module.</p> <p>You can filter a suite run based on the components using <code translate="no" dir="ltr">module-metadata-include-filter</code> and <code translate="no" dir="ltr">module-metadata-exclude-filter</code>.</p> <p>Example:</p> 
+<pre>  --module-metadata-include-filter component framework
+</pre> <p>This example only runs the test module annotated with the <code translate="no" dir="ltr">framework</code> component.</p> <h3 id="parameter">Parameter</h3> <p>The <code translate="no" dir="ltr">parameter</code> metadata is informational and impacts the test execution. It specifies which Android mode the test module applies to. In this case, <em>modes</em> are limited to high level Android modes, such as <code translate="no" dir="ltr">instant apps</code>, <code translate="no" dir="ltr">secondary users</code> or <code translate="no" dir="ltr">different abis</code>.</p> <p>During the suite run, if the mode applies to the test, several variation of the test module are created based on the mode. Each variation runs similar tests but under different modes.</p> <ul> <li>
+<code translate="no" dir="ltr">instant_app</code>: Create a variation of the tests that install APKs as instant apps.</li> <li>
+<code translate="no" dir="ltr">multi_abi</code>: Create a variation of the tests for each ABI supported by the device.</li> <li>
+<code translate="no" dir="ltr">secondary_user</code>: Create a variation of the tests that install APKs and run tests as a secondary user.</li> </ul> <h2 id="metric_collecting_and_post-processing_for_performance_test_modules">Metric collecting and post-processing for performance test modules</h2> <p>For performance test modules, module-level <code translate="no" dir="ltr">metrics_collector</code> and <code translate="no" dir="ltr">metric_post_processor</code> are allowed as they are essential to performance tests. The module-level metric collectors and post-processors can be module specific. It is not recommended to specify post-processors at both top-level and module-level.</p> <p>A performance test module configuration must include the <code translate="no" dir="ltr">test-type</code> metadata with value <code translate="no" dir="ltr">performance</code>, like: <code translate="no" dir="ltr">xml
+    &lt;option name="config-descriptor:metadata" key="test-type" value="performance" /&gt;</code> Without this, if a test config includes <code translate="no" dir="ltr">metric_collector</code> other than <a href="https://source.android.com/reference/tradefed/com/android/tradefed/device/metric/FilePullerLogCollector"><code translate="no" dir="ltr">FilePullerLogCollector</code></a> or any <code translate="no" dir="ltr">metric_post_processor</code>, the test fails in presubmit.</p> <h3 id="example_performance_test_module_configuration">Example performance test module configuration:</h3> 
+<pre>&lt;configuration description="Runs sample performance test."&gt;
+    &lt;!-- Declare as a performance test module --&gt;
+    &lt;option name="config-descriptor:metadata" key="test-type" value="performance" /&gt;
+    &lt;option name="test-tag" value="hello-world-performance-test" /&gt;
+    &lt;test class="com.android.tradefed.testtype.HostTest" &gt;
+        &lt;option name="class" value="android.test.example.helloworldperformance.HelloWorldPerformanceTest" /&gt;
+    &lt;/test&gt;
+    &lt;!-- Add module-level post processor MetricFilePostProcessor --&gt;
+    &lt;metric_post_processor class="com.android.tradefed.postprocessor.MetricFilePostProcessor"&gt;
+        &lt;option name="aggregate-similar-tests" value="true" /&gt;
+        &lt;option name="enable-per-test-log" value="false" /&gt;
+    &lt;/metric_post_processor&gt;
+&lt;/configuration&gt;
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/tradefed/testing/through-suite/android-test-structure" class="_attribution-link">https://source.android.com/docs/core/tests/tradefed/testing/through-suite/android-test-structure</a>
+  </p>
+</div>

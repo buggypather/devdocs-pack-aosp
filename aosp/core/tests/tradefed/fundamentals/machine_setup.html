@@ -1,0 +1,17 @@
+<h1>TF development environment</h1>  <p> Trade Federation is distributed with the AOSP and uses the Android build system to create its binary. Make sure you've <a href="../../../../setup/initializing">established a build environment</a> to compile and run packages from the Android source tree. </p> <h2 id="build-tradefed">Build Tradefed</h2> <p> From the root directory of the Android source tree: </p> 
+<pre>
+source ./build/make/envsetup.sh
+lunch &lt;device-target&gt;
+make tradefed-all -j8
+</pre> <p> See <a href="../development">Developing Tradefed</a> for more details about how to set up your environment for coding in Tradefed. </p> <h2 id="run-from-command-line">Run from command line</h2> <p> Tradefed requires the <code translate="no" dir="ltr">adb</code> utility in your <code translate="no" dir="ltr">$PATH</code>: </p> 
+<pre>
+export PATH=$PATH:&lt;path/to/adb&gt;
+</pre> <p> If Tradefed was built, the <code translate="no" dir="ltr">tradefed.sh</code> launcher script is accessible from your path. To launch the <a href="console">Trade Federation Console</a>: </p> 
+<pre>
+tradefed.sh
+</pre> <p> Now your environment is set up for Trade Federation. </p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/tradefed/fundamentals/machine_setup" class="_attribution-link">https://source.android.com/docs/core/tests/tradefed/fundamentals/machine_setup</a>
+  </p>
+</div>

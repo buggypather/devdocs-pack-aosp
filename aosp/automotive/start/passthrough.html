@@ -1,0 +1,16 @@
+<h1>Emulator USB passthrough guide</h1> <p>This page describes how to enable Bluetooth peripherals with USB passthrough for the AAOS emulator.</p> <p>Use The Asus USB-BT400 Bluetooth 4.0 USB adapter to set up the USB passthrough connection. This applies for Android 13 and higher.</p> <ol> <li>Connect the dongle to the Linux host machine.</li> <li>
+<p>To confirm the device functions as intended, run the <code translate="no" dir="ltr">lsusb</code> command. Values for the <code translate="no" dir="ltr">VendorId(0x0b05)</code> and <code translate="no" dir="ltr">ProductId (0x17cb)</code> of the Asus BT-400 adapter are displayed.</p> 
+<pre>$ lsusb
+
+Bus 001 Device 010: ID 0b05:17cb ASUSTek Computer, Inc. Broadcom BCM20702A0 Bluetooth
+</pre>
+</li> <li>
+<p>Launch the emulator with the usb-passthrough information.</p> 
+<pre>$ emulator -cores 4 -memory 6144 -usb-passthrough vendorid=0x0b05,productid=0x17cb
+</pre>
+</li> </ol> <p>The dongles tested are:</p> <ul> <li><a href="https://www.asus.com/us/Networking-IoT-Servers/Adapters/All-series/USBBT400/">ASUS USB-BT400 USB Adapter</a></li> </ul> <p>Other dongles may work, however, not tested.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/start/passthrough" class="_attribution-link">https://source.android.com/docs/automotive/start/passthrough</a>
+  </p>
+</div>

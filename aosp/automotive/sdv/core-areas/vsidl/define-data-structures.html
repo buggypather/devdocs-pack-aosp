@@ -1,0 +1,81 @@
+<h1>Define messages and RPC services</h1>  <p>VSIDLC's type system operates at two levels: Protobuf and VSIDL. Protobuf is used to define messages that are exchanged between the publisher and subscribers defined by VSIDL. VSIDL references types declared by protobuf.</p> <p>This page explains how to define messages and remote procedure call (RPC) methods for calling and responding to requests.</p> <aside class="note"><strong>Note:</strong><span> Before reading this page, you should be familiar with protocol buffers. If you aren't, see the <a href="https://protobuf.dev/">Protocol buffers documentation</a>.</span></aside> <h2 id="define-messages">Define messages</h2> <p>This section explains how messages are defined in VSIDL and protobuf.</p> <p>The following code sample defines a <code translate="no" dir="ltr">TirePressure</code> message:</p> 
+<pre>syntax = "proto3";
+
+package com.android.sdv.sample.vsidl;
+
+message TirePressure {
+  uint32 pressure = 1;
+}
+</pre>
+<aside class="note"><strong>Note:</strong><span> To ensure forward and backward compatibility, adhere to the <a href="https://protobuf.dev/best-practices/dos-donts/">protobuf best practices</a>.</span></aside> <h2 id="define-services">Define RPC services</h2> <p>In protobuf, an RPC service defines a set of methods that can be called remotely as though they were local function calls. The following example defines a request and response message types and the RPC service method used to make a request and receive a response:</p> 
+<pre>syntax = "proto3";
+
+package com.google.sdv;
+
+enum SeatHeatingLevel {
+  OFF = 0;
+  LOW = 1;
+  HIGH = 2;
+}
+
+// Request to set seat heating
+message SetSeatHeatingRequest {
+  enum Seat {
+    DRIVER = 0;
+    PASSENGER = 1;
+  }
+  Seat seat = 1;
+  SeatHeatingLevel level = 2;
+}
+
+// Response to setting seat heating
+message SetSeatHeatingResponse {
+  bool success = 1;
+}
+
+// Seat heating service
+service SeatHeatingService {
+  rpc SetSeatHeating (SetSeatHeatingRequest) returns (SetSeatHeatingResponse);
+}
+</pre> <p>Where:</p> <ul> <li>
+<code translate="no" dir="ltr">service</code> identifies a collection of related RPC methods.</li> <li>
+<code translate="no" dir="ltr">rpc</code> identifies a single RPC method with input and output message types (<code translate="no" dir="ltr">SetSeatHeatingRequest</code> and <code translate="no" dir="ltr">SetSeatHeatingResponse</code>, respectively).</li> </ul> <h2 id="android-bp">Configure build system integration</h2> <p>To enable <code translate="no" dir="ltr">vsidlc</code> to discover your protobuf definitions and allow the Android build system to compile them, you must include an <code translate="no" dir="ltr">Android.bp</code> file in the topmost folder of your catalog directory.</p> <p>This file must define a <code translate="no" dir="ltr">rust_protobuf</code> target that groups your protobuf files (with a <code translate="no" dir="ltr">.proto</code> extension). Every file in your catalog must be accounted for in a filegroup. If there are multiple filegroups in the <code translate="no" dir="ltr">Android.bp</code> file, <code translate="no" dir="ltr">vsidlc</code> takes the first one.</p> <aside class="caution"><strong>Caution:</strong><span> Because <code translate="no" dir="ltr">vsidlc</code> uses a regex-based parser rather than a full Blueprint parser, you must follow a strict template. Notably, Defaults aren't supported.</span></aside> <p>The following example shows a typical <code translate="no" dir="ltr">rust_protobuf</code> target for a VSIDL catalog:</p> 
+<pre>  rust_protobuf {
+      name: "liboem_vehicle_messages",
+      crate_name: "oem_vehicle_messages",
+      source_stem: "oem_vehicle_messages_source",
+      protos: [
+          "**/*.proto",
+      ],
+      rustlibs: [
+          "libvsidl_v1_proto_rs",
+      ],
+      proto_flags: [
+          "-I external/protobuf/src",
+      ],
+      apex_available: [
+          "//apex_available:platform",
+          "//apex_available:anyapex",
+      ],
+      vendor_available: true,
+      product_available: true,
+      min_sdk_version: "35",
+  }
+
+  filegroup {
+      name: "catalog_oem_vehicle_messages",
+      srcs: ["**/*"],
+  }
+</pre> <p>Where:</p> <ul> <li>
+<code translate="no" dir="ltr">name</code>: A unique identifier for the build target. By convention, this starts with <code translate="no" dir="ltr">lib</code>.</li> <li>
+<code translate="no" dir="ltr">crate_name</code>: The name of the generated Rust crate.</li> <li>
+<code translate="no" dir="ltr">protos</code>: A list of all protobuf files in the catalog. Globs like <code translate="no" dir="ltr">**/*.proto</code> are supported.</li> <li>
+<code translate="no" dir="ltr">rustlibs</code>: Must include <code translate="no" dir="ltr">libvsidl_v1_proto_rs</code> to provide the standard SDV annotations and types.</li> <li>
+<code translate="no" dir="ltr">proto_flags</code>: Used to specify include paths. <code translate="no" dir="ltr">-I external/protobuf/src</code> is often required to resolve standard protobuf types.</li> <li>
+<code translate="no" dir="ltr">min_sdk_version</code>: Set to <code translate="no" dir="ltr">"35"</code> (Android 15) to declare compatibility with the corresponding SDV platform APIs and Rust toolchain requirements.</li> <li>
+<code translate="no" dir="ltr">filegroup</code>: Required for build-time discovery. Include every VSIDL, protobuf, and <code translate="no" dir="ltr">Android.bp</code> file in <code translate="no" dir="ltr">srcs</code> so the build system can copy them into the compilation sandbox.</li> </ul> <h2 id="whats-next">What's next</h2> <p>To continue implementing your service architecture, see <a href="define-service-arch">Define service architecture</a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/core-areas/vsidl/define-data-structures" class="_attribution-link">https://source.android.com/docs/automotive/sdv/core-areas/vsidl/define-data-structures</a>
+  </p>
+</div>

@@ -1,0 +1,132 @@
+<h1>Debug SDV</h1>  <p>This guide provides an overview of the essential tools and techniques for debugging services and applications that run on the SDV platform.</p> <h2 id="connect-device">Connect to the device</h2> <p>The primary tool for connecting to and interacting with the device is the <strong>Android Debug Bridge (adb)</strong>. Verify that <code translate="no" dir="ltr">adb</code> is in your system's path.</p> <h3 id="connect-network">Connect using the network</h3> <p>If the device is on the same network and you know its IP address, you can connect by Ethernet. Our system exclusively uses network connections for adb:</p> 
+<pre># Connect to the device using its IP address and default port
+adb connect &lt;device_ip_address&gt;:5555
+</pre> <h3 id="connect-multiple-devices">Connect to multiple devices</h3> <p>To manage multiple devices from a single workstation, you can connect to them through different IP addresses. If you run multiple VMs on a single host, you need to assign different ports to each device. This requires configuring the adb daemon on each SDV device to listen on a unique port, for example, 5555 for the first device and 5556 for the second. You can also configure the host to forward those ports to different guests:</p> 
+<pre># Connect to the first device
+adb connect &lt;device_1_ip_address&gt;:5555
+
+# Connect to a second device
+adb connect &lt;device_2_ip_address&gt;:5555
+
+# Connect to a second VM on first device on different port
+adb connect &lt;device_1_ip_address&gt;:5556
+
+# List all connected devices to verify
+adb devices
+</pre> <p>When you run subsequent <code translate="no" dir="ltr">adb</code> commands, you can target a specific device by using the <code translate="no" dir="ltr">-s</code> flag with its full address (<code translate="no" dir="ltr">ip:port</code>):</p> 
+<pre># Run a shell command on the second VM on first device in the above example
+adb -s &lt;device_1_ip_address&gt;:5556 shell
+</pre> <h2 id="view-logs">View logs</h2> <p>When a service fails or behaves unexpectedly, check the logs first.</p> <h3 id="use-logcat">Use logcat (Android logs)</h3> <p><code translate="no" dir="ltr">logcat</code> displays logs from system services, agents, and service bundles:</p> 
+<pre># View all logs in real-time
+adb logcat
+
+# Filter logs by a specific tag (e.g., the name of your service)
+adb logcat -s MyServiceTag
+
+# Filter logs by priority (V: Verbose, D: Debug, I: Info, W: Warn, E: Error, F: Fatal)
+# This shows only Error and Fatal messages for a specific tag
+adb logcat MyServiceTag:E *:S
+
+# Clear old logs before viewing new ones
+adb logcat -c &amp;&amp; adb logcat
+
+# Show all logs and return
+adb logcat -d
+
+# Color logs by level
+adb logcat -v color
+
+# Show timestamps as time since boot
+adb logcat -v monotonic
+</pre> <h3 id="use-dmesg">Use dmesg (kernel logs)</h3> <p><code translate="no" dir="ltr">dmesg</code> displays logs from the Linux kernel. This is crucial for debugging the following:</p> <ul> <li>Hardware and driver issues</li> <li>Kernel panics</li> <li>SELinux denials (<code translate="no" dir="ltr">avc: denied</code>) - also displayed in logcat</li> </ul> 
+<pre># View all kernel messages
+adb shell dmesg
+
+# Follow kernel messages in real-time
+adb shell dmesg -w
+</pre> <h3 id="access-logs-cuttlefish">Access logs on Cuttlefish</h3> <p>When you run on a Cuttlefish virtual device, you can directly access the log files from the host machine's file system. This is especially useful if <code translate="no" dir="ltr">adb</code> is not available. When you start Cuttlefish, it outputs all debugging paths, and you can also look them up using <code translate="no" dir="ltr">cvd fleet</code> for all running instances.</p> <aside class="note"><strong>Note:</strong><span> Typically, you can find the Cuttlefish instance's logs in the <code translate="no" dir="ltr">cuttlefish/instances/cvd-1/logs/</code> directory within your home directory. You need to adapt <code translate="no" dir="ltr">cvd-1</code> to <code translate="no" dir="ltr">cvd-X</code> for the instance you want to debug:</span></aside> <ul> <li>
+<strong>Logcat (Android logs):</strong> <code translate="no" dir="ltr">cuttlefish/instances/cvd-1/logs/logcat</code>
+</li> <li>
+<strong>Kernel logs:</strong> <code translate="no" dir="ltr">cuttlefish/instances/cvd-1/logs/kernel.log</code>
+</li> <li>
+<strong>Cuttlefish launcher logs:</strong> <code translate="no" dir="ltr">cuttlefish/instances/cvd-1/logs/launcher.log</code> (useful for debugging the Cuttlefish environment itself)</li> </ul> <p>You can use standard command-line tools such as <code translate="no" dir="ltr">cat</code>, <code translate="no" dir="ltr">less</code>, or <code translate="no" dir="ltr">tail -f</code> to view these files in real time.</p> <h2 id="interact-shell">Interact with the shell and file system</h2> <p>Gain shell access to run commands directly on the device, check process status, and navigate the file system:</p> 
+<pre># Open an interactive shell on the device
+adb shell
+
+# From within the shell, you can check running processes
+ps -A
+
+# Or check the status of a specific service managed by init
+getprop init.svc.&lt;service_name&gt;
+</pre> <h3 id="perform-file-system-operations">Perform file system operations</h3> <p>Use <code translate="no" dir="ltr">adb push</code> and <code translate="no" dir="ltr">adb pull</code> to move files between your host machine and the device. Use this to deploy test scripts, update configuration, or retrieve crash dumps:</p> 
+<pre># Push a file from your computer to the device
+adb push my_local_file.txt /data/local/tmp/
+
+# Pull a file from the device to your computer
+adb pull /data/tombstones/tombstone_00 .
+</pre> <h2 id="debug-native-applications">Debug applications (C++/Rust)</h2> <p>You can debug applications either online or offline.</p> <h3 id="lldb-live-debugging">Use lldb for live debugging</h3> <p>Follow these steps to debug a service in real-time using <code translate="no" dir="ltr">lldb</code> (to attach the debugger from Android Studio for Platform, see <a href="../../getting-started/ide-setup#debug-test">Debug and test</a> and <a href="https://developer.android.com/studio/platform/debug">Debug platform code</a>):</p> <ol> <li>
+<p>Restart <code translate="no" dir="ltr">adb</code> with root permissions (required for port forwarding):</p> 
+<pre>adb root
+</pre>
+</li> <li>
+<p>If a binary has debugging symbols, push an unstripped version from <code translate="no" dir="ltr">out/target/product/[SDV_FLAVOR]/symbols/[PARTITION]/bin/[EXECUTABLE]</code>. For example, to upload <code translate="no" dir="ltr">rpcagent</code> from <code translate="no" dir="ltr">system_ext</code> and <code translate="no" dir="ltr">sdv_core_cf</code>, run:</p> 
+<pre>adb push out/target/product/sdv_core_cf/symbols/system_ext/bin/rpcagent /data/local/tmp
+</pre>
+</li> <li>
+<p>Connect with the LLDB client using the <code translate="no" dir="ltr">lldbclient.py</code> convenience script:</p> 
+<pre># Run and connect a binary on device, run on host:
+lldbclient.py -r /data/local/tmp/rpcagent
+
+# Connect to an existing process with PID 2759
+lldbclient.py -p 2759
+</pre> <p>This script connects <code translate="no" dir="ltr">lldb</code> remotely. For all available flags, run <code translate="no" dir="ltr">lldbclient.py --help</code>.</p>
+</li> </ol> <h3 id="analyze-crash-dumps">Analyze crash dumps (tombstones)</h3> <p>When a service crashes, a <em>tombstone</em> file is generated in <code translate="no" dir="ltr">/data/tombstones/</code>. The file contains a stack trace, memory map, and other crucial information.</p> <p>Pull the tombstone file, then use a symbol-aware tool (like <code translate="no" dir="ltr">lldb</code> or a dedicated script) to analyze it with the unstripped version of the binary.</p> <h2 id="analyze-performance">Analyze performance</h2> <p>SDV supports multiple tools for performance measurements.</p> <h3 id="check-cpu-memory">Check CPU and memory use</h3> <ul> <li>
+<p><code translate="no" dir="ltr">top</code>: Provides a real-time view of running processes sorted by CPU usage.</p> 
+<pre>adb shell top -m 10  # Show top 10 processes
+</pre>
+</li> <li>
+<p><code translate="no" dir="ltr">procrank</code>: Provides a detailed breakdown of memory usage for a specific process or the entire system.</p> 
+<pre>adb shell procrank
+</pre>
+</li> </ul> <h3 id="dumpsys-service-state">Use dumpsys for service state</h3> <p><code translate="no" dir="ltr">dumpsys</code> is a powerful tool to query the internal state of any Android system service.</p> 
+<pre># List all available services
+adb shell dumpsys -l
+
+# Dump the state of a specific service or agent
+adb shell dumpsys &lt;service_name&gt;
+</pre> <h3 id="torq-performance">Use torq for performance analysis</h3> <p><a href="../../../tools/torq-cli">torq</a> is a command-line tool that simplifies profiling and tracing tasks on Android. It allows running Simpleperf, Perfetto, and other typical tasks during system performance analysis.</p> <h3 id="perfetto-tracing">Use Perfetto for tracing</h3> <p><a href="https://perfetto.dev/">Perfetto</a> is the standard tool for system-wide tracing on Android. Perfetto lets you record system events, app-level trace points, and performance counters, and visualize them on a timeline.</p> <p><strong>Key steps:</strong></p> <ol> <li>Add trace points in your C++ or Rust code: <ul> <li>
+<strong>C++:</strong> Use the Perfetto SDK with <code translate="no" dir="ltr">TRACE_EVENT</code> macros.</li> <li>
+<strong>Rust:</strong> Use the <code translate="no" dir="ltr">tracing</code> crate, which emits ATrace events compatible with Perfetto.</li> </ul>
+</li> <li>Create a textproto configuration file to specify datasources (for example, <code translate="no" dir="ltr">ftrace</code>, <code translate="no" dir="ltr">track_event</code>), categories, and tags.</li> <li>Use the <code translate="no" dir="ltr">record_android_trace</code> script (<code translate="no" dir="ltr">external/perfetto/tools/record_android_trace</code>) with your configuration file to capture the trace from the device.</li> <li>Open the generated trace file in the <a href="https://ui.perfetto.dev/">Perfetto Web UI</a> to analyze system behavior, identify bottlenecks, and understand service interactions.</li> </ol> <p>For detailed instructions on instrumentation, configuration, and collection, see <a href="tracing">Use tracing to gain insights into system performance</a>.</p> <h3 id="simpleperf-profiling">Use Simpleperf for profiling</h3> <p><a href="https://android.googlesource.com/platform/system/extras/+/master/simpleperf/doc/README.md">Simpleperf</a> is a versatile command-line tool for performance profiling on Android, similar to Linux perf.</p> <p>Common use cases:</p> <ul> <li>CPU profiling: Identify functions consuming the most CPU time.</li> <li>Off-CPU analysis: Analyze why threads are sleeping or blocked.</li> <li>Hardware counters: Access hardware performance counters.</li> </ul> <p>Example commands:</p> 
+<pre># Go to simpleperf scripts
+cd system/extras/simpleperf/scripts
+
+# Profile system for 20 seconds and record call graph
+./app_profiler.py --system_wide -r "--call-graph fp --duration 20"
+
+# Record a profile for a specific process (PID 1)
+./app_profiler.py --pid 1 -r "--call-graph fp --duration 5"
+
+# Pull the profile data
+adb pull /data/local/tmp/perf.data .
+
+# Generate a report with symbol resolution
+./report_html.py --add_source_code --source_dirs $ANDROID_BUILD_TOP --add_disassembly -o report.html
+</pre> <p>Simpleperf offers many more events and options. Refer to the <a href="https://developer.android.com/ndk/guides/simpleperf">Simpleperf guide</a> for comprehensive documentation.</p> <h2 id="selinux-denials">SELinux denials</h2> <p><strong>Symptom</strong>: Your service fails to start, access a file, or use a capability, and you see an <code translate="no" dir="ltr">avc: denied</code> message in <code translate="no" dir="ltr">dmesg</code> or <code translate="no" dir="ltr">logcat</code>.</p> 
+<pre>[ 123.456] avc: denied { read } for pid=789 comm="my_service" name="some_file" dev="sda1" ino=123 scontext=u:r:my_service_t:s0 tcontext=u:object_r:some_file_t:s0 tclass=file permissive=0
+</pre> <p><strong>Quick debug (for development only)</strong></p> <aside class="warning"><strong>Warning:</strong><span> Never ship a device in permissive mode. This is for debugging only.</span></aside><aside class="note"><strong>Note:</strong><span> We highly recommend to enabling SELinux from early development. It can highlight issues that require architectural changes, for example, <code translate="no" dir="ltr">neverallow</code> rules not permitting a specific approach.</span></aside> <p>You can temporarily disable the SELinux enforcement to see if the issue is resolved. This confirms that the problem is due to a missing SELinux policy rule.</p> 
+<pre># Disabling SELinux requires root permission
+adb root
+
+# Set SELinux to permissive mode
+adb shell setenforce 0
+
+# Check the current mode (should return "Permissive")
+adb shell getenforce
+</pre>
+<aside class="note"><strong>Note:</strong><span> Cuttlefish allows setting the guest to permissive mode from the boot sequence if you create the VM with <code translate="no" dir="ltr">cvd create --guest_enforce_security=false</code>.</span></aside> <p><strong>Fix</strong>: The <a href="../../../../security/features/selinux/validate#using_audit2allow"><code translate="no" dir="ltr">audit2allow</code></a> tool from the Android source tree on the denial message. This generates the correct <code translate="no" dir="ltr">.te</code> policy rule to add to your device's SELinux configuration.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/core/debugging" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/core/debugging</a>
+  </p>
+</div>

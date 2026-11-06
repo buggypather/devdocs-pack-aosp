@@ -1,0 +1,65 @@
+<h1>vvmconfig and vvmtruststore</h1>  <p>The SDV Service Discovery agent needs two sets of configuration information:</p> <ol> <li>The Vehicle Virtual Machine Configuration (VVM Config), which contains information common to all vehicles of the same model or platform.</li> <li>The Vehicle Virtual Machine Trust Store (VVM Trust Store), which contains information unique to that particular vehicle.</li> </ol> <figure> <img src="https://source.android.com/static/docs/automotive/sdv/images/vvmconfig_vvmtruststore.svg" alt="vvmtruststore and vvmconfig contents" width="600" class="android-image-dark-theme-background"> <figcaption><b>Figure 1:</b> vvmtruststore and vvmconfig contents.</figcaption> </figure> <h2 id="vvmconfig">Vehicle VM Config</h2> <p>The Vehicle VM Config is a file named <code translate="no" dir="ltr">vvmconfig[.SUFFIX]</code> located in the <code translate="no" dir="ltr">/etc</code> directory of the <code translate="no" dir="ltr">product</code> partition. The <code translate="no" dir="ltr">vvmconfig</code> file suffix is optional and has no meaning to Android SDV. Partners can add any information in the <code translate="no" dir="ltr">vvmconfig</code> suffix they find useful, such as the vehicle platform name or the product name.</p> <p>If the system has multiple Vehicle VM Config files, the bootloader should specify the chosen file using the <code translate="no" dir="ltr">androidboot.sdv.vvmconfig</code> kernel parameter. This parameter should contain only the filename (e.g., <code translate="no" dir="ltr">vvmconfig.example</code>), without any path component. For example, <code translate="no" dir="ltr">/etc/vvmconfig.example</code> would be an invalid value.</p> <p>The Vehicle VM Config file is provided in a <a href="https://datatracker.ietf.org/doc/html/rfc7049">CBOR</a> format defined in the following <a href="https://datatracker.ietf.org/doc/html/rfc8610">CDDL</a> fragment:</p> 
+<pre>VvmConfig = [
+  version: 1,
+  ; Public key of the UDS root provisioning authority
+  udsCaPub: COSE_Key,
+  ; Revocation list of intermediate CAs of UDS certificates
+  udsCaRevList: KeyList,
+  policies: DicePolicies,
+  vmConfigs: VmConfigMap,
+]
+
+DicePolicies = [+ DicePolicy]
+
+KeyList = [* COSE_Key]
+
+; Maps a VM instance name to its configuration
+VmConfigMap = {
+  VmInstanceName =&gt; VmConfig
+}
+
+VmConfig = [
+  ; IP addresses of this virtual machine.
+  ips: [+ IpAndPort],
+  ; Index of the DICE policy for the Android SDV VM DICE chain.
+  android: PolicyIndex,
+  ; Index of the DICE policy for the Secure World DICE chain used by the Android SDV VM.
+  secureWorld: PolicyIndex,
+]
+
+IpAndPort = [
+    ip: IpAddress,
+    ; If not specified, the default Service Discovery agent port will be used.
+    ? port: uint
+]
+
+IpAddress = ipv4-address / ipv6-address
+
+; Index of a DicePolicy in the DicePolicies array.
+PolicyIndex = uint
+
+; The VM Name (as defind in the VVM Config). This must comply with VM Name identifier
+; definition in Service Identity docs.
+VmInstanceName = tstr
+
+; INCLUDE /hardware/interfaces/security/authgraph/aidl/android/hardware/security/authgraph/DicePolicy.cddl for: DicePolicy
+</pre> <p><code translate="no" dir="ltr">COSE_Key</code> is defined in <a href="https://datatracker.ietf.org/doc/html/rfc8152">RFC 8152</a>, <em>CBOR Object Signing and Encryption (COSE)</em>.</p> <p><code translate="no" dir="ltr">ipv4-address</code> and <code translate="no" dir="ltr">ipv6-address</code> are defined in <a href="https://datatracker.ietf.org/doc/html/rfc9164">RFC 9164</a>, <em>Concise Binary Object Representation (CBOR) Tags for IPv4 and IPv6 Addresses and Prefixes</em>.</p> <h3 id="dice-policies">DICE Policies</h3> <p>The OEM provides Android SDV with a collection of <a href="https://android.googlesource.com/platform/system/secretkeeper/+/ea4bb28d13d6e723514603d6fb7ca6a19b8ad558/dice_policy/README.md">DICE policies</a> defining the constraints that valid (and trustworthy) DICE chains must comply with. This policy collection must cover all the DICE chains related to all SDV VMs in the vehicle.</p> <p>All Secure World DICE chains must fail an Android SDV DICE Policy. Conversely, all Android SDV DICE chains must fail a Secure World DICE policy. This means that it must not be possible to successfully pass an Android SDV DICE Chain as a Secure World DICE chain and vice-versa.</p> <h2 id="vvmtruststore">Vehicle VM Trust Store</h2> <p>The Vehicle VM Trust Store contains the UDS public keys of all participants of the SDV Secure Mesh. It's an unsigned partition named <code translate="no" dir="ltr">vvmtruststore</code> with an ext4 file system and mounted on the <code translate="no" dir="ltr">/vvmtruststore</code> directory. Those public keys can optionally be certified by the root authority specified in the VVM Config.</p> <p>This partition is mounted either as read-and-write, when the Android HLOS is booted with SDV Boot Mode <code translate="no" dir="ltr">unlocked</code>, or as read-only, when the SDV Boot Mode is <code translate="no" dir="ltr">locked</code>. It may have up to two files: <code translate="no" dir="ltr">uds_pubs</code> and <code translate="no" dir="ltr">uds_certs</code>.</p> <p><code translate="no" dir="ltr">uds_pubs</code> is a <a href="https://datatracker.ietf.org/doc/html/rfc7049">CBOR</a> file containing all the UDS public keys from all the ECUs that are hosting SDV VMs in the current SDV Mesh. Those UDS public keys are collected from the DICE chains provided by the peer SDV VMs during provisioning. This file is created by the <code translate="no" dir="ltr">sdv_provisioning_tool</code> during the <a href="provisioning#factory-provisioning">provisioning flow</a>.</p> <p><code translate="no" dir="ltr">uds_certs</code> is a <a href="https://datatracker.ietf.org/doc/html/rfc7049">CBOR</a> file defined in the following <a href="https://datatracker.ietf.org/doc/html/rfc8610">CDDL</a> fragment:</p> 
+<pre>UdsCertificates = [
+  1, ; version
+  *   UdsCertChain
+]
+
+UdsCertChain = [
+  2* X509Certificate ; Root -&gt; ... -&gt; Leaf. "Root" is the vendor self-signed
+                     ; cert, "Leaf" contains UDS_Public. There may also be
+                     ; intermediate certificates between Root and Leaf.
+]
+
+; A bstr containing a DER-encoded X.509 certificate.
+X509Certificate = bstr
+</pre> <p><code translate="no" dir="ltr">uds_certs</code> holds the CA-signed UDS certificates only of the UDS Public keys of the local device (as opposed to all keys listed in <code translate="no" dir="ltr">uds_pubs</code>). This file must be provided by the OEM and is mandatory only for the parts replacement provisioning flow.</p> <p>The UDS certificates in the <code translate="no" dir="ltr">uds_certs</code> must follow the <a href="https://android.googlesource.com/platform//hardware/interfaces/+/HEAD/security/rkp/README.md#x_509-certificates">specifications</a> defined in the Remote Provisioning HAL. Additionally, the digital signatures signing certificates must be Ed25519 or ECDSA with curves P-256 or P-384. Following the Remote Provisioning HAL means, in particular, that the leaf certificate of the UDS cert chain should have <code translate="no" dir="ltr">BasicConstraints</code> and <code translate="no" dir="ltr">KeyUsage</code> as specified for the UDS certificate, while all intermediate and root certificates should follow the rules for CA certificates.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/core/vm-attestation/config-and-truststore" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/core/vm-attestation/config-and-truststore</a>
+  </p>
+</div>

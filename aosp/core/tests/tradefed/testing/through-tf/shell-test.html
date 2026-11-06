@@ -1,0 +1,18 @@
+<h1>Write a shell test in Trade Federation</h1>  <p>This page describes how to write a shell test. If a test can be done with a shell script, you can run it with <a href="https://android.googlesource.com/platform/tools/tradefederation/+/refs/heads/android17-release/test_framework/com/android/tradefed/testtype/binary/ExecutableHostTest.java"><code translate="no" dir="ltr">ExecutableHostTest</code></a>. <code translate="no" dir="ltr">ExecutableHostTest</code> supports test filtering and test sharding.</p> <h2 id="writing">Write a shell test</h2> <p>Your main shell script runs on the host. Other scripts or binaries to run on the device and the data files required must be pushed to the device first. This can be done as part of the main script or using <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:tools/tradefederation/core/test_framework/com/android/tradefed/targetprep/PushFilePreparer.java"><code translate="no" dir="ltr">PushFilePreparer</code></a>.</p> <p>If the test has device binary modules that should be installed alongside the test, specify them with <a href="https://ci.android.com/builds/submitted/6873301/linux/latest/view/sh.html#sh_test.data_device_bins"><code translate="no" dir="ltr">data_device_bins</code></a> property.</p> 
+<pre>sh_test {
+    name: "module-name",
+    ...
+    data_device_bins: ["target-name"],
+}
+</pre> <p>Shell test <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:system/libziparchive/Android.bp"><code translate="no" dir="ltr">ziptool-tests</code></a> is such an example.</p> <p>The test result for each test is based on the exit status of your main script. A test can timeout if <code translate="no" dir="ltr">per-binary-timeout</code> has been specified.</p> <h2 id="configuring">Configure a shell test</h2> <p>In Tradefed XML configuration, shell tests are run through the <code translate="no" dir="ltr">ExecutableHostTest</code> runner.</p> 
+<pre>&lt;test class="com.android.tradefed.testtype.binary.ExecutableHostTest" &gt;
+    &lt;option name="binary" value="your-test-script.sh" /&gt;
+    &lt;option name="relative-path-execution" value="true" /&gt;
+    &lt;option name="per-binary-timeout" value="15m" /&gt;
+&lt;/test&gt;
+</pre> <p>Set the main script for the test as the value of the <code translate="no" dir="ltr">binary</code> option. Check out other <code translate="no" dir="ltr">ExecutableHostTest</code> options.</p> <p>If the script requires root privilege, add <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:tools/tradefederation/core/test_framework/com/android/tradefed/targetprep/RootTargetPreparer.java"><code translate="no" dir="ltr">RootTargetPreparer</code></a> to the configuration.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/tradefed/testing/through-tf/shell-test" class="_attribution-link">https://source.android.com/docs/core/tests/tradefed/testing/through-tf/shell-test</a>
+  </p>
+</div>

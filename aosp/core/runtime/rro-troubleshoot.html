@@ -1,0 +1,149 @@
+<h1>Troubleshoot runtime resource overlays</h1> <p>Use this content to troubleshoot why a runtime resource overlay (RRO) might not be functioning as intended in an Android Automotive implementation.</p> <h2 id="related-docs">Related documentation</h2> <p>To learn more about RROs in Android, see <a href="rros">Change the value of an app's resources at runtime</a>. Be sure to maintain a constant vigilance on <code translate="no" dir="ltr">logcat</code> output, which can provide good information about what is happening throughout the process.</p> <h2 id="list-rros">Step 1: List the RROs</h2> <p>To list the RROs:</p> <ol> <li>
+<p>Run the following command:</p> 
+<pre>adb shell cmd overlay list --user current</pre> <p>Output like this appears:</p> 
+<pre>com.android.systemui
+[ ] com.android.theme.icon_pack.rounded.systemui
+[ ] com.android.theme.icon_pack.filled.systemui
+[ ] com.android.theme.icon_pack.circular.systemui
+
+com.android.permissioncontroller
+--- com.android.permissioncontroller.googlecarui.rro
+</pre>
+</li> <li>
+<p>Verify that your RRO appears in the list. The following indicators denote RRO status:</p> <table> <thead> <tr> <th>Indicator</th> <th>RRO status</th> </tr> </thead> <tbody> <tr> <td><code translate="no" dir="ltr">[ ]</code></td> <td>Installed and ready to be activated.</td> </tr> <tr> <td><code translate="no" dir="ltr">[X]</code></td> <td>Installed and activated.</td> </tr> <tr> <td><code translate="no" dir="ltr">---</code></td> <td>Installed but contains errors.</td> </tr> </tbody> </table> <p>If your RRO isn't listed under the package name of the target you want to overlay, your RRO isn't installed.</p>
+</li> </ol> <h2 id="enable-disable">Step 2: Enable and disable an RRO</h2> <p>If an RRO is installed:</p> <ol> <li>
+<p>Use the following command to enable (or disable) the RRO:</p> 
+<pre>adb shell cmd overlay [enable/disable] --user current [your RRO package name]</pre>
+<aside class="note"><strong>Note:</strong><span> Using <code translate="no" dir="ltr">Enable</code> without specifying a user affects the current, that is the system user (<code translate="no" dir="ltr">userId = 0</code>), not the foreground user (<code translate="no" dir="ltr">userId = 10</code>). To enable an RRO for the foreground user, use the parameter <code translate="no" dir="ltr">--user 10</code>. The system user owns the System UI, but doesn't own apps started by the foreground user.</span></aside><aside class="note"><strong>Note:</strong><span> Static RROs are enabled by default at boot time. Dynamic RROs aren't enabled by default at boot. There are some exceptions to these default behaviors. For details, see <a href="rros">Change the value of an app's resources at runtime</a>. .</span></aside>
+</li> </ol> <h2 id="confirm">Step 3: Confirm RRO is installed</h2> <p>To confirm an RRO is installed on a device or troubleshoot why the RRO wasn't enabled:</p> <ol> <li>
+<p>Run the following command:</p> 
+<pre>adb shell cmd overlay dump [your RRO package name]</pre> <p>Output such as the following appears:</p> 
+<pre>com.android.car.rotaryplayground.googlecarui.rro:0 {
+  mPackageName...........: com.android.car.rotaryplayground.googlecarui.rro
+  mUserId................: 0
+  mTargetPackageName.....: com.android.car.rotaryplayground
+  mTargetOverlayableName.: car-ui-lib
+  mBaseCodePath..........: /product/overlay/googlecarui-com-android-car-rotaryplayground/googlecarui-com-android-car-rotaryplayground.apk
+  mState.................: STATE_MISSING_TARGET
+  mIsEnabled.............: true
+  mIsMutable.............: true
+  mPriority..............: 10
+  mCategory..............: BypassIdMapV1
+}
+com.android.car.rotaryplayground.googlecarui.rro:10 {
+  mPackageName...........: com.android.car.rotaryplayground.googlecarui.rro
+  mUserId................: 10
+  mTargetPackageName.....: com.android.car.rotaryplayground
+  mTargetOverlayableName.: car-ui-lib
+  mBaseCodePath..........: /product/overlay/googlecarui-com-android-car-rotaryplayground/googlecarui-com-android-car-rotaryplayground.apk
+  mState.................: STATE_MISSING_TARGET
+  mIsEnabled.............: true
+  mIsMutable.............: true
+  mPriority..............: 10
+  mCategory..............: BypassIdMapV1
+}
+</pre>
+</li> <li><p>Identify the user (or users) who installed the RRO. In the previous example, the RRO is available for user <code translate="no" dir="ltr">0</code> and user<code translate="no" dir="ltr">10</code> (see the values for <code translate="no" dir="ltr">mUserId</code> in the top code block).</p></li> <li><p>To enable (or disable) the RRO for a user, go to Step 2.</p></li> <li>
+<p>To check the value of <code translate="no" dir="ltr">mState</code>:</p> <ul> <li><p><code translate="no" dir="ltr">STATE_ENABLED</code> and <code translate="no" dir="ltr">STATE_ENABLED_IMMUTABLE</code>. The RRO is enabled and applied to your target.</p></li> <li><p><code translate="no" dir="ltr">STATE_MISSING_TARGET</code>. Your target isn't installed.</p></li> <li><p><code translate="no" dir="ltr">STATE_NO_IDMAP</code>. Something is wrong with the way the <code translate="no" dir="ltr">AndroidManifest.xml</code>, <code translate="no" dir="ltr">overlays.xml</code>, or <code translate="no" dir="ltr">overlayable.xml</code> files are set up. Use <code translate="no" dir="ltr">adb logcat</code> to run the logs and search for the keyword <code translate="no" dir="ltr">idmap</code> to identify the error. <em>See steps 4 &amp; 5.</em></p></li> <li><p><code translate="no" dir="ltr">STATE_UNKNOWN</code>. Something is wrong with <code translate="no" dir="ltr">OverlayManagerService</code>.</p></li> </ul>
+</li> </ol> <h2 id="check-manifest">Step 4: Check AndroidManifest.xml</h2> <p>To verify <code translate="no" dir="ltr">AndroidManifest.xml</code>:</p> <ol> <li>
+<p>Check <code translate="no" dir="ltr">targetName</code> and <code translate="no" dir="ltr">targetPackage</code>.</p> <p><code translate="no" dir="ltr">android:targetName</code> should have the same value of the overlayable group defined in the target app. This is required <em>only</em> when targeting an overlay.</p> <p><code translate="no" dir="ltr">android:targetPackage</code> is always required and should contain the package name of the target app.</p>
+</li> <li><p>Check that your RRO is static (or not). Static RROs are enabled by default at boot time. Dynamic RROs aren't enabled by default at boot. Additional ways of enabling dynamic RROs are provided in <a href="rros">Change the value of an app's resources at runtime</a>.</p></li> <li>
+<p>Check the priority of your static RRO (dynamic RRO priority is always set to <code translate="no" dir="ltr">Integer.MAX_VALUE</code> and the order in which they're applied is based on when they're enabled).</p> <p>Multiple RROs can apply to the same target. RROs with a higher priority are applied last. On a scale of 0 to 10, 10 is highest and 0 is lowest.</p>
+</li> </ol> <h2 id="check-overlays">Step 5: Check overlays.xml</h2> <aside class="note"><strong>Note:</strong><span> This check applies <em>only</em> to Android 11 and higher.</span></aside> <ol> <li>
+<p>Check <code translate="no" dir="ltr">overlays.xml</code> to confirm all resources you intend to overlay are defined in this file. For example, consider the following<code translate="no" dir="ltr">overlays.xml</code>:</p> 
+<pre>&lt;overlay&gt;
+    &lt;item target="string/app_name" value="@string/overlaid_app_name" /&gt;
+&lt;/overlay&gt;
+</pre>
+</li> <li>
+<p>You must ensure that a:</p> <ul> <li>
+<code translate="no" dir="ltr">string</code> resource with the name <code translate="no" dir="ltr">app_name</code> exists in the target app.</li> <li>
+<code translate="no" dir="ltr">string</code> resource with the name <code translate="no" dir="ltr">overlaid_app_name</code> exists in your RRO.</li> </ul>
+</li> <li>
+<p>If your target has an <code translate="no" dir="ltr">overlayable.xml</code> file, make sure <code translate="no" dir="ltr">app_name</code> is contained in that file. Make sure you use the correct <code translate="no" dir="ltr">targetName</code> in your <code translate="no" dir="ltr">AndroidManifest.xml</code> file (Step 4).</p> <aside class="note"><strong>Note:</strong><span> If you overlay a layout file, make sure all the IDs and app namespace attributes are included in <em>both</em> <code translate="no" dir="ltr">overlays.xml</code> and <code translate="no" dir="ltr">overlayable.xml</code>.</span></aside> <p>For example:</p> 
+<pre>&lt;overlay&gt;
+&lt;item target="layout/car_ui_base_layout_toolbar" value="@layout/car_ui_base_layout_toolbar" /&gt;
+&lt;item target="id/car_ui_toolbar_background" value="@id/car_ui_toolbar_background" /&gt;
+&lt;item target="attr/layout_constraintTop_toBottomOf" value="@attr/layout_constraintTop_toBottomOf" /&gt;
+&lt;/overlay&gt;
+</pre>
+</li> </ol> <h2 id="dump-idmap">Step 6: Dump the idmap</h2> <p>At this stage, all issues with your RRO should be resolved. Next, dump the <code translate="no" dir="ltr">idmap</code> of your RRO to learn how a resource is being resolved and why it's resolving to a different value than you expect.</p> <ol> <li>
+<p>To find the path to the <code translate="no" dir="ltr">idmap</code> on your device:</p> 
+<pre>adb shell
+su
+ls data/resource-cache</pre>
+</li> <li>
+<p>To dump the contents of that file:</p> 
+<pre>adb root
+adb shell idmap2 dump --idmap-path [path to your RRO idmap file]</pre> <p>Example:</p> 
+<pre>adb shell idmap2 dump --idmap-path data/resource-cache/system@app@CarUiPortraitLauncherReferenceRRO@CarUiPortraitLauncherReferenceRRO.apk@idmap</pre> <p>The output appears similar to the following. The output displays which ID from your RRO is mapped to which ID in your target as well as the name of the overlaid resource.</p> 
+<pre>target apk path : /system/priv-app/CarMediaApp/CarMediaApp.apk
+overlay apk path : /product/overlay/googlecarui-com-android-car-media/googlecarui-com-android-car-media.apk
+0x7f040008 -&gt; 0x7f010000 bool/car_ui_toolbar_logo_fills_nav_icon_space
+0x7f040009 -&gt; 0x7f010001 bool/car_ui_toolbar_nav_icon_reserve_space
+0x7f04000b -&gt; 0x7f010002 bool/car_ui_toolbar_tab_flexible_layout
+0x7f04000c -&gt; 0x7f010003 bool/car_ui_toolbar_tabs_on_second_row
+0x7f09006c -&gt; 0x7f020000 id/car_ui_base_layout_content_container
+0x7f090073 -&gt; 0x7f020001 id/car_ui_recycler_view
+0x7f090074 -&gt; 0x7f020002 id/car_ui_scroll_bar
+0x7f090075 -&gt; 0x7f020003 id/car_ui_scrollbar_page_down
+0x7f090076 -&gt; 0x7f020004 id/car_ui_scrollbar_page_up
+0x7f090077 -&gt; 0x7f020005 id/car_ui_scrollbar_thumb
+0x7f090078 -&gt; 0x7f020006 id/car_ui_scrollbar_track
+0x7f09007a -&gt; 0x7f020007 id/car_ui_toolbar_background
+0x7f09007e -&gt; 0x7f020008 id/car_ui_toolbar_logo
+0x7f090084 -&gt; 0x7f020009 id/car_ui_toolbar_menu_items_container
+0x7f090085 -&gt; 0x7f02000a id/car_ui_toolbar_nav_icon
+0x7f090086 -&gt; 0x7f02000b id/car_ui_toolbar_nav_icon_container
+0x7f090087 -&gt; 0x7f02000c id/car_ui_toolbar_progress_bar
+0x7f090089 -&gt; 0x7f02000d id/car_ui_toolbar_row_separator_guideline
+0x7f09008d -&gt; 0x7f02000e id/car_ui_toolbar_search_view_container
+0x7f09008f -&gt; 0x7f02000f id/car_ui_toolbar_subtitle
+0x7f090092 -&gt; 0x7f020010 id/car_ui_toolbar_tabs
+0x7f090093 -&gt; 0x7f020011 id/car_ui_toolbar_title
+0x7f090094 -&gt; 0x7f020012 id/car_ui_toolbar_title_container
+0x7f090095 -&gt; 0x7f020013 id/car_ui_toolbar_title_logo
+0x7f090096 -&gt; 0x7f020014 id/car_ui_toolbar_title_logo_container
+0x7f0c0024 -&gt; 0x7f030000 layout/car_ui_base_layout_toolbar
+0x7f0c0035 -&gt; 0x7f030001 layout/car_ui_recycler_view
+0x7f0c0038 -&gt; 0x7f030002 layout/car_ui_toolbar
+0x7f0c003f -&gt; 0x7f030003 layout/car_ui_toolbar_two_row
+</pre>
+</li> </ol> <p>Use the following command to look up a specific resource to see how they're mapped:</p> 
+<pre>adb shell cmd overlay lookup --verbose --user 10 com.android.car.ui.paintbooth com.android.car.ui.paintbooth:color/widget_background</pre>
+<aside class="note"><strong>Note:</strong><span> <code translate="no" dir="ltr">--user 10</code> is supplied to ensure that the mapping has been applied for the foreground user (<code translate="no" dir="ltr">userId = 10</code>) which owns apps started by the user.</span></aside> <p>The output is the final value of the resource:</p> 
+<pre>#ff7986cb
+</pre> <p>You can also dump your layout files from your apks to view the resolved IDs to match the above output:</p> 
+<pre>aapt2 dump xmltree $OUT/system/priv-app/sharedlibraryclient/sharedlibraryclient.apk --file res/layout/activity_main.xml</pre> <p>Output such as the following is returned:</p> 
+<pre>N: android=http://schemas.android.com/apk/res/android (line=2)
+  N: app=http://schemas.android.com/apk/res-auto (line=2)
+    N: lib=http://schemas.android.com/apk/com.android.car.ui.sharedlibrary.test (line=2)
+      E: androidx.constraintlayout.widget.ConstraintLayout (line=2)
+        A: http://schemas.android.com/apk/res/android:layout_width(0x010100f4)=-1
+        A: http://schemas.android.com/apk/res/android:layout_height(0x010100f5)=-1
+          E: TextView (line=19)
+            A: http://schemas.android.com/apk/res/android:layout_width(0x010100f4)=-2
+            A: http://schemas.android.com/apk/res/android:layout_height(0x010100f5)=-2
+            A: http://schemas.android.com/apk/res/android:text(0x0101014f)=@0x020f0000
+            A: http://schemas.android.com/apk/res-auto:layout_constraintBottom_toBottomOf(0x7f0200fb)=0
+            A: http://schemas.android.com/apk/res-auto:layout_constraintLeft_toLeftOf(0x7f02010e)=0
+            A: http://schemas.android.com/apk/res-auto:layout_constraintRight_toRightOf(0x7f020112)=0
+            A: http://schemas.android.com/apk/res-auto:layout_constraintTop_toTopOf(0x7f020118)=0
+          E: com.android.car.ui.sharedlibrary.test.MyRecyclerView (line=28)
+            A: http://schemas.android.com/apk/res/android:layout_width(0x010100f4)=-2
+            A: http://schemas.android.com/apk/res/android:layout_height(0x010100f5)=-2
+            A: http://schemas.android.com/apk/com.android.car.ui.sharedlibrary.test:implClass="HelloWorld!" (Raw: "HelloWorld!")
+          E: com.android.car.ui.sharedlibraryclient.CustomView (line=34)
+            A: http://schemas.android.com/apk/res/android:layout_width(0x010100f4)=-2
+            A: http://schemas.android.com/apk/res/android:layout_height(0x010100f5)=-2
+            A: http://schemas.android.com/apk/res-auto:implClass2(0x7f0200e8)="HelloWorld!!" (Raw: "HelloWorld!!")
+</pre> <p>Failures to resolve mappings are indicated by <code translate="no" dir="ltr">idmap2</code> through three question marks (<code translate="no" dir="ltr">???</code>).</p> <p>In this example, the RRO has a hard-coded color value overlaid on top of a public resource:</p> 
+<pre>$ idmap2 dump --idmap-path [file]
+0x00010402 -&gt; color 0xff00ff00 (???)</pre> <p>In this example, the RRO overlays a public resource by pointing it to an internal (private) color resource inside the same shared library:</p> 
+<pre>$ idmap2 dump --idmap-path [file]
+0x00010402 -&gt; 0x7f010000 (??? -&gt; color/item_background_new)</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/runtime/rro-troubleshoot" class="_attribution-link">https://source.android.com/docs/core/runtime/rro-troubleshoot</a>
+  </p>
+</div>

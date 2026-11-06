@@ -1,0 +1,14 @@
+<h1>Trade Federation Global Configuration</h1>  <p>The Trade Federation (TF) Global Configuration is a file that is loaded once upon TF initialization. This configuration file is used to define the environment for that instance of TF.</p> <h2 id="load_the_global_configuration_file">Load the Global Configuration file</h2> <p>The TF Global Configuration file is an XML file and can be specified by setting the local environment variable <code translate="no" dir="ltr">TF_GLOBAL_CONFIG</code>. If <code translate="no" dir="ltr">TF_GLOBAL_CONFIG</code> is not specified, TF will try to locate a file named <code translate="no" dir="ltr">tf_global_config.xml</code> in its current working path. If that fails, TF will load the default Global Configuration file. For example, you can launch TF with your custom global configuration via the following command:</p> 
+<pre>TF_GLOBAL_CONFIG=/path/to/my/custom/good_tf_global_conf.xml tradefed.sh
+</pre> <h2 id="example_global_configuration_file">Example Global Configuration file</h2> 
+<pre>&lt;configuration description="Example Global Config"&gt;
+  &lt;device_manager class="com.android.tradefed.device.DeviceManager"&gt;
+    &lt;option name="max-null-devices" value="10" /&gt;
+  &lt;/device_manager&gt;
+&lt;/configuration&gt;
+</pre> <p>The example above sets the number of "null-device" placeholders to 10 instead of the default value define in the <code translate="no" dir="ltr">DeviceManager</code>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/tradefed/architecture/advanced/global-config" class="_attribution-link">https://source.android.com/docs/core/tests/tradefed/architecture/advanced/global-config</a>
+  </p>
+</div>

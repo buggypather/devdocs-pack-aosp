@@ -1,0 +1,50 @@
+<h1>Use debuggers</h1>  <p>This page details using <a href="https://lldb.llvm.org/">LLDB</a> for OS development. For app development, see <a href="https://developer.android.com/studio/debug/index">Debug your app</a> instead, which explains how to use the Android Studio GUI (based on LLDB).</p> <p>GDB is no longer supported or provided. If you're switching from GDB to LLDB, you should probably start by reading the <a href="https://lldb.llvm.org/use/tutorial.html">LLDB Tutorial</a>. If you're an expert GDB user, the <a href="https://lldb.llvm.org/use/map.html">GDB to LLDB command map</a> is very helpful while transitioning.</p> <h2 id="prerequisites">Prerequisites</h2> <p>To use a debugger:</p> <ul> <li>Set up the build environment with the usual <code translate="no" dir="ltr">envsetup.sh</code> command.</li> <li>Run the same <code translate="no" dir="ltr">lunch</code> command you used when building. Note that the lunch item should exactly match the device you are debugging. If the lunch item doesn't match with the attached device, you'll get an error of the form: <code translate="no" dir="ltr">You used the wrong lunch: TARGET_PRODUCT (aosp_arm64) does not match attached device (xyzabc)</code> </li> <li>Connect your device to machine.</li> </ul> <p>For more help with setting up your environment, see <a href="../../../setup/build/building#initialize">Set up environment</a>.</p> <h2 id="debug_executable">Debug a binary</h2> <p> To debug a binary that you built on your machine, first you'll have to copy the binary to the device and then launch the debugger. For example: </p> 
+<pre>
+adb push test.exe /data/local/tmp/test.exe
+lldbclient.py --port 5038 -r /data/local/tmp/test.exe
+</pre> <h2 id="running">Debug running apps or processes</h2> <p>To connect to a running app or native daemon, use <code translate="no" dir="ltr">lldbclient.py</code> with a PID. For example, to debug the process with PID 1234, run this on the host:</p> <aside class="note"><strong>Note:</strong> Do not confuse <code translate="no" dir="ltr">-p</code> with <code translate="no" dir="ltr">--port</code>. <code translate="no" dir="ltr">-p</code> is for PID and <code translate="no" dir="ltr">--port</code> is used to supply an unused port number. See <code translate="no" dir="ltr">lldbclient.py --help</code> for more info.</aside> 
+<pre>
+lldbclient.py -p 1234
+</pre> <p>The script sets up port forwarding, starts the appropriate remote debugging stub on the device, starts the debugger on the host, configures it to find symbols, and connects it to the remote debugging stub.</p> <aside class="note"><strong>Note:</strong> In Android 6 and lower the script was a shell script called <code translate="no" dir="ltr">lldbclient</code> instead of a Python script called <code translate="no" dir="ltr">lldbclient.py</code>.</aside> <h2 id="starts">Debug native process startup</h2> <p>To debug a process as it starts, use <code translate="no" dir="ltr">lldbclient.py</code> with the <code translate="no" dir="ltr">-r</code> option. For example, to debug <code translate="no" dir="ltr">ls /bin</code>, run this on the host:</p> 
+<pre>
+lldbclient.py -r /system/bin/ls /bin
+</pre> <p>Then, enter <code translate="no" dir="ltr">continue</code> at the debugger's prompt.</p> <h2 id="app-startup">Debug app startup</h2> <p>Sometimes you want to debug an app as it starts, such as when there's a crash and you want to step through code to see what happened <em>before</em> the crash. <a href="#running">Attaching</a> works in some cases, but in other cases is impossible because the app crashes before you can attach. The <code translate="no" dir="ltr">logwrapper</code> approach (used for <code translate="no" dir="ltr">strace</code>) doesn't always work because the app might not have permissions to open a port, and <code translate="no" dir="ltr">lldbserver</code> inherits that restriction.</p> <p>To debug app startup, use the developer options in Settings to instruct the app to wait for a Java debugger to attach:</p> <ol> <li>Go to <strong>Settings &gt; Developer options &gt; Select debug app</strong> and choose your app from the list, then click <strong>Wait for debugger</strong>.</li> <li>Start the app, either from the launcher or by using the command line to run: 
+<pre>
+adb shell am start -a android.intent.action.MAIN -n APP_NAME/.APP_ACTIVITY
+</pre>
+</li> <li>Wait for the app to load and a dialog to appear telling you the app is waiting for a debugger.</li> <li>Attach <code translate="no" dir="ltr">lldbserver</code>/<code translate="no" dir="ltr">lldbclient</code> normally, set breakpoints, then continue the process.</li>
+</ol> <p>To let the app run, attach a Java Debug Wire Protocol (JDWP) debugger such as Java Debugger (jdb):</p> 
+<pre>
+adb forward tcp:12345 jdwp:XXX  # (Where XXX is the PID
+of the debugged process.)
+jdb -attach localhost:12345
+</pre> <h2 id="crash">Debug apps or processes that crash</h2> <p>If you want <code translate="no" dir="ltr">debuggerd</code> to suspend crashed processes so that you can attach a debugger, set the appropriate property:</p> <ul> <li>After Android 11 
+<pre>
+adb shell setprop debug.debuggerd.wait_for_debugger true
+</pre>
+</li> <li>Android 11 and lower 
+<pre>
+adb shell setprop debug.debuggerd.wait_for_gdb true
+</pre>
+</li> <li>Android 6.0 Marshmallow and lower 
+<pre>
+adb shell setprop debug.db.uid 999999
+</pre>
+</li> </ul> <p>At the end of the usual crash output, <code translate="no" dir="ltr">debuggerd</code> provides copy and paste instructions in logcat showing how to connect the debugger to the crashed process.</p> <h2 id="vscode">Debug with VS Code</h2> <p>LLDB supports debugging platform code on <a href="https://code.visualstudio.com/">Visual Studio Code</a>. You can use the VS Code debugger frontend instead of the LLDB CLI interface to control and debug native code running on devices.</p> <p>Before using VS Code for debugging, install the <a href="https://marketplace.visualstudio.com/items"> CodeLLDB extension</a>.</p> <p>To debug code using VS Code:</p> <ol> <li>Ensure that all build artifacts (such as symbols) required to run <code translate="no" dir="ltr">lldbclient.py</code> or <code translate="no" dir="ltr">lldbclient.py</code> are present.</li> <li>In VS Code, press <strong>Ctrl+Shift+P</strong> to run a command, search for <strong>Debug: Add Configuration...</strong>, then select <strong>LLDB</strong>. This opens a <code translate="no" dir="ltr">launch.json</code> file and adds a new JSON object to a list.</li> <li>Replace the newly added debugger configuration with two comment lines - <code translate="no" dir="ltr">// #lldbclient-generated-begin</code> and <code translate="no" dir="ltr">// #lldbclient-generated-end</code>, so that your configuration list looks like this: 
+<pre>"configurations": [
+    // #lldbclient-generated-begin
+    // #lldbclient-generated-end
+]</pre> <p><code translate="no" dir="ltr">lldbclient.py</code> uses these comments to detect where to write the config. If there are other items in the list, add the comment lines to the end after the other configurations. </p> </li> <li>Run the following command in the terminal where you've run <code translate="no" dir="ltr">envsetup.sh</code> and <code translate="no" dir="ltr">lunch</code>: 
+<pre>lldbclient.py --setup-forwarding vscode-lldb \
+      --vscode-launch-file LAUNCH_JSON_PATH \
+      ANY_OTHER_FLAGS -p pid | -n proc-name | -r ...</pre> <p><code translate="no" dir="ltr">lldbclient.py</code> writes the generated config into <code translate="no" dir="ltr">launch.json</code> and continues running. This is expected; don't kill the <code translate="no" dir="ltr">lldbclient.py</code> program. If you omit the <code translate="no" dir="ltr">--vscode-launch-file</code> the script will print the JSON snippet that you will need to copy and paste into <code translate="no" dir="ltr">launch.json</code> manually.</p> <p>The <code translate="no" dir="ltr">-r</code> flag must be the last flag if it is present due to how flags are parsed by the tool.</p> </li> <li>Open the <strong>Run and Debug</strong> side bar - the new configuration should appear in the debugger list. Press <strong>Start Debugging (F5)</strong>. The debugger should connect after 10 to 30 seconds. <p>If the new configuration did not appear in the Run and Debug view, reload the window to refresh the debugger list - press <strong>Ctrl+Shift+P</strong> and type <code translate="no" dir="ltr">reload window</code>. </p> </li> <li>When you're done debugging, go to the terminal running <code translate="no" dir="ltr">lldbclient.py</code> and press <strong>Enter</strong> to end the <code translate="no" dir="ltr">lldbclient.py</code> program. Subsequent runs of the script would generate the config between the <code translate="no" dir="ltr">#lldbclient-generated</code> comments and replace the old contents, you do not need to remove them manually. </li> </ol> <p>To add custom properties to the generated launch config, you can use the <code translate="no" dir="ltr">--vscode-launch-props</code> flag. For example: </p>
+
+<pre>lldbclient.py --setup-forwarding vscode-lldb \
+    --vscode-launch-props \
+    '{"initCommands" : ["script print(\"Hello\")"], "preLaunchTask" : "Build"}' \
+    ...</pre> The example properties would make VS Code run a task named <code translate="no" dir="ltr">Build</code> before debugging and appends a new debug initialization step to the steps generated by the script. You can find an overview of available properties in the <a href="https://code.visualstudio.com/docs/editor/debugging#_launchjson-attributes"> VS Code documentation</a> and in the User Manual of the <a href="https://marketplace.visualstudio.com/items"> CodeLLDB extension</a>.<div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/debug/gdb" class="_attribution-link">https://source.android.com/docs/core/tests/debug/gdb</a>
+  </p>
+</div>

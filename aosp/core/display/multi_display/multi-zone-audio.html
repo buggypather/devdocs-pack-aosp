@@ -1,0 +1,40 @@
+<h1>Multi-zone audio</h1>  <p>To learn more about the use of multi-zone audio in automotive rear-seat entertainment systems, see <a href="../../../devices/automotive/audio#multi-zone">Multi-Zone Audio</a>.</p> <p>Device manufacturers can link a display to an audio zone in a vehicle. For instance, for a car with one primary and rear seat entertainment zone, a device manufacturer can have the following configuration on the vendor partition:</p> <table> <tbody> <tr> <td>
+
+<pre>&lt;?xml version="1.0" encoding="utf-8"?&gt;
+&lt;carAudioConfigurations xmlns:car="http://schemas.android.com/apk/res-auto"&gt;
+    &lt;zones&gt;
+        &lt;zone name="primary zone"&gt;
+            &lt;volumeGroups&gt;
+                &lt;group&gt;
+                    &lt;device address="bus001_media"&gt;
+                        &lt;context context="music"/&gt;
+                    &lt;/device&gt;
+                    &lt;device address="bus002_others"&gt;
+                    ...
+                    &lt;/device&gt;
+                &lt;/group&gt;
+            &lt;/volumeGroups&gt;
+            &lt;displays&gt;
+                &lt;display car:display="&lt;display-id-1&gt;" /&gt;
+            &lt;/displays&gt;
+        &lt;/zone&gt;
+        &lt;zone name="rear seat"&gt;
+            &lt;volumeGroups&gt;
+                &lt;group&gt;
+                    &lt;device address="bus100_all"&gt;
+                    ...
+                    &lt;/device&gt;
+                &lt;/group&gt;
+            &lt;/volumeGroups&gt;
+            &lt;displays&gt;
+                &lt;display car:display="&lt;display-id-2&gt;" /&gt;
+            &lt;/displays&gt;
+        &lt;/zone&gt;
+    &lt;/zones&gt;
+&lt;/carAudioConfigurations&gt;
+&lt;/xml&gt;</pre> </td> </tr> </tbody> </table> <p><code translate="no" dir="ltr">CarAudioService</code> parses this configuration file and sets up the audio routing by its audio context (or audio usage) at boot time. During runtime, <code translate="no" dir="ltr">CarAudioService</code> further detects an app launch event and dynamically assigns the app to the zone based on UID.</p> <h2 id="implementation">Implementation</h2> <p>For the stable ID that device manufacturers can include in their configuration file, see <a href="displays#static">Static display identifiers</a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/display/multi_display/multi-zone-audio" class="_attribution-link">https://source.android.com/docs/core/display/multi_display/multi-zone-audio</a>
+  </p>
+</div>

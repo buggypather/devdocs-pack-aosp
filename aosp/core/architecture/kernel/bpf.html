@@ -1,0 +1,88 @@
+<h1>Extend the kernel with eBPF</h1>  <p>Extended Berkeley Packet Filter (eBPF) is an in-kernel virtual machine that runs user-supplied eBPF programs to extend kernel functionality. These programs can be hooked to probes or events in the kernel and used to collect useful kernel statistics, monitor, and debug. A program is loaded into the kernel using the <code translate="no" dir="ltr">bpf(2)</code> syscall and is provided by the user as a binary blob of eBPF machine instructions. The Android build system has support for compiling C programs to eBPF using simple build file syntax described in this document.</p> <p>More information about eBPF internals and architecture can be found at <a href="http://www.brendangregg.com/ebpf.html">Brendan Gregg's eBPF page</a>.</p> <p>Android includes an eBPF loader and library that loads eBPF programs at boot time.</p> <h2 id="loader">Android BPF loader</h2> <p>During Android boot, all eBPF programs located at <code translate="no" dir="ltr">/system/etc/bpf/</code> are loaded. These programs are binary objects built by the Android build system from C programs and are accompanied by <code translate="no" dir="ltr">Android.bp</code> files in the Android source tree. The build system stores the generated objects at <code translate="no" dir="ltr">/system/etc/bpf</code>, and those objects become part of the system image.</p> <h3 id="format_of_an_android_ebpf_c_program">Format of an Android eBPF C program</h3> <p>An eBPF C program must have the following format:</p> 
+<pre>#include &lt;bpf_helpers.h&gt;
+
+/* Define one or more maps in the maps section, for example
+ * define a map of type array int -&gt; uint32_t, with 10 entries
+ */
+DEFINE_BPF_MAP(name_of_my_map, ARRAY, int, uint32_t, 10);
+
+/* this also defines type-safe accessors:
+ *   value * bpf_name_of_my_map_lookup_elem(&amp;key);
+ *   int bpf_name_of_my_map_update_elem(&amp;key, &amp;value, flags);
+ *   int bpf_name_of_my_map_delete_elem(&amp;key);
+ * as such it is heavily suggested to use lowercase *_map names.
+ * Also note that due to compiler deficiencies you cannot use a type
+ * of 'struct foo' but must instead use just 'foo'.  As such structs
+ * must not be defined as 'struct foo {}' and must instead be
+ * 'typedef struct {} foo'.
+ */
+
+DEFINE_BPF_PROG("PROGTYPE/PROGNAME", AID_*, AID_*, PROGFUNC)(..args..) {
+   &lt;body-of-code
+    ... read or write to MY_MAPNAME
+    ... do other things
+   &gt;
+}
+
+LICENSE("GPL"); // or other license</pre> <p>Where:</p> <ul> <li>
+<code translate="no" dir="ltr"><em>name_of_my_map</em></code> is the name of your map variable. This name informs the BPF loader of the type of map to create and with what parameters. This struct definition is provided by the included <code translate="no" dir="ltr">bpf_helpers.h</code> header.</li> <li><p><code translate="no" dir="ltr"><em>PROGTYPE/PROGNAME</em></code> represents the type of the program and program name. The type of the program can be any of those listed in the following table. When a type of program isn't listed, there is no strict naming convention for the program; the name just needs to be known to the process that attaches the program.</p></li> <li><p><code translate="no" dir="ltr"><em>PROGFUNC</em></code> is a function that, when compiled, is placed in a section of the resulting file.</p></li> </ul> <table class="responsive"> <tbody> <tr> <th>kprobe</th> <td>Hooks <code translate="no" dir="ltr">PROGFUNC</code> onto at a kernel instruction using the kprobe infrastructure. <code translate="no" dir="ltr">PROGNAME</code> must be the name of the kernel function being kprobed. Refer to the <a href="https://www.kernel.org/doc/Documentation/kprobes.txt">kprobe kernel documentation</a> for more information about kprobes. </td> </tr> <tr> <th>tracepoint</th> <td>Hooks <code translate="no" dir="ltr">PROGFUNC</code> onto a tracepoint. <code translate="no" dir="ltr">PROGNAME</code> must be of the format <code translate="no" dir="ltr">SUBSYSTEM/EVENT</code>. For example, a tracepoint section for attaching functions to scheduler context switch events would be <code translate="no" dir="ltr">SEC("tracepoint/sched/sched_switch")</code>, where <code translate="no" dir="ltr">sched</code> is the name of the trace subsystem, and <code translate="no" dir="ltr">sched_switch</code> is the name of the trace event. Check the <a href="https://www.kernel.org/doc/Documentation/trace/events.txt">trace events kernel documentation</a>for more information about tracepoints. </td> </tr> <tr> <th>skfilter</th> <td>Program functions as a networking socket filter.</td> </tr> <tr> <th>schedcls</th> <td>Program functions as a networking traffic classifier.</td> </tr> <tr> <th>cgroupskb, cgroupsock</th> <td>Program runs whenever processes in a CGroup create an AF_INET or AF_INET6 socket. </td> </tr> </tbody> </table> <p>Additional types can be found in the <a href="https://android.googlesource.com/platform/system/bpf/+/4845288a6e42e13b1bb8063923b24371c9e93397/libbpf_android/Loader.cpp">Loader source code</a>.</p> <p>For example, the following <code translate="no" dir="ltr">myschedtp.c</code> program adds information about the latest task PID that has run on a particular CPU. This program achieves its goal by creating a map and defining a <code translate="no" dir="ltr">tp_sched_switch</code> function which can be attached to the <code translate="no" dir="ltr">sched:sched_switch</code> trace event. For more information, see <a href="#tracepoints">Attaching programs to tracepoints</a>.</p> 
+<pre>#include &lt;linux/bpf.h&gt;
+#include &lt;stdbool.h&gt;
+#include &lt;stdint.h&gt;
+#include &lt;bpf_helpers.h&gt;
+
+DEFINE_BPF_MAP(cpu_pid_map, ARRAY, int, uint32_t, 1024);
+
+struct switch_args {
+    unsigned long long ignore;
+    char prev_comm[16];
+    int prev_pid;
+    int prev_prio;
+    long long prev_state;
+    char next_comm[16];
+    int next_pid;
+    int next_prio;
+};
+
+DEFINE_BPF_PROG("tracepoint/sched/sched_switch", AID_ROOT, AID_SYSTEM, tp_sched_switch)
+(struct switch_args *args) {
+    int key;
+    uint32_t val;
+
+    key = bpf_get_smp_processor_id();
+    val = args-&gt;next_pid;
+
+    bpf_cpu_pid_map_update_elem(&amp;key, &amp;val, BPF_ANY);
+    return 1; // return 1 to avoid blocking simpleperf from receiving events
+}
+
+LICENSE("GPL");</pre> <p>The LICENSE macro is used to verify if the program is compatible with the kernel's license when the program makes use of BPF helper functions provided by the kernel. Specify the name of your program's license in string form, such as <code translate="no" dir="ltr">LICENSE("GPL")</code> or <code translate="no" dir="ltr">LICENSE("Apache 2.0")</code>.</p> <h3 id="format_of_the_androidbp_file">Format of the Android.bp file</h3> <p>For the Android build system to build an eBPF <code translate="no" dir="ltr">.c</code> program, you must create an entry in the <code translate="no" dir="ltr">Android.bp</code> file of the project. For example, to build an eBPF C program named <code translate="no" dir="ltr">bpf_test.c</code>, make the following entry in your project's <code translate="no" dir="ltr">Android.bp</code> file:</p> 
+<pre>bpf {
+    name: "bpf_test.o",
+    srcs: ["bpf_test.c"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+}</pre> <p>This entry compiles the C program resulting in the object <code translate="no" dir="ltr">/system/etc/bpf/bpf_test.o</code>. On boot, the Android system automatically loads the <code translate="no" dir="ltr">bpf_test.o</code> program into the kernel.</p> <aside class="note"><strong>Note:</strong><span> Your GPL-licensed eBPF C program should go in <code translate="no" dir="ltr">system/bpfprogs</code>.</span></aside> <h3 id="sysfs">Files available in sysfs</h3> <p>During boot, the Android system automatically loads all the eBPF objects from <code translate="no" dir="ltr">/system/etc/bpf/</code>, creates the maps that the program needs, and pins the loaded program with its maps to the BPF file system. These files can then be used for further interaction with the eBPF program or reading maps. This section describes the conventions used for naming these files and their locations in sysfs.</p> <p>The following files are created and pinned:</p> <ul> <li>
+<p>For any programs loaded, assuming <code translate="no" dir="ltr">PROGNAME</code> is the name of the program and <code translate="no" dir="ltr">FILENAME</code> is the name of the eBPF C file, the Android loader creates and pins each program at <code translate="no" dir="ltr">/sys/fs/bpf/prog_FILENAME_PROGTYPE_PROGNAME</code>.</p> <p>For example, for the previous <code translate="no" dir="ltr">sched_switch</code> tracepoint example in <code translate="no" dir="ltr">myschedtp.c</code>, a program file is created and pinned to <code translate="no" dir="ltr">/sys/fs/bpf/prog_myschedtp_tracepoint_sched_sched_switch</code>.</p>
+</li> <li>
+<p>For any maps created, assuming <code translate="no" dir="ltr">MAPNAME</code> is the name of the map and <code translate="no" dir="ltr">FILENAME</code> is the name of the eBPF C file, the Android loader creates and pins each map to <code translate="no" dir="ltr">/sys/fs/bpf/map_FILENAME_MAPNAME</code>.</p> <p>For example, for the previous <code translate="no" dir="ltr">sched_switch</code> tracepoint example in <code translate="no" dir="ltr">myschedtp.c</code>, a map file is created and pinned to <code translate="no" dir="ltr">/sys/fs/bpf/map_myschedtp_cpu_pid_map</code>.</p>
+</li> <li><p><code translate="no" dir="ltr">bpf_obj_get()</code> in the Android BPF library returns a file descriptor from the pinned <code translate="no" dir="ltr">/sys/fs/bpf</code> file. This file descriptor can be used for further operations, such as reading maps or attaching a program to a tracepoint.</p></li> </ul> <h2 id="library">Android BPF library</h2> <p>The Android BPF library is named <code translate="no" dir="ltr">libbpf_android.so</code> and is part of the system image. This library provides the user with low-level eBPF capabilities needed for creating and reading maps, creating probes, tracepoints, and perf buffers.</p> <h3 id="tracepoints">Attach programs to tracepoints</h3> <p>Tracepoint programs are loaded automatically at boot. After loading, the tracepoint program must be activated using these steps:</p> <ol> <li>Call <code translate="no" dir="ltr">bpf_obj_get()</code> to obtain the program <code translate="no" dir="ltr">fd</code> from the pinned file's location. For more information, refer to the <a href="bpf#files_available_in_sysfs">Files available in sysfs</a>.</li> <li>Call <code translate="no" dir="ltr">bpf_attach_tracepoint()</code> in the BPF library, passing it the program <code translate="no" dir="ltr">fd</code> and the tracepoint name.</li> </ol> <p>The following code sample shows how to to attach the <code translate="no" dir="ltr">sched_switch</code> tracepoint defined in the previous <code translate="no" dir="ltr">myschedtp.c</code> source file (error checking isn't shown):</p> 
+<pre>  char *tp_prog_path = "/sys/fs/bpf/prog_myschedtp_tracepoint_sched_sched_switch";
+  char *tp_map_path = "/sys/fs/bpf/map_myschedtp_cpu_pid";
+
+  // Attach tracepoint and wait for 4 seconds
+  int mProgFd = bpf_obj_get(tp_prog_path);
+  int mMapFd = bpf_obj_get(tp_map_path);
+  int ret = bpf_attach_tracepoint(mProgFd, "sched", "sched_switch");
+  sleep(4);
+
+  // Read the map to find the last PID that ran on CPU 0
+  android::bpf::BpfMap&lt;int, int&gt; myMap(mMapFd);
+  printf("last PID running on CPU %d is %d\n", 0, myMap.readValue(0));</pre> <h3 id="reading">Read from the maps</h3> <p>BPF maps support arbitrary complex key and value structures or types. The Android BPF library includes an <code translate="no" dir="ltr">android::BpfMap</code> class that makes use of C++ templates to instantiate <code translate="no" dir="ltr">BpfMap</code> based on the key and value type for the map in question. The previous code sample demonstrates using a <code translate="no" dir="ltr">BpfMap</code> with key and value as integers. The integers can also be arbitrary structures.</p> <p>Thus the templatized <code translate="no" dir="ltr">BpfMap</code> class lets you define a custom <code translate="no" dir="ltr">BpfMap</code> object suitable for the particular map. The map can then be accessed using the custom-generated functions, which are type aware, resulting in cleaner code.</p> <p>For more information about <code translate="no" dir="ltr">BpfMap</code>, refer to the <a href="https://android.googlesource.com/platform/system/bpf/+/75b410bdf186263fa4e05e079bfba44578622c33/libbpf/include/bpf/BpfMap.h">Android sources</a>.</p> <h2 id="debugging">Debug issues</h2> <p>During boot time, several messages related to BPF loading are logged. If the loading process fails for any reason, a detailed log message is provided in logcat. Filtering the logcat logs by <code translate="no" dir="ltr">bpf</code> prints all the messages and any detailed errors during load time, such as eBPF verifier errors.</p> <h2 id="androidebpf">Examples of eBPF in Android</h2> <p>The following programs in AOSP provide additional examples of using eBPF:</p> <ul> <li><p>The <code translate="no" dir="ltr">netd</code> <a href="https://android.googlesource.com/platform/system/bpf/+/4845288a6e42e13b1bb8063923b24371c9e93397/progs/netd.c">eBPF C program</a> is used by the networking daemon (netd) in Android for various purposes such as socket filtering and statistics gathering. To see how this program is used, check the <a href="../../data/ebpf-traffic-monitor">eBPF traffic monitor</a> sources.</p></li> <li><p>The <code translate="no" dir="ltr">time_in_state</code> <a href="https://android.googlesource.com/platform/system/bpfprogs/+/482dfa1ca63eb209866ff3a7b3aeb3daada7b4e1/time_in_state.c">eBPF C program</a> calculates the amount of time an Android app spends at different CPU frequencies, which is used to calculate power.</p></li> <li><p>In Android 12, the <code translate="no" dir="ltr">gpu_mem</code> <a href="https://android.googlesource.com/platform/frameworks/native/+/445e98c792dfb991cd408de5699c6e3b813973d9/services/gpuservice/bpfprogs/gpu_mem.c">eBPF C program</a> tracks total GPU memory usage for each process and for the entire system. This program is used for GPU memory profiling.</p></li> </ul> <p>For more information about using eBPF to collect low-overhead kernel memory management and power latency histograms for <code translate="no" dir="ltr">statsd</code>, see <a href="kernel-telemetry">Collect kernel telemetry with eBPF</a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/kernel/bpf" class="_attribution-link">https://source.android.com/docs/core/architecture/kernel/bpf</a>
+  </p>
+</div>

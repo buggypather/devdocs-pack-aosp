@@ -1,0 +1,98 @@
+<h1>Vendor boot partitions</h1>  <p>Android 11 introduced the concept of the Generic Kernel Image (GKI). To enable booting an arbitrary device with the GKI, Android 11 devices can use boot image header version 3. In version 3, all vendor-specific information is factored out of the <code translate="no" dir="ltr">boot</code> partition and relocated into a new <code translate="no" dir="ltr">vendor_boot</code> partition. An ARM64 device launching with Android 11 on the 5.4 Linux kernel must support the <code translate="no" dir="ltr">vendor_boot</code> partition and the updated <code translate="no" dir="ltr">boot</code> partition format to pass testing with the GKI.</p> <p>Android 12 devices can use boot image header version 4, which supports including multiple vendor ramdisks in the <code translate="no" dir="ltr">vendor_boot</code> partition. Multiple vendor ramdisk fragments are concatenated one after another in the vendor ramdisk section. A vendor ramdisk table is used to describe the layout of the vendor ramdisk section and the metadata of each vendor ramdisk fragment.</p> <h2 id="vendor-boot-partition">Partition structure</h2> <p>The vendor boot partition is A/B-ed with virtual A/B and protected by Android Verified Boot.</p> <h3 id="vendor-boot-partition-v3">Version 3</h3> <p>The partition consists of a header, the vendor ramdisk, and the device tree blob (DTB).</p> <table> <tr> <th>Section</th> <th>Number of pages</th> </tr> <tr> <td>Vendor boot header (n pages)</td> <td><code translate="no" dir="ltr">n = (2112 + page_size - 1) / page_size</code></td> </tr> <tr> <td>Vendor ramdisk (o pages)</td> <td><code translate="no" dir="ltr">o = (vendor_ramdisk_size + page_size - 1) / page_size</code></td> </tr> <tr> <td>DTB (p pages)</td> <td><code translate="no" dir="ltr">p = (dtb_size + page_size - 1) / page_size</code></td> </tr> </table> <h3 id="vendor-boot-partition-v4">Version 4</h3> <p>The partition consists of a header, the vendor ramdisk section (consisting of all vendor ramdisk fragments, concatenated), the device tree blob (DTB), and the vendor ramdisk table.</p> <table> <tr> <th>Section</th> <th>Number of pages</th> </tr> <tr> <td>Vendor boot header (n pages)</td> <td><code translate="no" dir="ltr">n = (2128 + page_size - 1) / page_size</code></td> </tr> <tr> <td>Vendor ramdisk fragments (o pages)</td> <td><code translate="no" dir="ltr">o = (vendor_ramdisk_size + page_size - 1) / page_size</code></td> </tr> <tr> <td>DTB (p pages)</td> <td><code translate="no" dir="ltr">p = (dtb_size + page_size - 1) / page_size</code></td> </tr> <tr> <td>Vendor ramdisk table (q pages)</td> <td><code translate="no" dir="ltr">q = (vendor_ramdisk_table_size + page_size - 1) / page_size</code></td> </tr> <tr> <td>Bootconfig (r pages)</td> <td><code translate="no" dir="ltr">r = (bootconfig_size + page_size - 1) / page_size</code></td> </tr> </table> <aside class="note"><strong>Note:</strong><span> For details on the vendor ramdisk and the handling of kernel modules, see <a href="../kernel/kernel-module-support">Kernel Module Support</a>.</span></aside> <h2 id="vendor-boot-header">Vendor boot header</h2> <p>The contents of the vendor boot partition header consist primarily of data that has been relocated there from the <a href="../bootloader/boot-image-header">boot image header</a>. It also contains information about the vendor ramdisk.</p> <h3 id="vendor-boot-header-v3">Version 3</h3> 
+<pre>struct vendor_boot_img_hdr_v3
+{
+#define VENDOR_BOOT_MAGIC_SIZE 8
+    uint8_t magic[VENDOR_BOOT_MAGIC_SIZE];
+    uint32_t header_version;
+    uint32_t page_size;           /* flash page size we assume */
+
+    uint32_t kernel_addr;         /* physical load addr */
+    uint32_t ramdisk_addr;        /* physical load addr */
+
+    uint32_t vendor_ramdisk_size; /* size in bytes */
+
+#define VENDOR_BOOT_ARGS_SIZE 2048
+    uint8_t cmdline[VENDOR_BOOT_ARGS_SIZE];
+
+    uint32_t tags_addr;           /* physical addr for kernel tags */
+
+#define VENDOR_BOOT_NAME_SIZE 16
+    uint8_t name[VENDOR_BOOT_NAME_SIZE]; /* asciiz product name */
+    uint32_t header_size;         /* size of vendor boot image header in
+                                   * bytes */
+    uint32_t dtb_size;            /* size of dtb image */
+    uint64_t dtb_addr;            /* physical load address */
+
+};
+</pre> <h3 id="vendor-boot-header-v4">Version 4</h3> 
+<pre>struct vendor_boot_img_hdr_v4
+{
+#define VENDOR_BOOT_MAGIC_SIZE 8
+    uint8_t magic[VENDOR_BOOT_MAGIC_SIZE];
+    uint32_t header_version;
+    uint32_t page_size;           /* flash page size we assume */
+
+    uint32_t kernel_addr;         /* physical load addr */
+    uint32_t ramdisk_addr;        /* physical load addr */
+
+    uint32_t vendor_ramdisk_size; /* size in bytes */
+
+#define VENDOR_BOOT_ARGS_SIZE 2048
+    uint8_t cmdline[VENDOR_BOOT_ARGS_SIZE];
+
+    uint32_t tags_addr;           /* physical addr for kernel tags */
+
+#define VENDOR_BOOT_NAME_SIZE 16
+    uint8_t name[VENDOR_BOOT_NAME_SIZE]; /* asciiz product name */
+    uint32_t header_size;         /* size of vendor boot image header in
+                                   * bytes */
+    uint32_t dtb_size;            /* size of dtb image */
+    uint64_t dtb_addr;            /* physical load address */
+
+    uint32_t vendor_ramdisk_table_size; /* size in bytes for the vendor ramdisk table */
+    uint32_t vendor_ramdisk_table_entry_num; /* number of entries in the vendor ramdisk table */
+    uint32_t vendor_ramdisk_table_entry_size; /* size in bytes for a vendor ramdisk table entry */
+    uint32_t bootconfig_size; /* size in bytes for the bootconfig section */
+};
+
+#define VENDOR_RAMDISK_TYPE_NONE 0
+#define VENDOR_RAMDISK_TYPE_PLATFORM 1
+#define VENDOR_RAMDISK_TYPE_RECOVERY 2
+#define VENDOR_RAMDISK_TYPE_DLKM 3
+
+struct vendor_ramdisk_table_entry_v4
+{
+    uint32_t ramdisk_size; /* size in bytes for the ramdisk image */
+    uint32_t ramdisk_offset; /* offset to the ramdisk image in vendor ramdisk section */
+    uint32_t ramdisk_type; /* type of the ramdisk */
+#define VENDOR_RAMDISK_NAME_SIZE 32
+    uint8_t ramdisk_name[VENDOR_RAMDISK_NAME_SIZE]; /* asciiz ramdisk name */
+
+#define VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE 16
+    // Hardware identifiers describing the board, soc or platform which this
+    // ramdisk is intended to be loaded on.
+    uint32_t board_id[VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE];
+};
+</pre> <ul> <li>
+<code translate="no" dir="ltr">vendor_ramdisk_size</code> is the total size of all the vendor ramdisk fragments.</li> <li>
+<code translate="no" dir="ltr">ramdisk_type</code> denotes the type of the ramdisk, possible values are: <ul> <li>
+<code translate="no" dir="ltr">VENDOR_RAMDISK_TYPE_NONE</code> indicates the value is unspecified.</li> <li>
+<code translate="no" dir="ltr">VENDOR_RAMDISK_TYPE_PLATFORM</code> ramdisks contain platform specific bits. The bootloader must always load these into memory.</li> <li>
+<code translate="no" dir="ltr">VENDOR_RAMDISK_TYPE_RECOVERY</code> ramdisks contain recovery resources. The bootloader must load these into memory when booting into recovery.</li> <li>
+<code translate="no" dir="ltr">VENDOR_RAMDISK_TYPE_DLKM</code> ramdisks contain dynamic loadable kernel modules.</li> </ul>
+</li> <li>
+<code translate="no" dir="ltr">ramdisk_name</code> is an unique name of the ramdisk.</li> <li>
+<code translate="no" dir="ltr">board_id</code> is a vector of vendor defined hardware identifiers.</li> </ul> <aside class="note"><strong>Note:</strong><span> To view AOSP details on all supported boot and vendor boot image headers, refer to <a href="https://android.googlesource.com/platform/system/tools/mkbootimg/+/refs/heads/android17-release/include/bootimg/bootimg.h"><code translate="no" dir="ltr">system/tools/mkbootimg/include/bootimg/bootimg.h</code></a>.</span></aside> <h2 id="bootloader-support">Bootloader support</h2> <p>Because the vendor boot partition contains information (such as flash page size, kernel, ramdisk load addresses, the DTB itself) that previously existed in the boot partition, the bootloader must access both the boot and vendor boot partitions to have enough data to complete booting.</p> <p>The bootloader must load the generic ramdisk into memory <em>immediately</em> following the vendor ramdisk (the CPIO, Gzip, and lz4 formats support this type of concatenation). Don't page align the generic ramdisk image or introduce any other space between it and the end of the vendor ramdisk in memory. After the kernel decompresses, it extracts the concatenated file into an <code translate="no" dir="ltr">initramfs</code>, which results in a file structure that's a generic ramdisk overlaid on the vendor ramdisk file structure.</p> <p>Because the generic ramdisk and vendor ramdisk get concatenated, they must be in the same format. The GKI boot image uses an lz4-compressed generic ramdisk, so a device that is GKI-compliant must use an lz4-compressed vendor ramdisk. The configuration for this is shown below.</p> <p>The bootloader requirements for supporting bootconfig are explained in <a href="../bootloader/implementing-bootconfig">Implement Bootconfig</a>.</p> <h3 id="multiple_vendor_ramdisks_version_4">Multiple vendor ramdisks (version 4)</h3> <p>With boot image header version 4, the bootloader can select either a subset or all of the vendor ramdisks to load as the <code translate="no" dir="ltr">initramfs</code> during boot time. The vendor ramdisk table contains the metadata of each ramdisk, and can aid the bootloader in deciding which ramdisks to load. The bootloader can decide the order to load the selected vendor ramdisks, as long as the generic ramdisk is loaded last.</p> <p>For example, the bootloader can omit loading vendor ramdisks of type <code translate="no" dir="ltr">VENDOR_RAMDISK_TYPE_RECOVERY</code> during normal boot to conserve resources, so only vendor ramdisks of type <code translate="no" dir="ltr">VENDOR_RAMDISK_TYPE_PLATFORM</code> and <code translate="no" dir="ltr">VENDOR_RAMDISK_TYPE_DLKM</code> are loaded into memory. On the other hand, vendor ramdisks of type <code translate="no" dir="ltr">VENDOR_RAMDISK_TYPE_PLATFORM</code>, <code translate="no" dir="ltr">VENDOR_RAMDISK_TYPE_RECOVERY</code> and <code translate="no" dir="ltr">VENDOR_RAMDISK_TYPE_DLKM</code> are loaded into memory when booting into recovery mode.</p> <p>Alternatively, the bootloader can ignore the vendor ramdisk table and load the entire vendor ramdisk section. This has the same effect as does loading all of the vendor ramdisk fragments in the <code translate="no" dir="ltr">vendor_boot</code> partition.</p> <h2 id="build-support">Build support</h2> <p>To implement vendor boot support for a device:</p> <ul> <li><p>Set <code translate="no" dir="ltr">BOARD_BOOT_HEADER_VERSION</code> to <code translate="no" dir="ltr">3</code> or greater.</p></li> <li><p>Set <code translate="no" dir="ltr">BOARD_RAMDISK_USE_LZ4</code> to <code translate="no" dir="ltr">true</code> if your device is GKI-compliant, or if it otherwise uses an lz4-compressed generic ramdisk.</p></li> <li><p>Set <code translate="no" dir="ltr">BOARD_VENDOR_BOOTIMAGE_PARTITION_SIZE</code> to an appropriate size for your device, considering the kernel modules that must go on the vendor ramdisk.</p></li> <li><p>Update <code translate="no" dir="ltr">AB_OTA_PARTITIONS</code> to include <code translate="no" dir="ltr">vendor_boot</code> and any vendor-specific lists of OTA partitions on the device.</p></li> <li><p>Copy your device <code translate="no" dir="ltr">fstab</code> into <code translate="no" dir="ltr">/first_stage_ramdisk</code> in the <code translate="no" dir="ltr">vendor_boot</code> partition, not the <code translate="no" dir="ltr">boot</code> partition. For example, <code translate="no" dir="ltr">$(LOCAL_PATH)/fstab.hardware:$(TARGET_COPY_OUT_VENDOR_RAMDISK)/first_stage_ramdisk/fstab.$(PRODUCT_PLATFORM)</code>.</p></li> </ul> <p>To include multiple vendor ramdisks in <code translate="no" dir="ltr">vendor_boot</code>:</p> <ul> <li>Set <code translate="no" dir="ltr">BOARD_BOOT_HEADER_VERSION</code> to <code translate="no" dir="ltr">4</code>.</li> <li>
+<p>Set <code translate="no" dir="ltr">BOARD_VENDOR_RAMDISK_FRAGMENTS</code> to a list of logical vendor ramdisk fragment names to be included in <code translate="no" dir="ltr">vendor_boot</code>.</p> <aside class="special"><strong>Important:</strong><span> For Android 12 and higher, usage of the name <code translate="no" dir="ltr">default</code> is reserved. Giving the name <code translate="no" dir="ltr">default</code> to vendor ramdisk fragments isn't allowed under any circumstances. To learn more, see the <a href="../bootloader/fastbootd">Moving Fastboot to Userspace page</a>, under <a href="../bootloader/fastbootd#mkbootimg">mkbootimg</a>.</span></aside>
+</li> <li><p>To add a prebuilt vendor ramdisk, set <code translate="no" dir="ltr">BOARD_VENDOR_RAMDISK_FRAGMENT.$(vendor_ramdisk).PREBUILT</code> to the prebuilt path.</p></li> <li><p>To add a DLKM vendor ramdisk, set <code translate="no" dir="ltr">BOARD_VENDOR_RAMDISK_FRAGMENT.$(vendor_ramdisk).KERNEL_MODULE_DIRS</code> to the list of kernel module directories to be included.</p></li> <li><p>Set <code translate="no" dir="ltr">BOARD_VENDOR_RAMDISK_FRAGMENT.$(vendor_ramdisk).MKBOOTIMG_ARGS</code> to <code translate="no" dir="ltr">mkbootimg</code> arguments. These are the <code translate="no" dir="ltr">--board_id[0-15]</code> and <code translate="no" dir="ltr">--ramdisk_type</code> arguments for the vendor ramdisk fragment. For DLKM vendor ramdisk, the default <code translate="no" dir="ltr">--ramdisk_type</code> would be <code translate="no" dir="ltr">DLKM</code> if it's not otherwise specified.</p></li> </ul> <p>To build recovery resources as a standalone <code translate="no" dir="ltr">recovery</code> ramdisk in <code translate="no" dir="ltr">vendor_boot</code>:</p> <ul> <li>Set <code translate="no" dir="ltr">BOARD_BOOT_HEADER_VERSION</code> to <code translate="no" dir="ltr">4</code>.</li> <li>Set <code translate="no" dir="ltr">BOARD_MOVE_RECOVERY_RESOURCES_TO_VENDOR_BOOT</code> to <code translate="no" dir="ltr">true</code>.</li> <li>Set <code translate="no" dir="ltr">BOARD_INCLUDE_RECOVERY_RAMDISK_IN_VENDOR_BOOT</code> to <code translate="no" dir="ltr">true</code>.</li> <li>This adds a vendor ramdisk fragment whose <code translate="no" dir="ltr">ramdisk_name</code> is <code translate="no" dir="ltr">recovery</code> and <code translate="no" dir="ltr">ramdisk_type</code> is <code translate="no" dir="ltr">VENDOR_RAMDISK_TYPE_RECOVERY</code>. The ramdisk then contains all recovery files, which are files installed under <code translate="no" dir="ltr">$(TARGET_RECOVERY_ROOT_OUT)</code>.</li> </ul> <h3 id="mkbootimg-arguments">mkbootimg arguments</h3> <table> <tr> <th>Argument</th> <th>Description</th> </tr> <tr> <td><code translate="no" dir="ltr">--ramdisk_type</code></td> <td> The type of the ramdisk, can be one of <code translate="no" dir="ltr">NONE</code>, <code translate="no" dir="ltr">PLATFORM</code>, <code translate="no" dir="ltr">RECOVERY</code> or <code translate="no" dir="ltr">DLKM</code>. </td> </tr> <tr> <td><code translate="no" dir="ltr">--board_id[0-15]</code></td> <td>Specify the <code translate="no" dir="ltr">board_id</code> vector, defaults to <code translate="no" dir="ltr">0</code>.</td> </tr> </table> <p>Following is an example configuration:</p> 
+<pre>BOARD_KERNEL_MODULE_DIRS := foo bar baz
+BOARD_BOOT_HEADER_VERSION := 4
+BOARD_VENDOR_RAMDISK_FRAGMENTS := dlkm_foobar
+BOARD_VENDOR_RAMDISK_FRAGMENT.dlkm_foobar.KERNEL_MODULE_DIRS := foo bar
+BOARD_VENDOR_RAMDISK_FRAGMENT.dlkm_foobar.MKBOOTIMG_ARGS := --board_id0 0xF00BA5 --board_id1 0xC0FFEE
+</pre> <p>The resulting <code translate="no" dir="ltr">vendor_boot</code> would contain two vendor ramdisk fragments. The first one is the "default" ramdisk, which contains the DLKM directory <code translate="no" dir="ltr">baz</code> and the rest of the files in <code translate="no" dir="ltr">$(TARGET_VENDOR_RAMDISK_OUT)</code>. The second one is the <code translate="no" dir="ltr">dlkm_foobar</code> ramdisk, which contains the DLKM directories <code translate="no" dir="ltr">foo</code> and <code translate="no" dir="ltr">bar</code>, and the <code translate="no" dir="ltr">--ramdisk_type</code> defaults to <code translate="no" dir="ltr">DLKM</code>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/partitions/vendor-boot-partitions" class="_attribution-link">https://source.android.com/docs/core/architecture/partitions/vendor-boot-partitions</a>
+  </p>
+</div>

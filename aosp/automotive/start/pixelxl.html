@@ -1,0 +1,46 @@
+<h1>Pixel devices as development platforms</h1>  <p>This guide is mainly for developers who want to test and develop using AAOS</p> <h2 id="caveats">Caveats</h2> <p>These limitations apply when using a Pixel as development platforms:</p> <aside class="caution"> <b>Caution:</b> In Android 16 and higher, AAOS builds on Pixel phones aren't supported because vendor images are no longer shared for Pixel devices. </aside> <aside class="caution"> <b>Caution:</b> There is a chance that you can brick your device when using Pixel as a development platform. If a device become bricked, have it repaired by <a href="https://store.google.com/magazine/support" target="_blank"> Google Support. </a> </aside> <ul> <li> <p> The Pixel Tablet is verified and supported. You can visit <a href="https://store.google.com/product/pixel_tablet" target="_blank">Google Store</a> to purchase it.</p> </li>
+<li> The following devices are supported but not actively tested. Be sure to download the correct binaries and then follow the instructions and change the commands as required: <ul> <li>Pixel 7, 7a and 7Pro</li> <li>Pixel 8 and 8Pro</li> </ul> </li> <li> <p>You <em>must</em> use Android 14 , build <a href="https://source.android.com/setup/start/build-numbers#source-code-tags-and-builds">android-14.0.0_r30</a>.</p> </li> <li>Limited support for Bluetooth profiles and some of the profiles will not work at all</li> <li>Tablet does not support GPS, location requires "mock location app or similar" </li> </ul> <h2 id="prerequisites">Prerequisites</h2> <p>Before you continue, confirm you have the following items:</p> <ol> <li>
+<strong>OEM unlocking is required.</strong> </li>
+<li>
+<strong>Linux desktop capable of building Android code.</strong> For more information, see <a href="https://source.android.com/setup/build/initializing">Establishing a Build Environment</a>.</li> </ol> <h2 id="code-sync-and-build">Code sync and build</h2> <ol> <li>To sync Android build AP1A.240405.002 : 
+<pre>mkdir aaos_on_pixel
+cd aaos_on_pixel
+REPO_ALLOW_SHALLOW=0 repo init -c -u https://android.googlesource.com/platform/manifest -b android-14.0.0_r30 --use-superproject --partial-clone --partial-clone-exclude=platform/frameworks/base --clone-filter=blob:limit=10M 
+repo sync -j32</pre> </li> <li>Download the vendor image for pixel devices from <a href="https://developers.google.com/android/drivers" target="_blank">developers.google.com</a> for AP1A.240405.002 
+<pre>curl --output - https://dl.google.com/dl/android/aosp/google_devices-tangorpro-ap1a.240405.002-8d141153.tgz  | tar -xzvf -
+tail -n +315 extract-google_devices-tangorpro.sh | tar -zxvf -</pre> </li> <li> Take a patch 
+<pre>cd packages/services/Car
+git fetch https://android.googlesource.com/platform/packages/services/Car refs/changes/83/3037383/2 &amp;&amp; git cherry-pick FETCH_HEAD #fix the audio crash
+cd -</pre> </li>
+<li>Run the build. : 
+<pre>. build/envsetup.sh
+lunch aosp_tangorpro_car-ap1a-userdebug
+m</pre> </li> <li>Build the Automotive-related packages: 
+<pre>m android.hardware.automotive.vehicle@2.0-default-service android.hardware.automotive.audiocontrol-service.example </pre> </li> </ol> <h2 id="set-up-the-device-to-flash-the-build">Set up the device to flash the build</h2> <p>If you haven't already done so, enable <strong>Developer options</strong>. Go to Settings &gt; System &gt; About Phone and then tap Build Number seven times.</p> <p>When you've enabled Developer options:</p> <ol> <li>Go to Settings &gt; System &gt; Developer options and enable <strong>USB debugging</strong> and <strong>OEM unlocking</strong>:</li> </ol> <table class="columns"> <tr> <td style="padding-left: 37px"><img src="https://source.android.com/static/docs/automotive/images/pixelxl_01.png" class="android-image-dark-theme-background" alt="USB bebugging"></td> <td><img src="https://source.android.com/static/docs/automotive/images/pixelxl_02.png" class="android-image-dark-theme-background" alt="OEM unlocking"></td> </tr> </table> <h2 id="flash-the-build">Flash the build</h2> <ol> <li>To place the device into fastboot mode and then unlock it: 
+<pre>adb reboot bootloader
+fastboot flashing unlock</pre> </li> <li>On the device, select Unlock the Bootloader. Doing so erases <strong><em>all</em></strong> data on the device!</li> <li>To flash the build: 
+<pre>fastboot -w flashall</pre> </li> <li>After the build start booting with animation: <ol> <li id="remount">To enable <code translate="no" dir="ltr">adb remount</code>: 
+<pre>#Temporary disable the userdata checkpoint 
+adb wait-for-device root; sleep 3; adb shell vdc checkpoint commitChanges; sleep 2 
+#Enable remount
+adb remount &amp;&amp; sleep 2 &amp;&amp; adb reboot &amp;&amp; echo "rebooting the device" &amp;&amp; adb wait-for-device root &amp;&amp; sleep 5 &amp;&amp; adb remount</pre> </li> <li>To push the required Automotive-specific files to the device: 
+<pre>adb sync vendor &amp;&amp; adb reboot</pre> </li> <li>Wait for the device to start:<br> <p><img src="https://source.android.com/static/docs/automotive/images/Pixel_boot.gif" class="screenshot android-image-dark-theme-background" alt></p> </li> </ol> <h2 id="tips">Tips</h2> </li>
+<li>If you see screen brightness too low: 
+<pre>adb shell settings put system screen_brightness 255</pre> </li> <li>Boot when charger is plugged in: 
+<pre>adb reboot bootloader 
+fastboot oem off-mode-charge 1
+fastboot reboot</pre> </li> <li>Enable Mock location: 
+<pre>    adb unroot
+    adb shell cmd location set-location-enabled true
+    adb root
+    adb shell appops set 0 android:mock_location allow
+    adb shell cmd location providers add-test-provider gps
+    adb shell cmd location providers set-test-provider-enabled gps true
+    adb shell cmd location providers set-test-provider-location gps --location 37.090200,-95.712900
+    #To verify
+    adb shell dumpsys location | grep "last location"</pre> </li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/start/pixelxl" class="_attribution-link">https://source.android.com/docs/automotive/start/pixelxl</a>
+  </p>
+</div>

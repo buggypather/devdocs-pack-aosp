@@ -1,0 +1,57 @@
+<h1>Implement the service</h1>  <aside class="warning"> <strong>Warning:</strong> Android 10 deprecates the ConfigStore HAL and replaces the HAL with system properties. For details, refer to <a href="../configuration">Configuring</a>. </aside> <p>To prepare for the HAL implementation, you can generate basic ConfigStore interface code, then modify it to meet your needs.</p> <h2 id="generate-boilerplate">Generate interface code</h2> <p>To generate boilerplate code for the interface, run <code translate="no" dir="ltr">hidl-gen</code>. For example, to generate code for <code translate="no" dir="ltr">surfaceflinger</code>:</p> 
+<pre>
+hidl-gen -o hardware/interfaces/configstore/1.0/default \
+    -Lc++-impl \
+    -randroid.hardware:hardware/interfaces \
+    -randroid.hidl:system/libhidl/transport \
+    android.hardware.config@1.0::ISurfaceFlingerConfigs
+</pre> <aside class="note"><strong>Note:</strong> Don't run <code translate="no" dir="ltr">hidl-gen</code> with <code translate="no" dir="ltr">-Landroidbp-impl</code> as this generates <code translate="no" dir="ltr">Android.bp</code>. The module must be built with <code translate="no" dir="ltr">Android.mk</code> to access build flags.</aside> <h2 id="modify-androidmk">Modify Android.mk</h2> <p>Next, modify the <code translate="no" dir="ltr">Android.mk</code> file to add the implementation file (<code translate="no" dir="ltr">&lt;modulename&gt;Configs.cpp</code>) to <code translate="no" dir="ltr">LOCAL_SRC_FILES</code> and to map build flags into macro definitions. For example, you can modify <code translate="no" dir="ltr">surfaceflinger</code> in <code translate="no" dir="ltr">hardware/interface/configstore/1.0/default/Android.mk</code>:</p> 
+<pre>
+LOCAL_SRC_FILES += SurfaceFlingerConfigs.cpp
+ifneq ($(NUM_FRAMEBUFFER_SURFACE_BUFFERS),)
+    LOCAL_CFLAGS += -DNUM_FRAMEBUFFER_SURFACE_BUFFERS=$(NUM_FRAMEBUFFER_SURFACE_BUFFERS)
+endif
+
+ifeq ($(TARGET_RUNNING_WITHOUT_SYNC_FRAMEWORK),true)
+    LOCAL_CFLAGS += -DRUNNING_WITHOUT_SYNC_FRAMEWORK
+endif
+</pre> <p>If <code translate="no" dir="ltr">Android.mk</code> includes several <code translate="no" dir="ltr">ifeq-endif</code> blocks, consider moving your code into a new file (that is, <code translate="no" dir="ltr">surfaceflinger.mk</code>) then include that file from <code translate="no" dir="ltr">Android.mk</code>.</p> <h2 id="implement-functions">Implement functions</h2> <p>To fill the functions to implement the HAL, call back the <code translate="no" dir="ltr">_hidl_cb</code> function with different values (conditioned on build flags). For example, you can fill the functions for <code translate="no" dir="ltr">surfaceflinger</code> in <code translate="no" dir="ltr">hardware/interfaces/configstore/1.0/default/SurfaceFlingerConfigs.cpp</code>: </p> 
+<pre>
+Return&lt;void&gt; SurfaceFlingerConfigs::numFramebufferSurfaceBuffers(
+        numFramebufferSurfaceBuffers_cb _hidl_cb) {
+    #if NUM_FRAMEBUFFER_SURFACE_BUFFERS 2
+    _hidl_cb(NumBuffers.TWO);
+    #else if NUM_FRAMEBUFFER_SURFACE_BUFFERS 3
+    _hidl_cb(NumBuffers.THREE);
+    #else
+    _hidl_cb(NumBuffers.USE_DEFAULT);
+    #endif
+}
+
+Return&lt;void&gt; SurfaceFlingerConfigs::runWithoutSyncFramework(
+        runWithoutSyncFramework_cb _hidl_cb) {
+    #ifdef RUNNING_WITHOUT_SYNC_FRAMEWORK
+    _hidl_cb({true /* specified */, true /* value */});
+    #else
+    // when macro not defined, we can give any value to the second argument.
+    // It will simply be ignored in the framework side.
+    _hidl_cb({false /* specified */, false /* value */});
+    #endif
+}
+</pre> <p>Ensure that the implementation doesn't contain a function named <code translate="no" dir="ltr">HIDL_FETCH_<var translate="no">interface-name</var></code> (for example, <code translate="no" dir="ltr">HIDL_FETCH_ISurfaceFlingerConfigs</code>). This function is needed for HIDL passthrough mode, which is unused (and prohibited) by <code translate="no" dir="ltr">configstore</code>. ConfigStore must always run in binderized mode.</p> <h2 id="register-service">Register as a service</h2> <p>Finally, register all interface implementations to the <code translate="no" dir="ltr">configstore</code> service. For example, you can register <code translate="no" dir="ltr">surfaceflinger</code> implementations in <code translate="no" dir="ltr">hardware/interfaces/configstore/1.0/default/service.cpp</code>: </p> 
+<pre>
+configureRpcThreadpool(maxThreads, true);
+sp&lt;ISurfaceFlingerConfigs&gt; surfaceFlingerConfigs = new SurfaceFlingerConfigs;
+status_t status = surfaceFlingerConfigs-&gt;registerAsService();
+
+sp&lt;IBluetoothConfigs&gt; bluetoothConfigs = new BluetoothConfigs;
+status = bluetoothConfigs-&gt;registerAsService();
+
+// register more interfaces here
+joinRpcThreadpool();
+</pre> <h2 id="bootstrapping">Ensure early access</h2> <p>To ensure that a framework module can get early access the HAL service, the config HAL service should start as early as possible, just after <code translate="no" dir="ltr">hwservicemanager</code> is ready. As the config HAL service doesn't read external files, it's expected to be ready quickly after it's launched.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/configstore/service" class="_attribution-link">https://source.android.com/docs/core/architecture/configstore/service</a>
+  </p>
+</div>

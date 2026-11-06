@@ -1,0 +1,41 @@
+<h1>Integrate SOME/IP with SDV</h1>  <p>Integrate the scalable service-oriented middleware over IP (<a href="https://some-ip.com/">SOME/IP</a>) with software defined vehicle (SDV) by deploying and configuring several components. Each broker instance requires a corresponding local stack implementation. This document describes how to:</p> <ul> <li>Configure a single broker deployment</li> <li>Deploy the SOME/IP broker as a single or as multiple instances</li> <li>Deploy the vehicle services interactive data language (VSIDL) agent</li> <li>Use Soong with <code translate="no" dir="ltr">vsidl_rc_generator</code>
+</li> </ul> <h2 id="sample-configuration">Example configuration</h2> <p>The SDV examples, such as those for <a href="../../../devices/cuttlefish">Cuttlefish virtual Android devices</a> <code translate="no" dir="ltr">sdv_core_cf</code> and hardware <code translate="no" dir="ltr">sdv_core_arm64</code>, demonstrate a flexible deployment schema. The broker and stack each start based on a boot time system property, <code translate="no" dir="ltr">ro.boot.sdv.someip.enable</code>.</p> <p>You can achieve a single broker deployment schema by setting <code translate="no" dir="ltr">androidboot.sdv.someip.enable=true</code> on only one of the SDV instances running on the system.</p> 
+<pre># device/google/sdv/sdv_core_base/sdv.agents.rc
+# Declare and start the SDV SOME/IP broker agent.
+service sdv_someip_broker_agent /system_ext/bin/sdv_someip_broker_agent_comms
+    class core
+    disabled
+    user system_ext_sdv_someip
+    group system
+on property:ro.sdv.orchestrator.state.ready=true &amp;&amp; property:ro.boot.sdv.someip.enable=true
+    start sdv_someip_broker_agent
+</pre> <p>Another example:</p> 
+<pre>#device/google/sdv/sdv_core_cf/init.sdv_core_cf.rc
+# Declare and start the sample SDV SOME/IP stack agent.
+service sdv_someip_stack_agent /vendor/bin/sdv_someip_stack_agent
+    class core
+    disabled
+    user system
+    group system
+    setenv VSOMEIP_CONFIGURATION /vendor/etc/someip/vsomeip_config.json
+    setenv VSOMEIP_BASE_PATH /data/vendor/vsomeip/
+on property:dev.bootcomplete=1 &amp;&amp; property:ro.boot.sdv.someip.enable=true
+    start sdv_someip_stack_agent
+</pre> <h2 id="broker-deployment">Broker deployment</h2> <p>You can deploy the SOME/IP broker as a single or as multiple instances in SDV. You can split SOME/IP domains (or subnets) into different independent instances. You can do this to balance load or to improve isolation for security purposes.</p> <p>Each instance must process a disjointed set of SOME/IP and SDV endpoints. You can't use special routing or cross-agent synchronization. An improper configuration can lead to duplicate publications or inconsistent service discovery results.</p> <h2 id="vsidl-provider">Vehicle services interactive data language provider</h2> <p>SOME/IP gets metadata required for translations from the VSIDL agent. You must deploy the VSIDL agent to the same VM as the SOME/IP broker.</p> <aside class="note"><strong>Note:</strong><span> SDV supports global data location for the schemas and mappings used by SOME/IP brokers. As a result, the VSIDL agent doesn't retrieve data from other VMs or Android Package Extension (APEX) containers.</span></aside> <p>When used with the <code translate="no" dir="ltr">runtime-config-prebuilts</code> variant option, the VSIDL agent can generate an <code translate="no" dir="ltr">Android.bp</code> file. This file contains prebuilt rules that build and deploy the relevant runtime configuration.</p> <h2 id="soong">Soong</h2> <p>To run <code translate="no" dir="ltr">vsidl_rc_generator</code> provided by SDV:</p> 
+<pre>vsidl_rc_generator [OPTIONS] --catalog-path &lt;CATALOG_PATH&gt; --output-path &lt;OUTPUT_PATH&gt;
+</pre> <p>You must supply these arguments:</p> <ul> <li><code translate="no" dir="ltr">--vsidl-path &lt;VSIDL_PATH&gt;</code></li> <li><code translate="no" dir="ltr">--catalog-path &lt;CATALOG_PATH&gt;</code></li> <li><code translate="no" dir="ltr">--output-path &lt;OUTPUT_PATH&gt;</code></li> </ul> <p>You can also provide these optional arguments:</p> <ul> <li>
+<p>Optional: <code translate="no" dir="ltr">--dependency-catalog-path &lt;DEPENDENCY_CATALOG_PATH&gt;...</code></p> <p>Specifies the directories of the dependent protos outside the <code translate="no" dir="ltr">catalog_path</code>. To generate the Rust API for the dependent protos, each directory must contain an <code translate="no" dir="ltr">Android.bp</code> file. This file must include a <code translate="no" dir="ltr">rust_protobuf</code> build target.</p>
+</li> <li>
+<p>Optional: <code translate="no" dir="ltr">--variant &lt;VARIANT&gt;</code></p> <p>Defaults to <code translate="no" dir="ltr">RuntimeConfig</code> and specifies the mode in which the runtime config generator must run. <code translate="no" dir="ltr">RuntimeConfig</code> generates runtime config files for SOME/IP and diagnostics.</p> <p><code translate="no" dir="ltr">RuntimeConfigPrebuilts</code> generates build files. These files contain prebuilt modules. You can use these modules to include files generated by the <code translate="no" dir="ltr">RuntimeConfig</code> variant in other modules or in the VM image.</p>
+</li> <li>
+<p>Optional: <code translate="no" dir="ltr">--service-bundle-name &lt;SERVICE_BUNDLE_NAME&gt;</code></p> <p>Argument to specify the service bundle on which to apply the runtime config generator.</p>
+</li> <li>
+<p>Optional: <code translate="no" dir="ltr">--package-name &lt;PACKAGE_NAME&gt;</code></p> <p>In addition to the service bundle name argument, use this argument to specify the service bundle package name on which to apply the runtime config generator.</p>
+</li> <li>
+<p>Optional: <code translate="no" dir="ltr">--filegroup &lt;FILEGROUP&gt;</code></p> <p>Must be defined when using the <code translate="no" dir="ltr">RuntimeConfigPrebuilts</code> mode.</p>
+</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/some-ip-integration/deployment" class="_attribution-link">https://source.android.com/docs/automotive/sdv/some-ip-integration/deployment</a>
+  </p>
+</div>

@@ -1,0 +1,152 @@
+<h1>Service bundle metadata</h1>  <p>This page explains how to use the mandatory and optional service bundle metadata fields.</p> <h2 id="mandatory-metadata">Mandatory metadata</h2> <p>The service bundle execution model requires each service bundle to define the following metadata:</p> <ul> <li>Name of the service according to the <a href="../../core-areas/naming-conventions#service-name">SDV naming convention</a>
+</li> <li>Integer and string representation of the service bundle version</li> <li>Path to the <a href="service-bundle-development">service bundle library</a>
+</li> </ul> 
+<pre>sdv_service_bundle_metadata {
+  # Name of the service bundle.
+  #
+  # Must follow SDV service naming convention rules.
+  # Ref: https:/automotive/sdv/core-areas/naming-conventions
+  #
+  # When using VSIDL catalog and middleware generation, this name must be
+  # equal to the service bundle name defined in the catalog.
+  name: "TheNameOfTheServiceBundle"
+
+  # Service Bundle Version Number.
+  # Must be non-negative number.
+  version_number: 1
+
+  # Service Bundle Version Name.
+  # Must be non-empty string.
+  version_name: "1.0 alpha"
+
+  # Path to the native library to be loaded as service bundle.
+  # Must be the relative path from the APEX root directory
+  native_library_path: "lib64/libservice_bundle.so"
+}
+</pre>
+<aside class="tip"><strong>Tip:</strong><span> You can add several service bundles in one manifest file, if they are to be stored in the same package.</span></aside>
+<pre># Service bundle one.
+sdv_service_bundle_metadata {
+  name: "ServiceBundleOne"
+  ...
+}
+# Service bundle two.
+sdv_service_bundle_metadata {
+  name: "ServiceBundleTwo"
+  ...
+}
+</pre> <h2 id="optional-metadata">Optional metadata</h2> <p>Optional metadata support specific SDV capabilities.</p> <h3 id="orchestration-metadata">Orchestration metadata</h3> <p>The SDV orchestration configuration provides a mechanism for controlling service bundles startup and shutdown behavior. The SDV orchestration configuration defines a set of rules that determine when and how actions are performed on service bundle instances. These rules are based on vehicle, power and custom modes.</p> <p>To associate an orchestration configuration to the service bundle, provide the path to the <code translate="no" dir="ltr">prebuilt_etc</code> module in the optional <code translate="no" dir="ltr">orchestration_config_path</code> field:</p> 
+<pre>sdv_service_bundle_metadata {
+  ...
+  # Path to the orchestration config file.
+  # Warning: Shall be relative path to the APEX root directory.
+  orchestration_config_path: "etc/configuration/orchestration/configuration.textproto"
+}
+</pre> <h3 id="authorization-policy-path">Authorization policy path</h3> <p>The SDV authorization policy provides a mechanism for declaring permissions for the service bundle. The authorization policy defines what actions the service bundle can perform (such as publish, subscribe, serve, or call).</p> <p>To associate an authorization policy to the service bundle, provide the path to the <code translate="no" dir="ltr">prebuilt_etc</code> module in the optional <code translate="no" dir="ltr">authorization_policy_path</code> field:</p> 
+<pre>sdv_service_bundle_metadata {
+  ...
+  # Path to the authorization policy file.
+  # Warning: Shall be relative path to the APEX root directory.
+  authorization_policy_path: "etc/authz/permissions.textproto"
+}
+</pre> <h3 id="reflection-metadata">VSIDL provider metadata</h3> <p>The VSIDL provider metadata is a part of a mechanism for integrating service bundles with Diagnostics and SOME/IP platforms agents.</p> <p>To associate a VSIDL provider metadata with a service bundle, provide the path to the <code translate="no" dir="ltr">prebuilt_etc</code> files that contain generated metadata files in the optional <code translate="no" dir="ltr">vsidl_schemas_path</code> / <code translate="no" dir="ltr">diagnostics_config_path</code> / (SOME/IP config APEX only) <code translate="no" dir="ltr">external_service_bundle_metadata_path</code> field:</p> 
+<pre>sdv_service_bundle_metadata {
+  ...
+  # Path to the file with protobuf schemas extracted from bundle's VSIDL definition.
+  # Warning: Must be relative path to the APEX root directory.
+  vsidl_schemas_path: "etc/vsidl_provider/TheNameOfTheServiceBundle-vsidl-config.binpb"
+
+  # Path to the diagnostics config file.
+  # Warning: Shall be relative path to the APEX root directory.
+  diagnostics_config_path: "etc/vsidl_provider/TheNameOfTheServiceBundle-diag-config.binpb"
+
+  # Path to the SOME/IP config file. To be used in SOME/IP configuration apex only.
+  # Warning: Must be relative path to the APEX root directory.
+  external_protocol_mapping_path: "etc/vsidl_provider/someip-config.binpb"
+}
+</pre> <p>To learn more, see <a href="../../core-areas/vsidl">VSIDL Provider Overview</a>.</p> <h3 id="logtag-metadata">Log tag metadata</h3> <p>The log tag attribute specifies the unique identifier for logs generated by the service bundle. If this attribute is not defined, a default tag is automatically generated using the package name, service bundle name, and instance name. For optimal clarity, define a concise and unique log tag.</p> <h3 id="custom-metadata">Custom metadata</h3> <p>Custom metadata allows OEM and vendors to define some specific service bundle metadata</p> 
+<pre>sdv_service_bundle_metadata {
+  ...
+  # Custom service bundle metadata map.
+  # Key is a string, value is a string.
+  #
+  # 1st custom metadata value.
+  custom_metadata {
+    key: "question"
+    value: "Answer to the Ultimate Question of Life, the Universe, and Everything"
+  }
+  # 2nd custom metadata value.
+  custom_metadata {
+    key: "answer" value: "42"
+  }
+}
+</pre>
+<aside class="caution"><strong>Caution:</strong><span> The entire size of all custom metadata fields should be limited to 10 KB. This is a soft limit, which comes from the binder buffer limit. This can lead to a binder transaction failure and the metadata from entire service bundles becomes unavailable.</span></aside><aside class="tip"><strong>Tip:</strong><span> To reduce the size of the custom metadata field extract all the related metadata in a separate file, create a <code translate="no" dir="ltr">prebuilt_etc</code> module with this file and reference the path to this file in the custom metadata.</span></aside>
+<pre>sdv_service_bundle_metadata {
+  ...
+  # Custom metadata values are stored in etc/.
+  custom_metadata {
+    key: "path_to_custom_metadata"
+    value: "etc/configuration/file"
+  }
+}
+</pre> <h2 id="full-example">Full example</h2> 
+<pre># proto-file: //system/software_defined_vehicle/core_services/service_bundles_registry/proto/sdv_service_bundles_manifest.proto
+# proto-message: SdvServiceBundleManifestEntry
+
+# SDV service bundle.
+sdv_service_bundle_metadata {
+  # Name of the service bundle.
+  # Must follow SDV service naming convention rules.
+  name: "TheNameOfTheServiceBundle"
+
+  # Service Bundle Version Number.
+  # Must be non-negative number.
+  version_number: 42
+
+  # Service Bundle Version Name.
+  # Must be non-empty string.
+  version_name: "42.0.beta"
+
+  # Path to the native library to be loaded as service bundle.
+  # Must be the relative path from the APEX root directory.
+  native_library_path: "lib64/libservice_bundle.so"
+
+  # The log tag used for Android logging for the service bundle.
+  # If not specified, a tag derived from service bundle FQIN will be used.
+  log_tag: "current_service_bundle"
+
+  # Path to the orchestration config file.
+  # Warning: Shall be relative path to the APEX root directory.
+  orchestration_config_path: "etc/configuration/orchestration/configuration.textproto"
+
+  # Path to the file with protobuf schemas extracted from bundle's VSIDL definition.
+  # Warning: Must be relative path to the APEX root directory.
+  vsidl_schemas_path: "etc/vsidl_provider/TheNameOfTheServiceBundle-vsidl-config.binpb"
+
+  # Path to the diagnostics config file.
+  # Warning: Must be relative path to the APEX root directory.
+  diagnostics_config_path: "etc/vsidl_provider/TheNameOfTheServiceBundle-diag-config.binpb"
+
+  # Path to the SOME/IP config file. To be used in SOME/IP configuration apex only.
+  # Warning: Must be relative path to the APEX root directory.
+  external_protocol_mapping_path: "etc/vsidl_provider/someip-config.binpb"
+
+  # Custom service bundle metadata string.
+  # Key is a string, value is a string.
+  custom_metadata {
+    key: "key" value: "value"
+  }
+
+  # Custom metadata values are stored in etc/.
+  custom_metadata {
+    key: "path_to_custom_metadata"
+    value: "etc/configuration/file"
+  }
+}
+</pre> <h2 id="references">References</h2> <ul> <li><a href="service-bundle-development">Service bundle development guide</a></li> <li><a href="../../core-areas/naming-conventions#service-name">SDV naming convention</a></li> <li><a href="../../core-areas/vsidl">SDV metadata file sample</a></li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/core/service-bundle-metadata" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/core/service-bundle-metadata</a>
+  </p>
+</div>

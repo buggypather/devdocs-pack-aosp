@@ -1,0 +1,269 @@
+<h1>Stable AIDL</h1>  <p>Android 10 adds support for stable Android Interface Definition Language (AIDL), a new way to keep track of the application program interface (API) and application binary interface (ABI) provided by AIDL interfaces. Stable AIDL works exactly like AIDL, but the build system tracks interface compatibility, and there are restrictions on what you can do:</p> <ul> <li>Interfaces are defined in the build system with <code translate="no" dir="ltr">aidl_interfaces</code>.</li> <li>Interfaces can contain only structured data. Parcelables representing the preferred types are automatically created based on their AIDL definition and are automatically marshalled and unmarshalled.</li> <li>Interfaces can be declared as stable (backward compatible). When this happens, their API is tracked and versioned in a file next to the AIDL interface.</li> </ul> <h2 id="structured-vs-stable">Structured versus stable AIDL</h2> <p><em>Structured AIDL</em> refers to types defined purely in AIDL. For example, a parcelable declaration (a custom parcelable) isn't structured AIDL. Parcelables with their fields defined in AIDL are called <em>structured parcelables</em>.</p> <p><em>Stable AIDL</em> requires structured AIDL so that the build system and compiler can understand if changes made to parcelables are backward compatible. However, not all structured interfaces are stable. To be stable, an interface must use only structured types, and it also must use the following versioning features. Conversely, an interface isn't stable if the core build system is used to build it or if <code translate="no" dir="ltr">unstable:true</code> is set.</p> <h2 id="defining-an-aidl-interface">Define an AIDL interface</h2> <p>A definition of <code translate="no" dir="ltr">aidl_interface</code> looks like this:</p> 
+<pre>aidl_interface {
+    name: "my-aidl",
+    srcs: ["srcs/aidl/**/*.aidl"],
+    local_include_dir: "srcs/aidl",
+    imports: ["other-aidl"],
+    versions_with_info: [
+        {
+            version: "1",
+            imports: ["other-aidl-V1"],
+        },
+        {
+            version: "2",
+            imports: ["other-aidl-V3"],
+        }
+    ],
+    stability: "vintf",
+    backend: {
+        java: {
+            enabled: true,
+            platform_apis: true,
+        },
+        cpp: {
+            enabled: true,
+        },
+        ndk: {
+            enabled: true,
+        },
+        rust: {
+            enabled: true,
+        },
+    },
+
+}
+</pre> <ul> <li>
+<code translate="no" dir="ltr">name</code>: The name of the AIDL interface module that uniquely identifies an AIDL interface.</li> <li>
+<code translate="no" dir="ltr">srcs</code>: The list of AIDL source files that compose the interface. The path for an AIDL type <code translate="no" dir="ltr">Foo</code> defined in a package <code translate="no" dir="ltr">com.acme</code> should be at <code translate="no" dir="ltr">&lt;base_path&gt;/com/acme/Foo.aidl</code>, where <code translate="no" dir="ltr">&lt;base_path&gt;</code> could be any directory related to the directory where <code translate="no" dir="ltr">Android.bp</code> is. In the preceding example, <code translate="no" dir="ltr">&lt;base_path&gt;</code> is <code translate="no" dir="ltr">srcs/aidl</code>.</li> <li>
+<code translate="no" dir="ltr">local_include_dir</code>: The path from where the package name starts. It corresponds to <code translate="no" dir="ltr">&lt;base_path&gt;</code> explained above.</li> <li>
+<code translate="no" dir="ltr">imports</code>: A list of <code translate="no" dir="ltr">aidl_interface</code> modules that this uses. If one of your AIDL interfaces uses an interface or a parcelable from another <code translate="no" dir="ltr">aidl_interface</code>, put its name here. This can be the name by itself, to refer to the latest version, or the name with the version suffix (such as <code translate="no" dir="ltr">-V1</code>) to refer to a specific version. Specifying a version has been supported since Android 12</li> <li>
+<code translate="no" dir="ltr">versions</code>: The previous versions of the interface that are frozen under <code translate="no" dir="ltr">api_dir</code>, Starting in Android 11, the <code translate="no" dir="ltr">versions</code> are frozen under <code translate="no" dir="ltr">aidl_api/<var translate="no">name</var></code>. If there are no frozen versions of an interface, this shouldn't be specified, and there won't be compatibility checks. This field has been replaced with <code translate="no" dir="ltr">versions_with_info</code> for Android 13 and higher.</li> <li>
+<code translate="no" dir="ltr">versions_with_info</code>: List of tuples, each of which contains the name of a frozen version and a list with version imports of other aidl_interface modules that this version of the aidl_interface imported. The definition of the version V of an AIDL interface IFACE is located at <code translate="no" dir="ltr">aidl_api/<var translate="no">IFACE</var>/<var translate="no">V</var></code>. This field was introduced in Android 13, and it isn't supposed to be modified in <code translate="no" dir="ltr">Android.bp</code> directly. The field is added or updated by invoking <code translate="no" dir="ltr">*-update-api</code> or <code translate="no" dir="ltr">*-freeze-api</code>. Also, <code translate="no" dir="ltr">versions</code> fields is automatically migrated to <code translate="no" dir="ltr">versions_with_info</code> when a user invokes <code translate="no" dir="ltr">*-update-api</code> or <code translate="no" dir="ltr">*-freeze-api</code>.</li> <li>
+<code translate="no" dir="ltr">stability</code>: The optional flag for the stability promise of this interface. This only supports <code translate="no" dir="ltr">"vintf"</code>. If <code translate="no" dir="ltr">stability</code> is unset, the build system checks that the interface is backward compatible unless <code translate="no" dir="ltr">unstable</code> is specified. Being unset corresponds to an interface with stability within this compilation context (so either all system things, for example, things in <code translate="no" dir="ltr">system.img</code> and related partitions, or all vendor things, for example, things in <code translate="no" dir="ltr">vendor.img</code> and related partitions). If <code translate="no" dir="ltr">stability</code> is set to <code translate="no" dir="ltr">"vintf"</code>, this corresponds to a stability promise: the interface must be kept stable as long as it is used.</li> <li>
+<code translate="no" dir="ltr">gen_trace</code>: The optional flag to turn the tracing on or off. Starting in Android 14 the default is <code translate="no" dir="ltr">true</code> for the <code translate="no" dir="ltr">cpp</code> and <code translate="no" dir="ltr">java</code> backends.</li> <li>
+<code translate="no" dir="ltr">host_supported</code>: The optional flag that when set to <code translate="no" dir="ltr">true</code> makes the generated libraries available to the host environment.</li> <li>
+<code translate="no" dir="ltr">unstable</code>: The optional flag used to mark that this interface doesn't need to be stable. When this is set to <code translate="no" dir="ltr">true</code>, the build system neither creates the API dump for the interface nor requires it to be updated.</li> <li>
+<code translate="no" dir="ltr">frozen</code>: The optional flag that when set to <code translate="no" dir="ltr">true</code> means that the interface has no changes since the previous version of the interface. This enables more build-time checks. When set to <code translate="no" dir="ltr">false</code> this means the interface is in development and has new changes so running <code translate="no" dir="ltr">foo-freeze-api</code> generates a new version and automatically change the value to <code translate="no" dir="ltr">true</code>. Introduced in Android 14.</li> <li>
+<code translate="no" dir="ltr">backend.&lt;type&gt;.enabled</code>: These flags toggle the each of the backends that the AIDL compiler generates code for. Four backends are supported: Java, C++, NDK, and Rust. Java, C++, and NDK backends are enabled by default. If any of these three backends isn't needed, it needs to be disabled explicitly. Rust is disabled by default until Android 15.</li> <li>
+<code translate="no" dir="ltr">backend.&lt;type&gt;.apex_available</code>: The list of APEX names that the generated stub library is available for.</li> <li>
+<code translate="no" dir="ltr">backend.[cpp|java].gen_log</code>: The optional flag that controls whether to generate additional code for gathering information about the transaction.</li> <li>
+<code translate="no" dir="ltr">backend.[cpp|java].vndk.enabled</code>: The optional flag to make this interface a part of VNDK. Default is <code translate="no" dir="ltr">false</code>.</li> <li>
+<code translate="no" dir="ltr">backend.[cpp|ndk].additional_shared_libraries</code>: Introduced in Android 14, this flag adds dependencies to the native libraries. This flag is useful with <code translate="no" dir="ltr">ndk_header</code> and <code translate="no" dir="ltr">cpp_header</code>.</li> <li>
+<code translate="no" dir="ltr">backend.java.sdk_version</code>: The optional flag for specifying the version of the SDK that the Java stub library is built against. The default is <code translate="no" dir="ltr">"system_current"</code>. This shouldn't be set when <code translate="no" dir="ltr">backend.java.platform_apis</code> is <code translate="no" dir="ltr">true</code>.</li> <li>
+<code translate="no" dir="ltr">backend.java.platform_apis</code>: The optional flag that should be set to <code translate="no" dir="ltr">true</code> when the generated libraries need to build against the platform API rather than the SDK.</li> </ul> <p>For each combination of the versions and the enabled backends, a stub library is created. For how to refer to the specific version of the stub library for a specific backend, see <a href="#module-naming-rules">Module naming rules</a>.</p> <h2 id="writing-aidl-files">Write AIDL files</h2> <p>Interfaces in stable AIDL are similar to traditional interfaces, with the exception that they aren't allowed to use unstructured parcelables (because these aren't stable! see <a href="#structured-vs-stable">Structured versus stable AIDL</a>). The primary difference in stable AIDL is how parcelables are defined. Previously, parcelables were <em>forward declared</em>; in stable (and therefore structured) AIDL, parcelables fields and variables are defined explicitly.</p> 
+<pre>// in a file like 'some/package/Thing.aidl'
+package some.package;
+
+parcelable SubThing {
+    String a = "foo";
+    int b;
+}
+</pre> <p>A default is supported (but not required) for <code translate="no" dir="ltr">boolean</code>, <code translate="no" dir="ltr">char</code>, <code translate="no" dir="ltr">float</code>, <code translate="no" dir="ltr">double</code>, <code translate="no" dir="ltr">byte</code>, <code translate="no" dir="ltr">int</code>, <code translate="no" dir="ltr">long</code>, and <code translate="no" dir="ltr">String</code>. In Android 12, defaults for user-defined enumerations are also supported. When a default is not specified, a 0-like or empty value is used. Enumerations without a default value are initialized to 0 even if there is no zero enumerator.</p> <h2 id="using-stub-libraries">Use stub libraries</h2> <p>After adding stub libraries as a dependency to your module, you can include them into your files. Here are examples of stub libraries in the build system (<code translate="no" dir="ltr">Android.mk</code> can also be used for legacy module definitions). Note, in these examples, the version is not present, so it represents using an unstable interface, but names for interfaces with versions include additional information, see <a href="#versioning-interfaces">Versioning interfaces</a>.</p> 
+<pre>cc_... {
+    name: ...,
+    // use `shared_libs:` to load your library and its transitive dependencies
+    // dynamically
+    shared_libs: ["my-module-name-cpp"],
+    // use `static_libs:` to include the library in this binary and drop
+    // transitive dependencies
+    static_libs: ["my-module-name-cpp"],
+    ...
+}
+# or
+java_... {
+    name: ...,
+    // use `static_libs:` to add all jars and classes to this jar
+    static_libs: ["my-module-name-java"],
+    // use `libs:` to make these classes available during build time, but
+    // not add them to the jar, in case the classes are already present on the
+    // boot classpath (such as if it's in framework.jar) or another jar.
+    libs: ["my-module-name-java"],
+    // use `srcs:` with `-java-sources` if you want to add classes in this
+    // library jar directly, but you get transitive dependencies from
+    // somewhere else, such as the boot classpath or another jar.
+    srcs: ["my-module-name-java-source", ...],
+    ...
+}
+# or
+rust_... {
+    name: ...,
+    rustlibs: ["my-module-name-rust"],
+    ...
+}
+</pre> <p>Example in C++:</p> 
+<pre>#include "some/package/IFoo.h"
+#include "some/package/Thing.h"
+...
+    // use just like traditional AIDL
+</pre> <p>Example in Java:</p> 
+<pre>import some.package.IFoo;
+import some.package.Thing;
+...
+    // use just like traditional AIDL
+</pre> <p>Example in Rust:</p> 
+<pre>use aidl_interface_name::aidl::some::package::{IFoo, Thing};
+...
+    // use just like traditional AIDL
+</pre> <h2 id="versioning-interfaces">Versioning interfaces</h2> <p>Declaring a module with name <strong>foo</strong> also creates a target in the build system that you can use to manage the API of the module. When built, <strong>foo-freeze-api</strong> adds a new API definition under <code translate="no" dir="ltr">api_dir</code> or <code translate="no" dir="ltr">aidl_api/<var translate="no">name</var></code>, depending on the Android version, and adds a <code translate="no" dir="ltr">.hash</code> file, both representing the newly frozen version of the interface. <strong>foo-freeze-api</strong> also updates the <code translate="no" dir="ltr">versions_with_info</code> property to reflect the additional version and <code translate="no" dir="ltr">imports</code> for the version. Basically, <code translate="no" dir="ltr">imports</code> in <code translate="no" dir="ltr">versions_with_info</code> is copied from <code translate="no" dir="ltr">imports</code> field. But the latest stable version is specified in <code translate="no" dir="ltr">imports</code> in <code translate="no" dir="ltr">versions_with_info</code> for the import, which doesn't have an explicit version. After the <code translate="no" dir="ltr">versions_with_info</code> property is specified, the build system runs compatibility checks between frozen versions and also between Top of Tree (ToT) and the latest frozen version.</p> <p>In addition, you need to manage ToT version's API definition. Whenever an API is updated, run <strong>foo-update-api</strong> to update <code translate="no" dir="ltr">aidl_api/<var translate="no">name</var>/current</code> which contains ToT version's API definition.</p> <p>To maintain the stability of an interface, owners can add new:</p> <ul> <li>Methods to the end of an interface (or methods with explicitly defined new serials)</li> <li>Elements to the end of a parcelable (requires a default to be added for each element)</li> <li>Constant values</li> <li>In Android 11, enumerators</li> <li>In Android 12, fields to the end of a union</li> </ul> <p>No other actions are permitted, and no one else can modify an interface (otherwise they risk collision with changes that an owner makes).</p> <p>To test that all interfaces are frozen for release, you can build with the following environmental variables set:</p> <ul> <li>
+<code translate="no" dir="ltr">AIDL_FROZEN_REL=true m ...</code> - build requires all stable AIDL interfaces to be frozen which have no <code translate="no" dir="ltr">owner:</code> field specified.</li> <li>
+<code translate="no" dir="ltr">AIDL_FROZEN_OWNERS="aosp test"</code> - build requires all stable AIDL interfaces to be frozen with the <code translate="no" dir="ltr">owner:</code> field specified as "aosp" or "test".</li> </ul> <h3 id="versioning-imports">Stability of imports</h3> <p>Updating the versions of imports for frozen versions of an interface is backward compatible at the Stable AIDL layer. However, updating these requires updating all servers and clients which use a previous version of the interface, and some apps may be confused when mixing different versions of types. Generally, for types-only or common packages, this is safe because code needs to already be written to handle unknown types from IPC transactions.</p> <p>In Android platform code <code translate="no" dir="ltr">android.hardware.graphics.common</code> is the biggest example of this type of version upgrade.</p> <h3 id="using-versioned-interfaces">Use versioned interfaces</h3> <h4 id="using-versioned-interface-methods">Interface methods</h4> <p>At runtime, when trying to call new methods on an old server, new clients get either an error or an exception, depending on the backend.</p> <ul> <li>
+<code translate="no" dir="ltr">cpp</code> backend gets <code translate="no" dir="ltr">::android::UNKNOWN_TRANSACTION</code>.</li> <li>
+<code translate="no" dir="ltr">ndk</code> backend gets <code translate="no" dir="ltr">STATUS_UNKNOWN_TRANSACTION</code>.</li> <li>
+<code translate="no" dir="ltr">java</code> backend gets <code translate="no" dir="ltr">android.os.RemoteException</code> with a message saying the API is not implemented.</li> </ul> <p>For strategies to handle this see <a href="#querying-the-interface-version-of-the-remote-object">querying versions</a> and <a href="#dealing-with-older-interfaces">using defaults</a>.</p> <h4 id="using-versioned-parcelables">Parcelables</h4> <p>When new fields are added to parcelables, old clients and servers drop them. When new clients and servers receive old parcelables, the default values for new fields are automatically filled in. This means that defaults need to be specified for all new fields in a parcelable.</p> <p>Clients shouldn't expect servers to use the new fields unless they know the server is implementing the version that has the field defined (see <a href="#querying-the-interface-version-of-the-remote-object">querying versions</a>).</p> <h4 id="using-versioned-enums">Enums and constants</h4> <p>Similarly, clients and servers should either reject or ignore unrecognized constant values and enumerators as appropriate, since more may be added in the future. For example, a server shouldn't abort when it receives an enumerator that it doesn't know about. The server should either ignore the enumerator, or return something so the client knows it's unsupported in this implementation.</p> <h4 id="using-versioned-unions">Unions</h4> <p>Trying to send a union with a new field fails if the receiver is old and doesn't know about the field. The implementation will never see the union with the new field. The failure is ignored if it's a one-way transaction; otherwise the error is <code translate="no" dir="ltr">BAD_VALUE</code>(for the C++ or NDK backend) or <code translate="no" dir="ltr">IllegalArgumentException</code>(for the Java backend). The error is received if the client is sending a union set to the new field to an old server, or when it's an old client receiving the union from a new server.</p> <h4 id="module-level-version-header">Module-level version header (C++ / NDK)</h4> <p>For stable, versioned AIDL modules using the <code translate="no" dir="ltr">cpp</code> or <code translate="no" dir="ltr">ndk</code> backends, Soong automatically generates a module-level synthetic header:</p> <ul> <li>
+<strong>C++ backend:</strong> <code translate="no" dir="ltr">#include "&lt;module-name&gt;.h"</code>
+</li> <li>
+<strong>NDK backend:</strong> <code translate="no" dir="ltr">#include "aidl/&lt;module-name&gt;.h"</code>
+</li> </ul> <p>This header defines the <code translate="no" dir="ltr">AIDL_VERSION_&lt;MODULE_NAME&gt;</code> macro with dots <code translate="no" dir="ltr">.</code> and hyphens <code translate="no" dir="ltr">-</code> in the module name converted to uppercase underscores <code translate="no" dir="ltr">_</code>. The macro is assigned the version number of the interface module based on the version of the library used.</p> <p>For example, you can use the macro from <code translate="no" dir="ltr">android.hardware.foo-V2-ndk</code>:</p> 
+<pre>#include &lt;aidl/android.hardware.foo.h&gt;
+
+#if AIDL_VERSION_ANDROID_HARDWARE_FOO &gt;= 2
+// Code for version 2 or higher
+#endif
+</pre> <h4 id="manage-multiple-versions">Manage multiple versions</h4> <p>A linker namespace in Android can have only 1 version of a specific <code translate="no" dir="ltr">aidl</code> interface to avoid situations where the generated <code translate="no" dir="ltr">aidl</code> types have multiple definitions. C++ has the One Definition Rule that requires only one definition of each symbol.</p> <p>The Android build provides an error when a module is depending on different versions of the same <code translate="no" dir="ltr">aidl_interface</code> library. The module might be depending on these libraries directly or indirectly through dependencies of their dependencies. These errors show the dependency graph from the failing module to the conflicting versions of the <code translate="no" dir="ltr">aidl_interface</code> library. All of the dependencies need to be updated to include the same (usually the latest) version of these libraries.</p> <p>If the interface library is used by many different modules, it can be helpful to create <code translate="no" dir="ltr">cc_defaults</code>, <code translate="no" dir="ltr">java_defaults</code>, and <code translate="no" dir="ltr">rust_defaults</code> for any group of libraries and processes that need to use the same version. When introducing a new version of the interface those defaults can be updated and all of modules using them are updated together, ensuring they aren't using different versions of the interface.</p> 
+<pre>cc_defaults {
+  name: "my.aidl.my-process-group-ndk-shared",
+  shared_libs: ["my.aidl-V3-ndk"],
+  ...
+}
+
+cc_library {
+  name: "foo",
+  defaults: ["my.aidl.my-process-group-ndk-shared"],
+  ...
+}
+
+cc_binary {
+  name: "bar",
+  defaults: ["my.aidl.my-process-group-ndk-shared"],
+  ...
+}
+</pre> <p>When <code translate="no" dir="ltr">aidl_interface</code> modules import other <code translate="no" dir="ltr">aidl_interface</code> modules this creates additional dependencies that require specific versions to be used together. This situation can become difficult to manage when there are common <code translate="no" dir="ltr">aidl_interface</code> modules that are imported in multiple <code translate="no" dir="ltr">aidl_interface</code> modules that are used together in the same processes.</p> <p><code translate="no" dir="ltr">aidl_interfaces_defaults</code> can be used to keep one definition of the latest versions of dependencies for an <code translate="no" dir="ltr">aidl_interface</code> that can be updated in a single place, and used by all <code translate="no" dir="ltr">aidl_interface</code> modules that want to import that common interface.</p> 
+<pre>aidl_interface_defaults {
+  name: "android.popular.common-latest-defaults",
+  imports: ["android.popular.common-V3"],
+  ...
+}
+
+aidl_interface {
+  name: "android.foo",
+  defaults: ["my.aidl.latest-ndk-shared"],
+  ...
+}
+
+aidl_interface {
+  name: "android.bar",
+  defaults: ["my.aidl.latest-ndk-shared"],
+  ...
+}
+</pre> <h2 id="flag-based-development">Flag-based development</h2> <p>In-development (unfrozen) interfaces can't be used on release devices, because they aren't guaranteed to be backward compatible.</p> <p>AIDL supports run time fallback for these unfrozen interface libraries in order for code to be written against the latest unfrozen version and still be used on release devices. The backward-compatible behavior of clients is similar to existing behavior and with the fallback, the implementations also need to follow those behaviors. See <a href="stable-aidl#using-versioned-interfaces">Use versioned interfaces</a>.</p> <h3 id="aidl-build-flag">AIDL build flag</h3> <p>The flag that controls this behavior is <code translate="no" dir="ltr">RELEASE_AIDL_USE_UNFROZEN</code> defined in <code translate="no" dir="ltr">build/release/build_flags.bzl</code>. <code translate="no" dir="ltr">true</code> means the unfrozen version of the interface is used at run time and <code translate="no" dir="ltr">false</code> means the libraries of the unfrozen versions all behave like their last frozen version. You can override the flag to <code translate="no" dir="ltr">true</code> for local development, but must revert it to <code translate="no" dir="ltr">false</code> before release. Typically development is done with a configuration that has the flag set to <code translate="no" dir="ltr">true</code>.</p> <h3 id="matrix-and-manifest">Compatibility matrix and manifests</h3> <p><a href="../vintf">Vendor interface objects (VINTF objects)</a> define what versions are expected, and what versions are provided on either side of the vendor interface.</p> <p>Most non-Cuttlefish devices target the latest compatibility matrix only after interfaces are frozen, so there is no difference in the AIDL libraries based on <code translate="no" dir="ltr">RELEASE_AIDL_USE_UNFROZEN</code>.</p> <h4 id="matrixes">Matrixes</h4> <p>Partner-owned interfaces are added to device-specific or product-specific compatibility matrixes that the device targets during development. So when a new, unfrozen version of an interface is added to a compatibility matrix, the previous frozen versions needs to remain for <code translate="no" dir="ltr">RELEASE_AIDL_USE_UNFROZEN=false</code>. You can handle this by using different compatibility matrix files for different <code translate="no" dir="ltr">RELEASE_AIDL_USE_UNFROZEN</code> configurations or allowing both versions in a single compatibility matrix file that is used in all configurations.</p> <p>For example, when adding an unfrozen version 4, use <code translate="no" dir="ltr">&lt;version&gt;3-4&lt;/version&gt;</code>.</p> <p>When version 4 is frozen you can remove version 3 from the compatibility matrix because the frozen version 4 is used when <code translate="no" dir="ltr">RELEASE_AIDL_USE_UNFROZEN</code> is <code translate="no" dir="ltr">false</code>.</p> <h4 id="manifests">Manifests</h4> <p>In Android 15, a change in <code translate="no" dir="ltr">libvintf</code> is introduced to modify the manifest files at build time based on the value of <code translate="no" dir="ltr">RELEASE_AIDL_USE_UNFROZEN</code>.</p> <p>The manifests and the manifest fragments declare which version of an interface a service implements. When using the latest unfrozen version of an interface, the manifest must be updated to reflect this new version. When <code translate="no" dir="ltr">RELEASE_AIDL_USE_UNFROZEN=false</code> the manifest entries are adjusted by <code translate="no" dir="ltr">libvintf</code> to reflect the change in the generated AIDL library. The version is modified from the unfrozen version, <code translate="no" dir="ltr">N</code>, to the last frozen version <code translate="no" dir="ltr">N - 1</code>. Therefore, users don't need to manage multiple manifests or manifest fragments for each of their services.</p> <h3 id="hal-client-changes">HAL client changes</h3> <p>HAL client code must be backward compatible with each previous supported frozen version. When <code translate="no" dir="ltr">RELEASE_AIDL_USE_UNFROZEN</code> is <code translate="no" dir="ltr">false</code> the services always look like the last frozen version or earlier (for example, calling new unfrozen methods returns <code translate="no" dir="ltr">UNKNOWN_TRANSACTION</code>, or new <code translate="no" dir="ltr">parcelable</code> fields have their default values). Android framework clients are required to be backward compatible with additional previous versions, but this is a new detail for vendor clients and clients of partner-owned interfaces.</p> <h3 id="hal-impl-changes">HAL implementation changes</h3> <p>The largest difference in HAL development with flag-based development is the requirement for HAL implementations to be backward compatible with the last frozen version to work when <code translate="no" dir="ltr">RELEASE_AIDL_USE_UNFROZEN</code> is <code translate="no" dir="ltr">false</code>. Considering backward compatibility in implementations and device code is a new exercise. See <a href="stable-aidl#using-versioned-interfaces">Use versioned interfaces</a>.</p> <p>The backward compatibility considerations are generally the same for the clients and servers, and for framework code and vendor code, but there are subtle differences that you need to be aware of, as you're now effectively implementing two versions that use the same source code (the current, unfrozen version).</p> <p>Example: An interface has three frozen versions. The interface is updated with a new method. The client and service are both updated to use the new version 4 library. Because the V4 library is based on an unfrozen version of the interface, it behaves like the last frozen version, version 3, when <code translate="no" dir="ltr">RELEASE_AIDL_USE_UNFROZEN</code> is <code translate="no" dir="ltr">false</code>, and prevents the use of the new method.</p> <p>When the interface is frozen, all values of <code translate="no" dir="ltr">RELEASE_AIDL_USE_UNFROZEN</code> use that frozen version, and the code handling the backward compatibility can be removed.</p> <p>When calling methods on callbacks, you must gracefully handle the case when <code translate="no" dir="ltr">UNKNOWN_TRANSACTION</code> is returned. Clients might be implementing two different versions of a callback based on the release configuration, so you can't assume the client sends the newest version, and new methods might return this. This is similar to how stable AIDL clients maintain backward compatibility with servers describes in <a href="stable-aidl#using-versioned-interfaces">Use versioned interfaces</a>.</p> 
+<pre>// Get the callback along with the version of the callback
+ScopedAStatus RegisterMyCallback(const std::shared_ptr&lt;IMyCallback&gt;&amp; cb) override {
+    mMyCallback = cb;
+    // Get the version of the callback for later when we call methods on it
+    auto status = mMyCallback-&gt;getInterfaceVersion(&amp;mMyCallbackVersion);
+    return status;
+}
+
+// Example of using the callback later
+void NotifyCallbackLater() {
+  // From the latest frozen version (V2)
+  mMyCallback-&gt;foo();
+  // Call this method from the unfrozen V3 only if the callback is at least V3
+  if (mMyCallbackVersion &gt;= 3) {
+    mMyCallback-&gt;bar();
+  }
+}
+</pre> <p>New fields in existing types (<code translate="no" dir="ltr">parcelable</code>, <code translate="no" dir="ltr">enum</code>, <code translate="no" dir="ltr">union</code>) might not exist or contain their default values when <code translate="no" dir="ltr">RELEASE_AIDL_USE_UNFROZEN</code> is <code translate="no" dir="ltr">false</code> and the values of new fields a service tries to send are dropped on the way out of the process.</p> <p>New types added in this unfrozen version can't be sent or received through the interface.</p> <p>The implementation never gets a call for new methods from any clients when <code translate="no" dir="ltr">RELEASE_AIDL_USE_UNFROZEN</code> is <code translate="no" dir="ltr">false</code>.</p> <p>Be careful to use new enumerators only with the version they're introduced in, and not the previous version.</p> <p>Normally, you use <code translate="no" dir="ltr">foo-&gt;getInterfaceVersion()</code> to see which version the remote interface is using. However with flag-based versioning support, you're implementing two different versions, so you might want to get the version of the current interface. You can do this by getting the interface version of the current object, for example, <code translate="no" dir="ltr">this-&gt;getInterfaceVersion()</code> or the other methods for <code translate="no" dir="ltr">my_ver</code>. See <a href="stable-aidl#querying-the-interface-version-of-the-remote-object">Querying the interface version of the remote object</a> for more information.</p> <h3 id="new-vintf-interfaces">New VINTF stable interfaces</h3> <p>When a new AIDL interface package is added there is no last frozen version, so there is no behavior to fall back to when <code translate="no" dir="ltr">RELEASE_AIDL_USE_UNFROZEN</code> is <code translate="no" dir="ltr">false</code>. Don't use these interfaces. When <code translate="no" dir="ltr">RELEASE_AIDL_USE_UNFROZEN</code> is <code translate="no" dir="ltr">false</code>, Service Manager won't allow the service to register the interface and the clients won't find it.</p> <p>You can add the services conditionally based on the value of the <code translate="no" dir="ltr">RELEASE_AIDL_USE_UNFROZEN</code> flag in the device makefile:</p> 
+<pre>ifeq ($(RELEASE_AIDL_USE_UNFROZEN),true)
+PRODUCT_PACKAGES += \
+    android.hardware.health.storage-service
+endif
+</pre> <p>If the service is a part of a larger process so you can't add it to the device conditionally, you can check to see if the service is declared with <code translate="no" dir="ltr">IServiceManager::isDeclared()</code>. If it's declared and failed to register, then abort the process. If it isn't declared, then it's expected to fail to register.</p> <h4 id="new-extension-interfaces">New VINTF stable extension interfaces</h4> <p>New <a href="aidl-hals#extension-interfaces">extension interfaces</a> have no previous version to fall back to and because they aren't registered with <code translate="no" dir="ltr">ServiceManager</code> or declared in VINTF manifests, <code translate="no" dir="ltr">IServiceManager::isDeclared()</code> can't be used to determine when to attach the extension interface to another interface.</p> <p>The <code translate="no" dir="ltr">RELEASE_AIDL_USE_UNFROZEN</code> variable can be used to determine whether to attach the new unfrozen extension interface to the existing interface to avoid using it on released devices. The interface needs to be frozen to be used on released devices.</p> <p>The <code translate="no" dir="ltr">vts_treble_vintf_vendor_test</code> and <code translate="no" dir="ltr">vts_treble_vintf_framework_test</code> VTS tests detect when an unfrozen extension interface is used in a released device and throw an error.</p> <p>If the extension interface isn't new and has a previously frozen version, then it falls back to that previously frozen version and there are no extra steps required.</p> <h3 id="cuttlefish-dev-tool">Cuttlefish as a development tool</h3> <p>Every year after the VINTF is frozen we adjust the framework compatibility matrix (FCM) <code translate="no" dir="ltr">target-level</code> and the <code translate="no" dir="ltr">PRODUCT_SHIPPING_API_LEVEL</code> of Cuttlefish so they reflect devices launching with next year's release. We adjust <code translate="no" dir="ltr">target-level</code> and <code translate="no" dir="ltr">PRODUCT_SHIPPING_API_LEVEL</code> to make sure there is some launching device that is tested and meets the new requirements for next year's release.</p> <p>When <code translate="no" dir="ltr">RELEASE_AIDL_USE_UNFROZEN</code> is <code translate="no" dir="ltr">true</code>, Cuttlefish is used for development of future Android releases. It targets next year's Android release's FCM level and <code translate="no" dir="ltr">PRODUCT_SHIPPING_API_LEVEL</code>, requiring it to satisfy the next release's Vendor Software Requirements (VSR).</p> <p>When <code translate="no" dir="ltr">RELEASE_AIDL_USE_UNFROZEN</code> is <code translate="no" dir="ltr">false</code>, Cuttlefish has the previous <code translate="no" dir="ltr">target-level</code> and <code translate="no" dir="ltr">PRODUCT_SHIPPING_API_LEVEL</code> to reflect a release device. In Android 14 and lower, this differentiation would be accomplished with different Git branches that don't pick up the change to FCM <code translate="no" dir="ltr">target-level</code>, shipping API level, or any other code targeting the next release.</p> <h2 id="module-naming-rules">Module naming rules</h2> <p>In Android 11, for each combination of the versions and the backends enabled, a stub library module is automatically created. To refer to a specific stub library module for linking, don't use the name of the <code translate="no" dir="ltr">aidl_interface</code> module, but the name of the stub library module, which is <var translate="no">ifacename</var>-<var translate="no">version</var>-<var translate="no">backend</var>, where</p> <ul> <li>
+<code translate="no" dir="ltr">ifacename</code>: name of the <code translate="no" dir="ltr">aidl_interface</code> module</li> <li>
+<code translate="no" dir="ltr">version</code> is either of <ul> <li>
+<code translate="no" dir="ltr">V<var translate="no">version-number</var></code> for the frozen versions</li> <li>
+<code translate="no" dir="ltr">V<var translate="no">latest-frozen-version-number + 1</var></code> for the tip-of-tree (yet-to-be-frozen) version</li> </ul>
+</li> <li>
+<code translate="no" dir="ltr">backend</code> is either of <ul> <li>
+<code translate="no" dir="ltr">java</code> for the Java backend,</li> <li>
+<code translate="no" dir="ltr">cpp</code> for the C++ backend,</li> <li>
+<code translate="no" dir="ltr">ndk</code> or <code translate="no" dir="ltr">ndk_platform</code> for the NDK backend. The former is for apps, and the latter is for platform usage until Android 13. In Android 13 and later, only use <code translate="no" dir="ltr">ndk</code>.</li> <li>
+<code translate="no" dir="ltr">rust</code> for Rust backend.</li> </ul>
+</li> </ul> <p>Assume that there is a module with name <strong>foo</strong> and its latest version is <strong>2</strong>, and it supports both NDK and C++. In this case, AIDL generates these modules:</p> <ul> <li>Based on version 1 <ul> <li><code translate="no" dir="ltr">foo-V1-(java|cpp|ndk|ndk_platform|rust)</code></li> </ul>
+</li> <li>Based on version 2 (the latest stable version) <ul> <li><code translate="no" dir="ltr">foo-V2-(java|cpp|ndk|ndk_platform|rust)</code></li> </ul>
+</li> <li>Based on ToT version <ul> <li><code translate="no" dir="ltr">foo-V3-(java|cpp|ndk|ndk_platform|rust)</code></li> </ul>
+</li> </ul> <p>Compared to Android 11:</p> <ul> <li>
+<code translate="no" dir="ltr">foo-<var translate="no">backend</var></code>, which referred to the latest stable version becomes <code translate="no" dir="ltr">foo-<strong>V2</strong>-<var translate="no">backend</var></code>
+</li> <li>
+<code translate="no" dir="ltr">foo-unstable-<var translate="no">backend</var></code>, which referred to the ToT version becomes <code translate="no" dir="ltr">foo-<strong>V3</strong>-<var translate="no">backend</var></code>
+</li> </ul> <p>The output file names are always the same as module names.</p> <ul> <li>Based on version 1: <code translate="no" dir="ltr">foo-V1-(cpp|ndk|ndk_platform|rust).so</code>
+</li> <li>Based on version 2: <code translate="no" dir="ltr">foo-V2-(cpp|ndk|ndk_platform|rust).so</code>
+</li> <li>Based on ToT version: <code translate="no" dir="ltr">foo-V3-(cpp|ndk|ndk_platform|rust).so</code>
+</li> </ul> <p>Note that the AIDL compiler doesn't create either an <code translate="no" dir="ltr">unstable</code> version module, or a non-versioned module for a stable AIDL interface. As of Android 12, the module name generated from a stable AIDL interface always includes its version.</p> <h2 id="new-meta-interface-methods">New meta interface methods</h2> <p>Android 10 adds several meta interface methods for the stable AIDL.</p> <h3 id="querying-the-interface-version-of-the-remote-object">Query the interface version of the remote object</h3> <p>Clients can query the version and hash of the interface that the remote object is implementing and compare the returned values with the values of the interface that the client is using.</p> <p>Example with the <code translate="no" dir="ltr">cpp</code> backend:</p> 
+<pre>sp&lt;IFoo&gt; foo = ... // the remote object
+int32_t my_ver = IFoo::VERSION;
+int32_t remote_ver = foo-&gt;getInterfaceVersion();
+if (remote_ver &lt; my_ver) {
+  // the remote side is using an older interface
+}
+
+std::string my_hash = IFoo::HASH;
+std::string remote_hash = foo-&gt;getInterfaceHash();
+</pre> <p>Example with the <code translate="no" dir="ltr">ndk</code> (and the <code translate="no" dir="ltr">ndk_platform</code>) backend:</p> 
+<pre>IFoo* foo = ... // the remote object
+int32_t my_ver = IFoo::version;
+int32_t remote_ver = 0;
+if (foo-&gt;getInterfaceVersion(&amp;remote_ver).isOk() &amp;&amp; remote_ver &lt; my_ver) {
+  // the remote side is using an older interface
+}
+
+std::string my_hash = IFoo::hash;
+std::string remote_hash;
+foo-&gt;getInterfaceHash(&amp;remote_hash);
+</pre> <p>Example with the <code translate="no" dir="ltr">java</code> backend:</p> 
+<pre>IFoo foo = ... // the remote object
+int myVer = IFoo.VERSION;
+int remoteVer = foo.getInterfaceVersion();
+if (remoteVer &lt; myVer) {
+  // the remote side is using an older interface
+}
+
+String myHash = IFoo.HASH;
+String remoteHash = foo.getInterfaceHash();
+</pre> <p>For Java language, the remote side MUST implement <code translate="no" dir="ltr">getInterfaceVersion()</code> and <code translate="no" dir="ltr">getInterfaceHash()</code> as follows (<code translate="no" dir="ltr">super</code> is used instead of <code translate="no" dir="ltr">IFoo</code> to avoid copy and paste mistakes. The annotation <code translate="no" dir="ltr">@SuppressWarnings("static")</code> might be needed to disable warnings, depending on the <code translate="no" dir="ltr">javac</code> configuration):</p> 
+<pre>class MyFoo extends IFoo.Stub {
+    @Override
+    public final int getInterfaceVersion() { return super.VERSION; }
+
+    @Override
+    public final String getInterfaceHash() { return super.HASH; }
+}
+</pre> <p>This is because the generated classes (<code translate="no" dir="ltr">IFoo</code>, <code translate="no" dir="ltr">IFoo.Stub</code>, etc.) are shared between the client and server (for example, the classes can be in the boot classpath). When classes are shared, the server is also linked against the newest version of the classes even though it might have been built with an older version of the interface. If this meta interface is implemented in the shared class, it always returns the newest version. However, by implementing the method as above, the version number of the interface is embedded in the server's code (because <code translate="no" dir="ltr">IFoo.VERSION</code> is a <code translate="no" dir="ltr">static final int</code> that is inlined when referenced) and thus the method can return the exact version the server was built with.</p> <h3 id="dealing-with-older-interfaces">Deal with older interfaces</h3> <p>It's possible that a client is updated with the newer version of an AIDL interface but the server is using the old AIDL interface. In such cases, calling a method on an old interface returns <code translate="no" dir="ltr">UNKNOWN_TRANSACTION</code>.</p> <p>With stable AIDL, clients have more control. In the client side, you can set a default implementation to an AIDL interface. A method in the default implementation is invoked only when the method isn't implemented in the remote side (because it was built with an older version of the interface). Since defaults are set globally, they should not be used from potentially shared contexts.</p> <aside class="warning"><strong>Warning:</strong><span> <code translate="no" dir="ltr">setDefaultImpl</code> is deprecated. When using this method, it's impossible to see which object you're implementing the default for. Instead, use <code translate="no" dir="ltr">I*Delegator</code> which is generated for various backends. Note, in Java <code translate="no" dir="ltr">I*Delegator</code> needs to be enabled with <code translate="no" dir="ltr">@JavaDelegator</code> on the interface.</span></aside> <p>Example in C++ in Android 13 and later:</p> 
+<pre>class MyDefault : public IFooDefault {
+  Status anAddedMethod(...) {
+   // do something default
+  }
+};
+
+// once per an interface in a process
+IFoo::setDefaultImpl(::android::sp&lt;MyDefault&gt;::make());
+
+foo-&gt;anAddedMethod(...); // MyDefault::anAddedMethod() will be called if the
+                         // remote side is not implementing it
+</pre>
+<aside class="note"><strong>Note:</strong><span> Before Android 13 <code translate="no" dir="ltr">IFoo::setDefaultImpl</code> received a <code translate="no" dir="ltr">std::unique_ptr&lt;IFoo&gt;</code> instead of <code translate="no" dir="ltr">::android::sp&lt;IFoo&gt;</code>.</span></aside> <p>Example in Java:</p> 
+<pre>IFoo.Stub.setDefaultImpl(new IFoo.Default() {
+    @Override
+    public xxx anAddedMethod(...)  throws RemoteException {
+        // do something default
+    }
+}); // once per an interface in a process
+
+foo.anAddedMethod(...);
+</pre>
+<aside class="note"><strong>Note:</strong><span> In Java, <code translate="no" dir="ltr">setDefaultImpl</code> is in the <code translate="no" dir="ltr">Stub</code> class, and not in the <code translate="no" dir="ltr">interface</code> class.</span></aside> <p>You don't need to provide the default implementation of all methods in an AIDL interface. Methods that are guaranteed to be implemented in the remote side (because you're certain that the remote is built when the methods were in the AIDL interface description) don't need to be overridden in the default <code translate="no" dir="ltr">impl</code> class.</p> <aside class="note"><strong>Note:</strong><span> The default implementation is not used for oneway method calls. This is because there is no way for a client to know if the remote has the method and has executed it or not; there is no acknowledgement from the remote side in case of the oneway method calls.</span></aside> <h2 id="converting-existing-aidl-to-structured-stable-aidl">Convert existing AIDL to structured or stable AIDL</h2> <p>If you have an existing AIDL interface and code that uses it, use the following steps to convert the interface to a stable AIDL interface.</p> <ol> <li><p>Identify all of the dependencies of your interface. For every package the interface depends on, determine if the package is defined in stable AIDL. If not defined, the package must be converted.</p></li> <li><p>Convert all parcelables in your interface into stable parcelables (the interface files themselves can remain unchanged). Do this by expressing their structure directly in AIDL files. Management classes must be rewritten to use these new types. This can be done before you create an <code translate="no" dir="ltr">aidl_interface</code> package (below).</p></li> <li><p>Create an <code translate="no" dir="ltr">aidl_interface</code> package (as described above) that contains the name of your module, its dependencies, and any other information you need. To make it stabilized (not just structured), it also needs to be versioned. For more information, see <a href="#versioning-interfaces">Versioning interfaces</a>.</p></li> </ol><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/aidl/stable-aidl" class="_attribution-link">https://source.android.com/docs/core/architecture/aidl/stable-aidl</a>
+  </p>
+</div>

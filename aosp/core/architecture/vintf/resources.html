@@ -1,0 +1,152 @@
+<h1>Additional resources</h1>  <p>The following resources provide details on code locations, tools, testing, and licensing.</p> <h2 id="query-api-code">Queryable code location</h2> <p>The code for the queryable vendor interface object goes to <code translate="no" dir="ltr"><a href="https://android.googlesource.com/platform/system/libvintf/+/android17-release">system/libvintf</a></code>.</p> <h2 id="related-tools">Tools</h2> <p>Handwriting manifest files and compatibility matrixes can be tough. Use the following tools to generate a boilerplate manifest/compatibility matrix to start from.</p> <h3 id="lshal">LSHAL</h3> <p>LSHAL is a device-side tool that lists all registered HALs to <code translate="no" dir="ltr">hwservicemanager</code> and all available passthrough implementations (e.g. <code translate="no" dir="ltr">android.hardware.foo@1.0-impl.so</code>) on the device. It can also generate a <strong>device manifest</strong> file based on the list:</p> 
+<pre>
+adb shell su 0 /system/bin/lshal --init-vintf
+</pre> <p>Note the following:</p> <ol> <li>If a package is both registered to <code translate="no" dir="ltr">hwservicemanager</code> and found as a passthrough HAL, <code translate="no" dir="ltr">&lt;transport&gt;</code> is set to <code translate="no" dir="ltr">hwbinder</code>.</li> <li>No SELinux version is written into the manifest. It is suggested that the element is injected through <code translate="no" dir="ltr">assemble_vintf</code> as explained below.</li> <li>The generated HAL manifest file may be inaccurate. Human attention is required to fix inconsistencies between the device manifest and what <code translate="no" dir="ltr">vendor.img</code> actually provides.</li> </ol> <h3 id="assemble_vintf">ASSEMBLE_VINTF</h3> <p><code translate="no" dir="ltr">assemble_vintf</code> is a host-side tool that:</p> <ol> <li>Verifies a compatibility matrix or manifest file is valid.</li> <li>Injects variables to manifests/compatibility matrixes available at build time and generates a new file that should be installed to the device.</li> <li>Checks compatibility between the generated file and its dual.</li> <li>If a manifest file is given, optionally generates a boilerplate compatibility matrix that is compatible with the manifest file.</li> </ol> <h4 id="example:-generate-device-compatibility-matrix-from-a-framework-manifest-file">
+<strong>Example:</strong> Generate <strong>device compatibility matrix</strong> from a framework manifest file</h4> 
+<pre>
+assemble_vintf -m --hals-only \
+    -i system/libhidl/manifest.xml \
+    -o device/manufacturer/device_name/compatibility_matrix.xml
+</pre> <p>Note that all HALs are set to <code translate="no" dir="ltr">optional="true"</code>.</p> <h4 id="example:-generate-a-skeleton-framework-compatibility-matrix-from-a-device-manifest-file">
+<strong>Example:</strong> Generate a skeleton framework compatibility matrix from a device manifest file</h4> 
+<pre>
+assemble_vintf -m --hals-only \
+    -i device/foo/bar/manifest.xml \
+    -o path/to/place/output/compatibility_matrix.xml
+</pre> <p>Note that all HALs are set to <code translate="no" dir="ltr">optional="true"</code>.</p> <h4 id="example:-generate-device-manifest-xml-files-from-variables">
+<strong>Example:</strong> Generate device manifest XML files from variables</h4> <p>At build time, if the following variables are defined in <code translate="no" dir="ltr">device/manufacturer/device_name/BoardConfig.mk</code>:</p> 
+<pre># Vendor manifest is named DEVICE_MANIFEST_FILE for legacy reasons.
+DEVICE_MANIFEST_FILE := \
+    device/manufacturer/device_name/vendor_manifest.xml
+ODM_MANIFEST_FILES := \
+    device/manufacturer/device_name/odm_manifest.xml
+ODM_MANIFEST_SKUS := sku1 sku2
+ODM_MANIFEST_SKU1_FILES := \
+    device/manufacturer/device_name/odm_manifest_sku1.xml
+ODM_MANIFEST_SKU2_FILES := \
+    device/manufacturer/device_name/odm_manifest_sku2.xml</pre> <p>Then the following commands are executed (in the build system, modified to omit implementation details) to generate device manifest XML files:</p> 
+<pre># vendor manifest; only when DEVICE_MANIFEST_FILE is set
+BOARD_SEPOLICY_VERS=$(BOARD_SEPOLICY_VERS) assemble_vintf \
+    $(addprefix,-i ,$(DEVICE_MANIFEST_FILE)) \
+    -o $(TARGET_OUT_VENDOR)/etc/vintf/manifest.xml
+
+# ODM manifests
+assemble_vintf \
+    $(addprefix,-i ,$(ODM_MANIFEST_FILES)) \
+    -o $(TARGET_OUT_ODM)/etc/vintf/manifest.xml
+
+# ODM manifests for each sku
+assemble_vintf \
+    $(addprefix,-i ,$(ODM_MANIFEST_SKU1_FILES)) \
+    -o $(TARGET_OUT_ODM)/etc/vintf/manifest_sku1.xml
+assemble_vintf \
+    $(addprefix,-i ,$(ODM_MANIFEST_SKU2_FILES)) \
+    -o $(TARGET_OUT_ODM)/etc/vintf/manifest_sku2.xml</pre> <p>At runtime, the VINTF object combines vendor manifests and ODM manifests as the device manifest. See <a href="objects#device-manifest-file">Device manifest</a> for details.</p> <h4 id="example:-generate-device-compatibility-matrix-xml-files-from-variables">
+<strong>Example:</strong> Generate device compatibility matrix XML files from variables</h4> <p>At build time, if the following variables are defined in <code translate="no" dir="ltr">device/manufacturer/device_name/BoardConfig.mk</code>:</p> 
+<pre># vendor compatibility matrix is named DEVICE_MATRIX_FILE for legacy reasons.
+DEVICE_MATRIX_FILE := \
+    device/manufacturer/device_name/vendor_compatibility_matrix.xml \
+    device/manufacturer/device_name/vendor_compatibility_matrix_additional.xml</pre> <p>Then the following commands are executed (in the build system, modified to omit implementation details) to generate device compatibility matrix XML files:</p> 
+<pre># vendor compatibility matrix; only when DEVICE_MATRIX_FILE is set
+assemble_vintf \
+    $(addprefix,-i ,$(DEVICE_MATRIX_FILE)) \
+    -o $(TARGET_OUT_VENDOR)/etc/vintf/compatibility_matrix.xml</pre> <p>At runtime, the VINTF object uses the vendor compatibility matrix as the device compatibility matrix. See <a href="comp-matrices#device-compatibility-matrix">Device compatibility matrix</a> for details.</p> <h4 id="example:-generate-framework-manifest-xml-files-from-variables">
+<strong>Example:</strong> Generate framework manifest XML files from variables</h4> <p>The following variables may be defined in <code translate="no" dir="ltr">device/manufacturer/device_name/BoardConfig.mk</code>:</p> 
+<pre># Device-specific system manifest is named DEVICE_FRAMEWORK_MANIFEST_FILE for legacy reasons
+DEVICE_FRAMEWORK_MANIFEST_FILE := \
+    device/manufacturer/device_name/device_system_manifest.xml
+
+# Product manifest
+PRODUCT_MANIFEST_FILES := \
+    device/manufacturer/device_name/product_manifest.xml</pre> <p>The following commands are executed (in the build system, modified to omit implementation details) to generate framework manifest XML files:</p> 
+<pre># system manifest
+assemble_vintf \
+    -i system/libhidl/vintfdata/manifest.xml \
+    $(addprefix,-i ,$(DEVICE_FRAMEWORK_MANIFEST_FILE)) \
+    -o $(TARGET_OUT)/etc/vintf/manifest.xml
+
+# product manifest
+assemble_vintf \
+    $(addprefix,-i ,$(PRODUCT_MANIFEST_FILES)) \
+    -o $(TARGET_OUT_PRODUCT)/etc/vintf/manifest.xml</pre> <p>At runtime, the VINTF object combines the system manifest, system manifest fragments, product manifest, and product manifest fragments as the framework manifest. See <a href="objects#framework-manifest-file">Framework manifest</a> for details.</p> <h4 id="example:-generate-framework-compatibility-matrix-xml-files-from-variables">
+<strong>Example:</strong> Generate framework compatibility matrix XML files from variables</h4> <p>The following variables may be defined in <code translate="no" dir="ltr">device/manufacturer/device_name/BoardConfig.mk</code> to define the product FCM and device-specific system FCM:</p> 
+<pre>DEVICE_PRODUCT_COMPATIBILITY_MATRIX_FILE := \
+    device/manufacturer/device_name/product_compatibility_matrix.xml
+# Device-specific system compatibility matrix is named
+# DEVICE_FRAMEWORK_COMPATIBILITY_MATRIX_FILE for legacy reasons.
+DEVICE_FRAMEWORK_COMPATIBILITY_MATRIX_FILE := \
+    device/manufacturer/device_name/device_system_compatibility_matrix.xml</pre> <p>The system_ext FCM must be installed with Soong modules. The product FCM may also be installed with Soong modules; do not define <code translate="no" dir="ltr">DEVICE_PRODUCT_COMPATIBILITY_MATRIX_FILE</code> if this method is used. In addition, multiple product FCM versions and system_ext FCM versions may be installed with Soong modules. Define the following: </p> <ul> <li> Define a module in <code translate="no" dir="ltr">device/manufacturer/device_name/Android.bp</code>. For example (replace system_ext with product for product FCM): 
+<pre>vintf_compatibility_matrix {
+    name: "system_ext_compatibility_matrix.xml",
+    stem: "compatibility_matrix.xml",
+    system_ext_specific: true,
+    // product_specific: true, // for product FCM
+    srcs: [
+        "system_ext_compatibility_matrix.xml",
+    ],
+}</pre> </li> <li> Install the module to <code translate="no" dir="ltr">device/manufacturer/device_name/device.mk</code>. For example: 
+<pre>PRODUCT_PACKAGES += system_ext_compatibility_matrix.xml</pre> </li> </ul> <p>The following commands are executed (in the build system, modified to omit implementation details) to generate framework compatibility matrix XML files:</p> 
+<pre># common system compatibility matrix for each FCM version
+BOARD_SEPOLICY_VERS=$(BOARD_SEPOLICY_VERS) \
+POLICYVERS=$(POLICYVERS) \
+BOARD_AVB_VBMETA_VERSION=$(BOARD_AVB_VBMETA_VERSION)
+assemble_vintf \
+    -i hardware/interfaces/compatibility_matrices/compatibility_matrix.empty.xml
+    $(addprefix,-i ,$(DEVICE_FRAMEWORK_COMPATIBILITY_MATRIX_FILE)) \
+    -o $(TARGET_OUT)/etc/vintf/compatibility_matrix.device.xml
+
+# framework compatibility matrixes at each FCM version
+assemble_vintf
+    -i hardware/interfaces/compatibility_matrices/compatibility_matrix.{level}.xml \
+    -o $(TARGET_OUT)/etc/vintf/compatibility_matrix.{level}.xml \
+    --kernel=...
+
+# product framework compatibility matrix; only when
+# DEVICE_PRODUCT_COMPATIBILITY_MATRIX_FILE is set or when the Soong module for
+# product FCM is defined
+assemble_vintf
+    -i $(DEVICE_PRODUCT_COMPATIBILITY_MATRIX_FILE)
+    -o $(TARGET_OUT_PRODUCT)/etc/vintf/compatibility_matrix.xml
+
+# system_ext framework compatibility matrix; only when the Soong module for
+# system_ext FCM is defined
+assemble_vintf
+    -i &lt;srcs for the soong module&gt;
+    -o $(TARGET_OUT_SYSTEM_EXT)/etc/vintf/compatibility_matrix.xml</pre> <p>At runtime, the VINTF object combines a subset of system compatibility matrixes and product compatibility matrixes as the framework compatibility matrix. See <a href="comp-matrices#framework-compatibility-matrix">Framework compatibility matrix</a> for details.</p> <h4 id="manifest-fragments">
+<strong>Example:</strong> Generate the vendor manifest from fragments</h4> <p>Multiple vendor manifest fragments can be bundled at build time. For example:</p> 
+<pre>&lt;!-- device/manufacturer/device_name/manifest_common.xml --&gt;
+&lt;manifest version="1.0" type="device"&gt;
+    &lt;!-- common HALs here --&gt;
+&lt;/manifest&gt;</pre> 
+<pre>&lt;!-- device/manufacturer/device_name/ir.xml --&gt;
+&lt;manifest version="1.0" type="device"&gt;
+    &lt;hal&gt;
+        &lt;name&gt;android.hardware.ir&lt;/name&gt;
+        &lt;version&gt;1.0&lt;/version&gt;
+        &lt;!-- other fields --&gt;
+    &lt;/hal&gt;
+&lt;/manifest&gt;</pre> 
+<pre># device/manufacturer/device_name/BoardConfig.mk
+DEVICE_MANIFEST_FILE := device/manufacturer/device_name/manifest_common.xml
+ifdef BOARD_ENABLE_IR
+    DEVICE_MANIFEST_FILE += device/manufacturer/device_name/ir.xml
+endif</pre> <p>Then, <code translate="no" dir="ltr">assemble_vintf</code> adds the IR HAL to the vendor manifest if <code translate="no" dir="ltr">BOARD_ENABLE_IR</code> is defined, and omits it if <code translate="no" dir="ltr">BOARD_ENABLE_IR</code> is not defined. The following commands (modified to omit implementation details) are executed to generate the vendor manifest:</p> 
+<pre># if BOARD_ENABLE_IR is defined
+BOARD_SEPOLICY_VERS=10000.0 assemble_vintf \
+    -i device/manufacturer/device_name/manifest_common.xml:device/manufacturer/device_name/ir.xml \
+    -o $(TARGET_OUT_VENDOR)/manifest.xml
+
+# if BOARD_ENABLE_IR is not defined
+BOARD_SEPOLICY_VERS=10000.0 assemble_vintf \
+    -i device/manufacturer/device_name/manifest_common.xml \
+    -o $(TARGET_OUT_VENDOR)/manifest.xml</pre> <p>For details, see:</p> 
+<pre>assemble_vintf --help</pre> <h2 id="testing">Testing</h2> <p>The <code translate="no" dir="ltr">platform/system/libvintf</code> project uses <a href="https://github.com/google/googletest">GTest</a> for the serialization, deserialization, and compatibility checking.</p> <h2 id="licensing">Licensing</h2> <ul> <li>
+<code translate="no" dir="ltr">tinyxml2</code> (external/tinyxml2) for serializing/deserializing the object to/from XML. BSD-like license.</li> <li>
+<code translate="no" dir="ltr">libselinux</code> (external/selinux/libselinux) for getting policydb version. Public domain license.</li> <li>
+<code translate="no" dir="ltr">libz</code> (external/zlib) for decompressing <code translate="no" dir="ltr">/proc/config.gz</code>. BSD-like license.</li> <li>
+<code translate="no" dir="ltr">libvintf</code> project uses Apache 2.0 license (with appropriate MODULE_LICENSE_APACHE2 and NOTICE files).</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/vintf/resources" class="_attribution-link">https://source.android.com/docs/core/architecture/vintf/resources</a>
+  </p>
+</div>

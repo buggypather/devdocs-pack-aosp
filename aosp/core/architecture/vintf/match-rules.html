@@ -1,0 +1,298 @@
+<h1>Match rules</h1>  <p>The two pairs of compatibility matrixes and manifests are meant to be reconciled to verify that the framework and vendor implementation can work with each other. This verification is successful upon a match between the framework compatibility matrix and the device manifest, as well as between the framework manifest and the device compatibility matrix.</p> <p>This verification is done at build time, at <a href="../../ota">OTA update</a> package generation time, at boot time, and in VTS compatibility tests.</p> <p>The following sections detail matching rules used by various components.</p> <h2 id="fcm-version">Framework compatibility matrix version matches</h2> <p>To match a device manifest with a framework compatibility matrix, the shipping FCM version specified by <code translate="no" dir="ltr">manifest.target-level</code> must be exactly equal to the FCM version specified by <code translate="no" dir="ltr">compatibility-matrix.level</code>. Otherwise there's no match.</p> <p>When the framework compatibility matrix is requested with <code translate="no" dir="ltr">libvintf</code>, this match is always successful because <code translate="no" dir="ltr">libvintf</code> opens the device manifest, retrieves the shipping FCM version, and returns the framework compatibility matrix at that shipping FCM version (plus some optional HALs from compatibility matrixes at higher FCM versions).</p> <h2 id="hals">HAL matches</h2> <p>The HAL-match rule identifies the versions of <code translate="no" dir="ltr">hal</code> elements in a manifest file that are considered to be supported by the owner of the corresponding compatibility matrix.</p> <h3 id="hidl-and-native-hals">HIDL and native HALs</h3> <p>The match rules for HIDL and native HALs are as follows:</p> <ul> <li>Multiple <code translate="no" dir="ltr">&lt;hal&gt;</code> elements are evaluated with a single <strong>AND</strong> relationship.</li> <li>
+<code translate="no" dir="ltr">&lt;hal&gt;</code> elements can have <code translate="no" dir="ltr">&lt;hal optional="true"&gt;</code> to mark them as not required.</li> <aside class="warning"> <b>Warning:</b> The <code translate="no" dir="ltr">optional</code> tag isn't supported in Android 16 and higher. </aside> <li>Multiple <code translate="no" dir="ltr">&lt;version&gt;</code> elements within the same <code translate="no" dir="ltr">&lt;hal&gt;</code> element have the <strong>OR</strong> relationship. If two or more are specified, only one of the versions needs to be implemented. (See <a href="#DRM">Successful HAL match for DRM module</a>.)</li> <li>Multiple <code translate="no" dir="ltr">&lt;instance&gt;</code> and <code translate="no" dir="ltr">&lt;regex-instance&gt;</code> elements within the same <code translate="no" dir="ltr">&lt;hal&gt;</code> element are evaluated with a single <strong>AND</strong> relationship when the <code translate="no" dir="ltr">&lt;hal&gt;</code> is required. (See <a href="#DRM">Successful HAL match for DRM module</a>.)</li> </ul> <h4 id="example:-successful-hal-match-for-a-module">Example: Successful HAL match for a module</h4> <p>For a HAL at version 2.5, the match rule is as follows:</p> <table> <tr> <th style="width: 12%">Matrix</th> <th>Matching manifest</th> </tr> <tr> <td><code translate="no" dir="ltr">2.5</code></td> <td>2.5-2.∞. In the compatibility matrix, <code translate="no" dir="ltr">2.5</code> is the shorthand for <code translate="no" dir="ltr">2.5-5</code>.</td> </tr> <tr> <td><code translate="no" dir="ltr">2.5-7</code></td> <td>2.5-2.∞. Indicates the following: <br> <ul> <li>2.5 is the minimum required version, meaning a manifest providing HAL 2.0-2.4 isn't compatible.</li> <li>2.7 is the maximum version that can be requested, meaning the owner of the compatibility matrix (framework or device) can't request versions beyond 2.7. The owner of the matching manifest can still serve version 2.10 (as an example) when 2.7 is requested. The compatibility-matrix owner knows only that the requested service is compatible with API version 2.7.</li> <li>-7 is informational only and doesn't affect the OTA update process.</li> </ul> Thus, a device with a HAL at version 2.10 in its manifest file remains compatible with a framework that states <code translate="no" dir="ltr">2.5-7</code> in its compatibility matrix.</td> </tr> </table> <h4 id="DRM">Example: Successful HAL match for DRM module</h4> <p>The framework compatibility matrix states the following version information for DRM HAL:</p> 
+<pre>&lt;hal&gt;
+    &lt;name&gt;android.hardware.drm
+    &lt;version&gt;1.0&lt;/version&gt;
+    &lt;version&gt;3.1-2&lt;/version&gt;
+    &lt;interface&gt;
+        &lt;name&gt;IDrmFactory&lt;/name&gt;
+        &lt;instance&gt;default&lt;/instance&gt;
+        &lt;instance&gt;specific&lt;/instance&gt;
+    &lt;/interface&gt;
+&lt;/hal&gt;
+&lt;hal&gt;
+    &lt;name&gt;android.hardware.drm
+    &lt;version&gt;2.0&lt;/version&gt;
+    &lt;interface&gt;
+        &lt;name&gt;ICryptoFactory&lt;/name&gt;
+        &lt;instance&gt;default&lt;/instance&gt;
+        &lt;regex-instance&gt;[a-z]+/[0-9]+&lt;/regex-instance&gt;
+    &lt;/interface&gt;
+&lt;/hal&gt;</pre> <p>A vendor can implement any of the following instances:</p> 
+<pre>
+android.hardware.drm@1.x::IDrmFactory/default          // where x &gt;= 0
+android.hardware.drm@1.x::IDrmFactory/specific         // where x &gt;= 0
+android.hardware.drm@3.y::IDrmFactory/default          // where y &gt;= 1
+android.hardware.drm@3.y::IDrmFactory/specific         // where y &gt;= 1
+android.hardware.drm@2.z::ICryptoFactory/default       // where z &gt;= 0
+android.hardware.drm@2.z::ICryptoFactory/${INSTANCE}
+            // where z &gt;= 0 and ${INSTANCE} matches [a-z]+/[0-9]+
+            // e.g. legacy/0
+</pre> <h3 id="aidl-hals">AIDL HALs</h3> <p>Android and higher supports versions for AIDL HALs in VINTF. The match rules for AIDL HALs are similar to those of HIDL and native HALs, except that there are no major versions, and there is exactly one version per HAL instance (<code translate="no" dir="ltr">1</code> if the version is unspecified):</p> <ul> <li>Multiple <code translate="no" dir="ltr">&lt;hal&gt;</code> elements are evaluated with a single <strong>AND</strong> relationship.</li> <li>
+<code translate="no" dir="ltr">&lt;hal&gt;</code> elements can have <code translate="no" dir="ltr">&lt;hal optional="true"&gt;</code> to mark them as not required.</li> <aside class="warning"> <b>Warning:</b> The <code translate="no" dir="ltr">optional</code> tag isn't supported in Android 16 and higher. </aside> <li>Multiple <code translate="no" dir="ltr">&lt;instance&gt;</code> and <code translate="no" dir="ltr">&lt;regex-instance&gt;</code> elements within the same <code translate="no" dir="ltr">&lt;hal&gt;</code> are evaluated with a single <strong>AND</strong> relationship when the <code translate="no" dir="ltr">&lt;hal&gt;</code> is required. (See <a href="#vibrator">Successful HAL match for multiple modules</a>.)</li> </ul> <h4 id="example:-successful-hal-match-for-a-module_1">Example: Successful HAL match for a module</h4> <p>For a HAL at version 5, the match rule is as follows:</p> <table> <tr> <th style="width: 12%">Matrix</th> <th>Matching manifest</th> </tr> <tr> <td><code translate="no" dir="ltr">5</code></td> <td>5-∞. In the compatibility matrix, <code translate="no" dir="ltr">5</code> is the shorthand for <code translate="no" dir="ltr">5-5</code>.</td> </tr> <tr> <td><code translate="no" dir="ltr">5-7</code></td> <td>5-∞. Indicates the following: <br> <ul> <li>5 is the minimum required version, meaning a manifest providing HAL 1-4 isn't compatible.</li> <li>7 is the maximum version that could be requested, meaning the owner of the compatibility matrix (framework or device) won't request versions beyond 7. The owner of the matching manifest can still serve version 10 (as an example) when 7 is requested. The compatibility-matrix owner knows only that the requested service is compatible with API version 7.</li> <li>-7 is informational only and doesn't affect the OTA update process.</li> </ul> Thus, a device with a HAL at version 10 in its manifest file remains compatible with a framework that states <code translate="no" dir="ltr">5-7</code> in its compatibility matrix.</td> </tr> </table> <h4 id="vibrator">Example: Successful HAL match for multiple modules</h4> <p>The framework compatibility matrix states the following version information for vibrator and camera HALs:</p> 
+<pre>&lt;hal&gt;
+    &lt;name&gt;android.hardware.vibrator
+    &lt;version&gt;1-2&lt;/version&gt;
+    &lt;interface&gt;
+        &lt;name&gt;IVibrator&lt;/name&gt;
+        &lt;instance&gt;default&lt;/instance&gt;
+        &lt;instance&gt;specific&lt;/instance&gt;
+    &lt;/interface&gt;
+&lt;/hal&gt;
+&lt;hal&gt;
+    &lt;name&gt;android.hardware.camera
+    &lt;version&gt;5&lt;/version&gt;
+    &lt;interface&gt;
+        &lt;name&gt;ICamera&lt;/name&gt;
+        &lt;instance&gt;default&lt;/instance&gt;
+        &lt;regex-instance&gt;[a-z]+/[0-9]+&lt;/regex-instance&gt;
+    &lt;/interface&gt;
+&lt;/hal&gt;</pre> <p>A vendor can implement any of these instances:</p> 
+<pre>
+android.hardware.vibrator.IVibrator/default     // version &gt;= 1
+android.hardware.vibrator.IVibrator/specific    // version &gt;= 1
+android.hardware.camera.ICamera/default         // version &gt;= 5
+android.hardware.camera.ICamera/${INSTANCE}
+            // with version &gt;= 5, where ${INSTANCE} matches [a-z]+/[0-9]+
+            // e.g. legacy/0
+</pre> <h2 id="kernel">Kernel matches</h2> <p>The <code translate="no" dir="ltr">&lt;kernel&gt;</code> section of the framework compatibility matrix describes the framework's requirements of the Linux kernel on the device. This information is meant to be matched against the <a href="objects#runtime-collectible-information">information</a> about the kernel that gets reported by the device's VINTF object.</p> <h3 id="kernel-branch">Match kernel branches</h3> <p>Each kernel branch suffix (for example, <code translate="no" dir="ltr">5.4-<strong>r</strong></code>) is mapped to a unique kernel FCM version (for example, 5). The mapping is the same as the mapping between release letters (for example, R) and FCM versions (for example, 5). </p> <p>VTS tests enforce that the device explicitly specifies the kernel FCM version in the device manifest, <code translate="no" dir="ltr">/vendor/etc/vintf/manifest.xml</code>, if one of the following is true: </p> <ul> <li> The kernel FCM version is different from the target FCM version. For example, the aforementioned device has a target FCM version 4, and its kernel FCM version is 5 (kernel branch suffix <code translate="no" dir="ltr">r</code>). </li> <li> The kernel FCM version is greater than or equal to 5 (kernel branch suffix <code translate="no" dir="ltr">r</code>). </li> </ul> <aside class="note"><strong>Note:</strong> If the kernel FCM version equals the target FCM version and they are greater than or equal to 5, the source file of the device manifest specified by <code translate="no" dir="ltr">DEVICE_MANIFEST_FILE</code> doesn't have to specify the kernel FCM version. <code translate="no" dir="ltr">assemble_vintf</code> automatically infers the kernel FCM version from the target FCM version if the target FCM version is greater than or equal to 5. </aside> <p> VTS tests enforce that, if the kernel FCM version is specified, the kernel FCM version is greater than or equal to the target FCM version in the device manifest. </p> <h4 id="example:-determine-the-kernel-branch">Example: Determine the kernel branch</h4> <p> If the device has target FCM version 4 (released in Android 10), but runs kernel from the <code translate="no" dir="ltr">4.19-r</code> branch, the device manifest should specify the following: </p> 
+<pre>&lt;manifest version="2.0" type="device" target-level="4"&gt;
+   &lt;kernel target-level="5" /&gt;
+&lt;/manifest&gt;</pre> <p> The VINTF object checks kernel compatibility against requirements on <code translate="no" dir="ltr">4.19-r</code> kernel branch, which is specified in FCM version 5. These requirements are built from <a href="https://android.googlesource.com/kernel/configs/+/refs/heads/android17-release/r/android-4.19/"> <code translate="no" dir="ltr">kernel/configs/r/android-4.19</code></a> in the Android source tree. </p> <h4 id="example:-determine-the-kernel-branch-for-gki">Example: Determine the kernel branch for GKI</h4> <p>If the device uses the Generic Kernel Image (GKI), and the kernel release string from <code translate="no" dir="ltr">/proc/version</code> is the following:</p> 
+<pre>5.4.42-android12-0-00544-ged21d463f856</pre> <p>Then, the VINTF object obtains the Android release from the kernel release, and use it to determine the kernel FCM version. In this example, <code translate="no" dir="ltr">android12</code> means kernel FCM version 6 (released in Android 12). </p> <p> For details on how the kernel release string is parsed, see <a href="../kernel/gki-versioning">GKI versioning</a>. </p>
+<h3 id="kernel-version">Match kernel versions</h3> <p>A matrix can include multiple <code translate="no" dir="ltr">&lt;kernel&gt;</code> sections, each with a different <code translate="no" dir="ltr">version</code> attribute using the format:</p> 
+<pre>${ver}.${major_rev}.${kernel_minor_rev}</pre> <p>The VINTF object considers only the <code translate="no" dir="ltr">&lt;kernel&gt;</code> section from the FCM with matching FCM version with the same <code translate="no" dir="ltr">${ver}</code> and <code translate="no" dir="ltr">${major_rev}</code> as the device kernel (that is, <code translate="no" dir="ltr">version="${ver}.${major_rev}.${matrix_minor_rev}")</code>; other sections are ignored. In addition, the minor revision from the kernel must be a value from the compatibility matrix (<code translate="no" dir="ltr">${kernel_minor_rev} &gt;=
+${matrix_minor_rev}</code>;). If no <code translate="no" dir="ltr">&lt;kernel&gt;</code> section meets these requirements, it's a non-match.</p> <h4 id="example:-select-requirements-for-matching">Example: Select requirements for matching</h4> <p>Consider the following hypothetical case where FCMs in <code translate="no" dir="ltr">/system/etc/vintf</code> declare the following requirements (header and footer tags are omitted):</p> 
+<pre>&lt;!-- compatibility_matrix.3.xml --&gt;
+&lt;kernel version="4.4.107" level="3"/&gt;
+&lt;!-- See kernel/configs/p/android-4.4/ for 4.4-p requirements --&gt;
+&lt;kernel version="4.9.84" level="3"/&gt;
+&lt;!-- See kernel/configs/p/android-4.9/ for 4.9-p requirements --&gt;
+&lt;kernel version="4.14.42" level="3"/&gt;
+&lt;!-- See kernel/configs/p/android-4.14/ for 4.14-p requirements --&gt;
+
+&lt;!-- compatibility_matrix.4.xml --&gt;
+&lt;kernel version="4.9.165" level="4"/&gt;
+&lt;!-- See kernel/configs/q/android-4.9/ for 4.9-q requirements --&gt;
+&lt;kernel version="4.14.105" level="4"/&gt;
+&lt;!-- See kernel/configs/q/android-4.14/ for 4.14-q requirements --&gt;
+&lt;kernel version="4.19.42" level="4"/&gt;
+&lt;!-- See kernel/configs/q/android-4.19/ for 4.19-q requirements --&gt;
+
+&lt;!-- compatibility_matrix.5.xml --&gt;
+&lt;kernel version="4.14.180" level="5"/&gt;
+&lt;!-- See kernel/configs/r/android-4.14/ for 4.14-r requirements --&gt;
+&lt;kernel version="4.19.123" level="5"/&gt;
+&lt;!-- See kernel/configs/r/android-4.19/ for 4.19-r requirements --&gt;
+&lt;kernel version="5.4.41" level="5"/&gt;
+&lt;!-- See kernel/configs/r/android-5.4/ for 5.4-r requirements --&gt;</pre> <p> The target FCM version, the kernel FCM version, and the kernel version together select the kernel requirements from the FCMs: </p> <table> <tr> <th>Target FCM version</th>
+<th>Kernel FCM version</th>
+<th>Kernel version</th>
+<th>Match with</th> </tr> <tr>
+<td>3 (P)</td>
+<td>Unspecified</td>
+<td><code translate="no" dir="ltr">4.4.106</code></td>
+<td>No match (minor version mismatch)</td>
+</tr> <tr>
+<td>3 (P)</td>
+<td>Unspecified</td>
+<td><code translate="no" dir="ltr">4.4.107</code></td>
+<td><code translate="no" dir="ltr">4.4-p</code></td>
+</tr> <tr>
+<td>3 (P)</td>
+<td>Unspecified</td>
+<td><code translate="no" dir="ltr">4.19.42</code></td>
+<td>
+<code translate="no" dir="ltr">4.19-q</code> (see note following the table)</td>
+</tr> <tr>
+<td>3 (P)</td>
+<td>Unspecified</td>
+<td><code translate="no" dir="ltr">5.4.41</code></td>
+<td>
+<code translate="no" dir="ltr">5.4-r </code> (see note following the table)</td>
+</tr> <tr>
+<td>3 (P)</td>
+<td>3 (P)</td>
+<td><code translate="no" dir="ltr">4.4.107</code></td>
+<td><code translate="no" dir="ltr">4.4-p</code></td>
+</tr> <tr>
+<td>3 (P)</td>
+<td>3 (P)</td>
+<td><code translate="no" dir="ltr">4.19.42</code></td>
+<td>No match (no <code translate="no" dir="ltr">4.19-p</code> kernel branch)</td>
+</tr> <tr>
+<td>3 (P)</td>
+<td>4 (Q)</td>
+<td><code translate="no" dir="ltr">4.19.42</code></td>
+<td><code translate="no" dir="ltr">4.19-q</code></td>
+</tr> <tr>
+<td>4 (Q)</td>
+<td>Unspecified</td>
+<td><code translate="no" dir="ltr">4.4.107</code></td>
+<td>No match (no <code translate="no" dir="ltr">4.4-q</code> kernel branch)</td>
+</tr> <tr>
+<td>4 (Q)</td>
+<td>Unspecified</td>
+<td><code translate="no" dir="ltr">4.9.165</code></td>
+<td><code translate="no" dir="ltr">4.9-q</code></td>
+</tr> <tr>
+<td>4 (Q)</td>
+<td>Unspecified</td>
+<td><code translate="no" dir="ltr">5.4.41</code></td>
+<td>
+<code translate="no" dir="ltr">5.4-r </code>(see note following the table)</td>
+</tr> <tr>
+<td>4 (Q)</td>
+<td>4 (Q)</td>
+<td><code translate="no" dir="ltr">4.9.165</code></td>
+<td><code translate="no" dir="ltr">4.9-q</code></td>
+</tr> <tr>
+<td>4 (Q)</td>
+<td>4 (Q)</td>
+<td><code translate="no" dir="ltr">5.4.41</code></td>
+<td>No match (no <code translate="no" dir="ltr">5.4-q</code> kernel branch)</td>
+</tr> <tr>
+<td>4 (Q)</td>
+<td>5 (R)</td>
+<td><code translate="no" dir="ltr">4.14.105</code></td>
+<td><code translate="no" dir="ltr">4.14-r</code></td>
+</tr> <tr>
+<td>4 (Q)</td>
+<td>5 (R)</td>
+<td><code translate="no" dir="ltr">5.4.41</code></td>
+<td><code translate="no" dir="ltr">5.4-r</code></td>
+</tr> <tr>
+<td>5 (R)</td>
+<td>Unspecified</td>
+<td>any</td>
+<td>VTS fails (must specify the kernel FCM version for the target FCM version 5)</td>
+</tr> <tr>
+<td>5 (R)</td>
+<td>4 (Q)</td>
+<td>any</td>
+<td>VTS fails (kernel FCM version &lt; target FCM version)</td>
+</tr> <tr>
+<td>5 (R)</td>
+<td>5 (R)</td>
+<td><code translate="no" dir="ltr">4.14.180</code></td>
+<td><code translate="no" dir="ltr">4.14-r</code></td>
+</tr> </table> <aside class="note"><strong>Note:</strong> For devices with a target FCM version lower than 5 (R) and an unspecified kernel FCM version, the VINTF object selects the kernel branch with the lowest suffix that is greater than the target FCM version with the matching kernel version. In the above example, a device with a target FCM version of 3 (P) use the <code translate="no" dir="ltr">4.19-q</code> kernel branch because <code translate="no" dir="ltr">4.19-q</code> has the lowest suffix among all <code translate="no" dir="ltr">4.19-*</code> kernel branches, <code translate="no" dir="ltr">[4.19-q, 4.19-r, 4.19-s]</code>. This requirement selection behavior is disallowed for devices with a target FCM version of 5 (R) or higher, because the kernel FCM version must be specified. </aside> <h3 id="kernel-configs">Match kernel configurations</h3> <p>If the <code translate="no" dir="ltr">&lt;kernel&gt;</code> section does match, the process continues by attempting to match <code translate="no" dir="ltr">config</code> elements against <code translate="no" dir="ltr">/proc/config.gz</code>. For each config element in the compatibility matrix, it looks up <code translate="no" dir="ltr">/proc/config.gz</code> to see if the config is present. When a config item is set to <code translate="no" dir="ltr">n</code> in the compatibility matrix for the matching <code translate="no" dir="ltr">&lt;kernel&gt;</code> section, it must be absent from <code translate="no" dir="ltr">/proc/config.gz</code>. Finally, a config item not in the compatibility matrix might or might not be present in <code translate="no" dir="ltr">/proc/config.gz</code>. </p> <h4 id="example:-match-kernel-configurations">Example: Match kernel configurations</h4> <ul> <li>
+<code translate="no" dir="ltr">&lt;value type="string"&gt;bar&lt;/value&gt;</code> matches <code translate="no" dir="ltr">"bar"</code>. Quotes are omitted in the compatibility matrix but present in <code translate="no" dir="ltr">/proc/config.gz</code>.</li> <li>
+<code translate="no" dir="ltr">&lt;value type="int"&gt;4096&lt;/value&gt;</code> matches <code translate="no" dir="ltr">4096</code>, <code translate="no" dir="ltr">0x1000</code>, or <code translate="no" dir="ltr">0X1000</code>.</li> <li>
+<code translate="no" dir="ltr">&lt;value type="int"&gt;0x1000&lt;/value&gt;</code> matches <code translate="no" dir="ltr">4096</code>, <code translate="no" dir="ltr">0x1000</code>, or <code translate="no" dir="ltr">0X1000</code>.</li> <li>
+<code translate="no" dir="ltr">&lt;value type="int"&gt;0X1000&lt;/value&gt;</code> matches <code translate="no" dir="ltr">4096</code>, <code translate="no" dir="ltr">0x1000</code>, or <code translate="no" dir="ltr">0X1000</code>.</li> <li>
+<code translate="no" dir="ltr">&lt;value type="tristate"&gt;y&lt;/value&gt;</code> matches <code translate="no" dir="ltr">y</code>.</li> <li>
+<code translate="no" dir="ltr">&lt;value type="tristate"&gt;m&lt;/value&gt;</code> matches <code translate="no" dir="ltr">m</code>.</li> <li>
+<code translate="no" dir="ltr">&lt;value type="tristate"&gt;n&lt;/value&gt;</code> means the config item must NOT exist in <code translate="no" dir="ltr">/proc/config.gz</code>.</li> <li>
+<code translate="no" dir="ltr">&lt;value type="range"&gt;1-0x3&lt;/value&gt;</code> matches <code translate="no" dir="ltr">1</code>, <code translate="no" dir="ltr">2</code>, or <code translate="no" dir="ltr">3</code>, or hexadecimal equivalent. </li> </ul> <h4 id="example:-successful-kernel-match">Example: Successful kernel match</h4> <p>A framework compatibility matrix with FCM version 1 has the following kernel information:</p> 
+<pre>&lt;kernel version="4.14.42"&gt;
+   &lt;config&gt;
+      &lt;key&gt;CONFIG_TRI&lt;/key&gt;
+      &lt;value type="tristate"&gt;y&lt;/value&gt;
+   &lt;/config&gt;
+   &lt;config&gt;
+      &lt;key&gt;CONFIG_NOEXIST&lt;/key&gt;
+      &lt;value type="tristate"&gt;n&lt;/value&gt;
+   &lt;/config&gt;
+   &lt;config&gt;
+      &lt;key&gt;CONFIG_DEC&lt;/key&gt;
+      &lt;value type="int"&gt;4096&lt;/value&gt;
+   &lt;/config&gt;
+   &lt;config&gt;
+      &lt;key&gt;CONFIG_HEX&lt;/key&gt;
+      &lt;value type="int"&gt;0XDEAD&lt;/value&gt;
+   &lt;/config&gt;
+   &lt;config&gt;
+      &lt;key&gt;CONFIG_STR&lt;/key&gt;
+      &lt;value type="string"&gt;str&lt;/value&gt;
+   &lt;/config&gt;
+   &lt;config&gt;
+      &lt;key&gt;CONFIG_EMPTY&lt;/key&gt;
+      &lt;value type="string"&gt;&lt;/value&gt;
+   &lt;/config&gt;
+&lt;/kernel&gt;</pre> <p> The kernel branch is matched first. The kernel branch is specified in the device manifest in <code translate="no" dir="ltr">manifest.kernel.target-level</code>, which defaults to <code translate="no" dir="ltr">manifest.level</code> if the former isn't specified: </p> <ul> <li>If the kernel branch in the device manifest is 1, the process proceeds to the next step and checks the kernel version.</li> <li>If the kernel branch in the device manifest is 2, there's no match to the matrix. VINTF objects read the kernel requirements from the matrix at FCM version 2 instead.</li> </ul> <p>Then, the kernel version is matched. If a device in <code translate="no" dir="ltr">uname()</code> reports:</p> <ul> <li>4.9.84 (no match to matrix unless there's a separate kernel section with <code translate="no" dir="ltr">&lt;kernel
+  version="4.9.x"&gt;</code>, where <code translate="no" dir="ltr">x &lt;= 84</code>)</li> <li>4.14.41 (no match to matrix, smaller than <code translate="no" dir="ltr">version</code>)</li> <li>4.14.42 (match to matrix)</li> <li>4.14.43 (match to matrix)</li> <li>4.1.22 (no match to matrix unless there's a separate kernel section with <code translate="no" dir="ltr">&lt;kernel version="4.1.x"&gt;</code>, where <code translate="no" dir="ltr">x &lt;= 22</code>)</li> </ul> <p>After the appropriate <code translate="no" dir="ltr">&lt;kernel&gt;</code> section is selected, for each <code translate="no" dir="ltr">&lt;config&gt;</code> item with value other than <code translate="no" dir="ltr">n</code>, the corresponding entry should be present in <code translate="no" dir="ltr">/proc/config.gz</code>; for each <code translate="no" dir="ltr">&lt;config&gt;</code> item with value <code translate="no" dir="ltr">n</code>, the corresponding entry shouldn't be present in <code translate="no" dir="ltr">/proc/config.gz</code>. The content of <code translate="no" dir="ltr">&lt;value&gt;</code> should exactly match the text after the equal sign (including quotes), up to the newline character or <code translate="no" dir="ltr">#</code>, with leading and trailing whitespace truncated.</p> <p>The following kernel configuration is an example of a successful match:</p> 
+<pre># comments don't matter
+CONFIG_TRI=y
+# CONFIG_NOEXIST shouldn't exist
+CONFIG_DEC = 4096 # trailing comments and whitespaces are fine
+CONFIG_HEX=57005  # 0XDEAD == 57005
+CONFIG_STR="str"
+CONFIG_EMPTY=""   # empty string must have quotes
+CONFIG_EXTRA="extra config items are fine too"</pre> <p>The following kernel configuration is an example of an unsuccessful match:</p> 
+<pre>CONFIG_TRI="y"   # mismatch: quotes
+CONFIG_NOEXIST=y # mismatch: CONFIG_NOEXIST exists
+CONFIG_HEX=0x0   # mismatch; value doesn't match
+CONFIG_DEC=""    # mismatch; type mismatch (expect int)
+CONFIG_EMPTY=1   # mismatch; expects ""
+# mismatch: CONFIG_STR is missing</pre> <h2 id="se-policy">SEPolicy matches</h2> <p>SEPolicy requires the following matches:</p> <ul> <li>
+<code translate="no" dir="ltr">&lt;sepolicy-version&gt;</code> defines a closed range of minor versions for every major version. The SEPolicy version reported by the device must fall within one of these ranges to be compatible with the framework. Match rules are similar to HAL versions; it is a match if the SEPolicy version is higher or equal to the minimum version for the range. The maximum version is purely informational.</li> <li>
+<code translate="no" dir="ltr">&lt;kernel-sepolicy-version&gt;</code>, that is, the Policy DB version, must be less than <code translate="no" dir="ltr">security_policyvers()</code> reported by the device. </li> </ul> <h4 id="example:-successful-sepolicy-match">Example: Successful SEPolicy match</h4> <p>The framework compatibility matrix states the following SEPolicy information: </p> 
+<pre>&lt;sepolicy&gt;
+    &lt;kernel-sepolicy-version&gt;30&lt;/kernel-sepolicy-version&gt;
+    &lt;sepolicy-version&gt;25.0&lt;/sepolicy-version&gt;
+    &lt;sepolicy-version&gt;26.0-3&lt;/sepolicy-version&gt;
+&lt;/sepolicy&gt;</pre> <p>On the device:</p> <ul> <li>The value returned by <code translate="no" dir="ltr">security_policyvers()</code> must be greater than or equal to 30. Otherwise it isn't a match. For example: <ul> <li>If a device returns 29, it isn't a match.</li> <li>If a device returns 31, it's a match.</li> </ul> </li> <li>SEPolicy version must be one of 25.0-∞ or 26.0-∞. Otherwise it isn't a match. (The <code translate="no" dir="ltr">-3</code> after <code translate="no" dir="ltr">26.0</code> is purely informational.)</li> </ul> <h2 id="avb-version">AVB version matches</h2> <p>The AVB version contains a MAJOR version and MINOR version, with the format as MAJOR.MINOR (for example, 1.0, 2.1). For details, refer to <a href="https://android.googlesource.com/platform/external/avb/#versioning-and-compatibility">Versioning and Compatibility</a>. AVB version has the following system properties:</p> <ul> <li>
+<code translate="no" dir="ltr">ro.boot.vbmeta.avb_version</code> is the <code translate="no" dir="ltr">libavb</code> version in bootloader.</li> <li>
+<code translate="no" dir="ltr">ro.boot.avb_version</code> is the <code translate="no" dir="ltr">libavb</code> version in Android OS (<code translate="no" dir="ltr">init/fs_mgr</code>).</li> </ul> <p>The system property appears only when the corresponding <code translate="no" dir="ltr">libavb</code> has been used to verify AVB metadata (and returns OK). It's absent if a verification failure occurred (or no verification occurred at all).</p> <p>A compatibility match compares the following:</p> <ul> <li>sysprop <code translate="no" dir="ltr">ro.boot.vbmeta.avb_version</code> with <code translate="no" dir="ltr">avb.vbmeta-version</code> from framework compatibility matrix: <ul> <li><code translate="no" dir="ltr">ro.boot.vbmeta.avb_version.MAJOR == avb.vbmeta-version.MAJOR</code></li> <li><code translate="no" dir="ltr">ro.boot.vbmeta.avb_version.MINOR &gt;= avb.vbmeta-version.MINOR</code></li> </ul> </li> <li>sysprop <code translate="no" dir="ltr">ro.boot.avb_version</code> with <code translate="no" dir="ltr">avb.vbmeta-version</code> from framework compatibility matrix: <ul> <li><code translate="no" dir="ltr">ro.boot.avb_version.MAJOR == avb.vbmeta-version.MAJOR</code></li> <li><code translate="no" dir="ltr">ro.boot.avb_version.MINOR &gt;= avb.vbmeta-version.MINOR</code></li> </ul> </li> </ul> <p>The bootloader or Android OS might contain two copies of <code translate="no" dir="ltr">libavb</code> libraries, each with a different MAJOR version for upgrade devices and launch devices. In this case, the same <em>unsigned</em> system image can be shared but the final <em>signed</em> system images are different (with different <code translate="no" dir="ltr">avb.vbmeta-version</code>):</p> <img src="https://source.android.com/docs/core/architecture/images/treble_vintf_avb_o_p.png" class="android-image-dark-theme-background"> <p><strong>Figure 1.</strong> AVB version matches (/system is P, all other partitions are O).</p> <br> <br> <img src="https://source.android.com/docs/core/architecture/images/treble_vintf_avb_p.png" class="android-image-dark-theme-background"> <p><strong>Figure 2.</strong> AVB version matches (all partitions are P).</p> <h4 id="example:-successful-avb-version-match">Example: Successful AVB version match</h4> <p>The framework compatibility matrix states the following AVB information:</p> 
+<pre>&lt;avb&gt;
+    &lt;vbmeta-version&gt;2.1&lt;/vbmeta-version&gt;
+&lt;/avb&gt;</pre> <p>On the device:</p> 
+<pre>ro.boot.avb_version              == 1.0 &amp;&amp;
+ro.boot.vbmeta.avb_version       == 2.1  mismatch </pre> 
+<pre>ro.boot.avb_version              == 2.1 &amp;&amp;
+ro.boot.vbmeta.avb_version       == 3.0  mismatch </pre> 
+<pre>ro.boot.avb_version              == 2.1 &amp;&amp;
+ro.boot.vbmeta.avb_version       == 2.3  match </pre> 
+<pre>ro.boot.avb_version              == 2.3 &amp;&amp;
+ro.boot.vbmeta.avb_version       == 2.1  match </pre> <h3 id="avb-version-ota">Match AVB version during OTA</h3> <aside class="note"><strong>Note:</strong> This section doesn't apply to devices updating to Android 11.</aside> <p>For devices launched with Android 9 or lower, when updating to Android 10, the AVB version requirements in the framework compatibility matrix are matched against the current AVB version on the device. If the AVB version has a major version upgrade during an OTA (for example, from 0.0 to 1.0), the VINTF check for compatibility in OTA doesn't reflect the compatibility after the OTA.</p> <p>To mitigate the issue, an OEM can place a fake AVB version in the OTA package (<code translate="no" dir="ltr">compatibility.zip</code>) to pass the check. To do so:</p> <ol> <li>Cherry-pick the following CLs to the Android 9 source tree: <ul> <li><a href="https://android-review.googlesource.com/732261">CL 732261</a></li> <li><a href="https://android-review.googlesource.com/732262">CL 732262</a></li> </ul> </li> <li>Define <code translate="no" dir="ltr">BOARD_OTA_FRAMEWORK_VBMETA_VERSION_OVERRIDE</code> for the device. Its value should equal the AVB version before the OTA, that is, the AVB version of the device when it was launched.</li> <li>Rebuild the OTA package.</li> </ol> <p>These changes automatically place <code translate="no" dir="ltr">BOARD_OTA_FRAMEWORK_VBMETA_VERSION_OVERRIDE</code> as <code translate="no" dir="ltr">compatibility-matrix.avb.vbmeta-version</code> in the following files: </p> <ul> <li>
+<code translate="no" dir="ltr">/system/compatibility_matrix.xml</code> (which isn't used in Android 9) on the device</li> <li>
+<code translate="no" dir="ltr">system_matrix.xml</code> in <code translate="no" dir="ltr">compatibility.zip</code> in the OTA package</li> </ul> <p> These changes don't affect other framework compatibility matrixes, including <code translate="no" dir="ltr">/system/etc/vintf/compatibility_matrix.xml</code>. After the OTA, the new value in <code translate="no" dir="ltr">/system/etc/vintf/compatibility_matrix.xml</code> is used for compatibility checks instead. </p> <h2 id="vndk">VNDK version matches</h2> <p>The device compatibility matrix declares the required VNDK version in <code translate="no" dir="ltr">compatibility-matrix.vendor-ndk.version</code>. If the device compatibility matrix doesn't have a <code translate="no" dir="ltr">&lt;vendor-ndk&gt;</code> tag, no requirements are imposed, and it's always considered a match.</p> <p>If the device compatibility matrix does have a <code translate="no" dir="ltr">&lt;vendor-ndk&gt;</code> tag, a <code translate="no" dir="ltr">&lt;vendor-ndk&gt;</code> entry with a matching <code translate="no" dir="ltr">&lt;version&gt;</code> is looked up from the set of VNDK vendor snapshots that's provided by the framework in the framework manifest. If such an entry doesn't exist, there's no match.</p> <p>If such an entry does exist, the set of libraries enumerated in the device compatibility matrix must be a subset of the set of libraries stated in the framework manifest; otherwise, the entry isn't considered a match.</p> <ul> <li>As a special case, if no libraries are enumerated in the device compatibility matrix, the entry is always considered a match, because an empty set is a subset of any set.</li> </ul> <h4 id="example:-successful-vndk-version-match">Example: Successful VNDK version match</h4> <p>If the device compatibility matrix states the following requirement on VNDK: </p> 
+<pre>&lt;!-- Example Device Compatibility Matrix --&gt;
+&lt;vendor-ndk&gt;
+    &lt;version&gt;27&lt;/version&gt;
+    &lt;library&gt;libjpeg.so&lt;/library&gt;
+    &lt;library&gt;libbase.so&lt;/library&gt;
+&lt;/vendor-ndk&gt;</pre> <p>In the framework manifest, only the entry with version 27 is considered.</p> 
+<pre>&lt;!-- Framework Manifest Example A --&gt;
+&lt;vendor-ndk&gt;
+    &lt;version&gt;27&lt;/version&gt;
+    &lt;library&gt;libjpeg.so&lt;/library&gt;
+    &lt;library&gt;libbase.so&lt;/library&gt;
+    &lt;library&gt;libfoo.so&lt;/library&gt;
+&lt;/vendor-ndk&gt;</pre> <p>Example A is a match, because VNDK version 27 is in the framework manifest, and <code translate="no" dir="ltr">{libjpeg.so, libbase.so, libfoo.so} ⊇ {libjpeg.so, libbase.so}</code>. </p> 
+<pre>&lt;!-- Framework Manifest Example B --&gt;
+&lt;vendor-ndk&gt;
+    &lt;version&gt;26&lt;/version&gt;
+    &lt;library&gt;libjpeg.so&lt;/library&gt;
+    &lt;library&gt;libbase.so&lt;/library&gt;
+&lt;/vendor-ndk&gt;
+&lt;vendor-ndk&gt;
+    &lt;version&gt;27&lt;/version&gt;
+    &lt;library&gt;libbase.so&lt;/library&gt;
+&lt;/vendor-ndk&gt;</pre> <p>Example B isn't a match. Even though VNDK version 27 is in the framework manifest, <code translate="no" dir="ltr">libjpeg.so</code> isn't supported by the framework in that snapshot. VNDK version 26 is ignored.</p> <h2 id="vsdk">System SDK version matches</h2> <p>The device compatibility matrix declares a set of required system SDK version in <code translate="no" dir="ltr">compatibility-matrix.system-sdk.version</code>. There's a match only if the set is a subset of provided system SDK versions as declared in <code translate="no" dir="ltr">manifest.system-sdk.version</code> in the framework manifest.</p> <ul> <li>As a special case, if no system SDK versions are enumerated in the device compatibility matrix, it's always considered a match, because empty set is a subset of any set.</li> </ul> <h4 id="example:-successful-system-sdk-version-match">Example: Successful system SDK version match</h4> <p>If the device compatibility matrix states the following requirement on System SDK: </p> 
+<pre>&lt;!-- Example Device Compatibility Matrix --&gt;
+&lt;system-sdk&gt;
+    &lt;version&gt;26&lt;/version&gt;
+    &lt;version&gt;27&lt;/version&gt;
+&lt;/system-sdk&gt;</pre> <p>Then, the framework must provide system SDK version 26 and 27 to match:</p> 
+<pre>&lt;!-- Framework Manifest Example A --&gt;
+&lt;system-sdk&gt;
+    &lt;version&gt;26&lt;/version&gt;
+    &lt;version&gt;27&lt;/version&gt;
+&lt;/system-sdk&gt;</pre> <p>Example A is a match:</p> 
+<pre>&lt;!-- Framework Manifest Example B --&gt;
+&lt;system-sdk&gt;
+    &lt;version&gt;26&lt;/version&gt;
+    &lt;version&gt;27&lt;/version&gt;
+    &lt;version&gt;28&lt;/version&gt;
+&lt;/system-sdk&gt;</pre> <p>Example B is a match:</p> 
+<pre>&lt;!-- Framework Manifest Example C --&gt;
+&lt;system-sdk&gt;
+    &lt;version&gt;26&lt;/version&gt;
+&lt;/system-sdk&gt;</pre> <p>Example C isn't a match, because system SDK version 27 isn't provided.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/vintf/match-rules" class="_attribution-link">https://source.android.com/docs/core/architecture/vintf/match-rules</a>
+  </p>
+</div>

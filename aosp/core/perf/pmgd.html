@@ -1,0 +1,51 @@
+<h1>Process memory guardian daemon</h1>  <p>Android 17 and higher supports the process memory guardian daemon (PMGD), which protects system health and the user experience by proactively managing memory usage on a per-process basis. The daemon improves overall device stability by gracefully enforcing memory ceilings on specific target processes, verifying that isolated memory leaks or spikes don't cause system-wide performance degradation.</p> <p>While conventional global low-memory killers act only when the entire system is under pressure, PMGD takes a granular approach. The daemon achieves this by monitoring <a href="https://docs.kernel.org/admin-guide/cgroup-v2.html#memory">Control Group v2 memory</a> values for its target processes. When a targeted process exceeds its configured memory limits, <code translate="no" dir="ltr">pmgd</code> handles limit violations by logging Statsd memory atoms before terminating the process.</p> <h2 id="how-it-works">How it works</h2> <p>The daemon uses <code translate="no" dir="ltr">inotify</code> to listen for memory pressure events (specifically high-memory activity using <code translate="no" dir="ltr">memory.events</code>). When a monitored process triggers a memory event, <code translate="no" dir="ltr">pmgd</code> performs the following actions:</p> <ol> <li>
+<strong>Anonymous memory check:</strong> Evaluates the process's anonymous memory. If it exceeds the configured <code translate="no" dir="ltr">anon_limit_in_mb</code>, <code translate="no" dir="ltr">pmgd</code> kills the process immediately.</li> <li>
+<strong>Reclaim wait period:</strong> If the anonymous memory is under the specified anonymous memory limit, <code translate="no" dir="ltr">pmgd</code> waits for a system reclaim grace period (<code translate="no" dir="ltr">reclaim_wait_time_secs</code>).</li> <li>
+<strong>Memory evaluation after reclaim:</strong> If the target process's <code translate="no" dir="ltr">memory.current</code> remains greater than or equal to <code translate="no" dir="ltr">memory.high</code> after the grace period, <em>or</em> anonymous memory exceeds <code translate="no" dir="ltr">anon_limit_in_mb</code>, <code translate="no" dir="ltr">pmgd</code> kills the process immediately.</li> </ol> <p>This is done continuously until the process is killed or reclaim on the process brings down its memory usage below the specified memory limits.</p> <h4 id="system-health-features">System health features</h4> <ul> <li>
+<strong>Reboot rate limiting:</strong> To prevent boot loops or persistent crashes, <code translate="no" dir="ltr">pmgd</code> tracks process kills in <code translate="no" dir="ltr">/data/misc/pmgd/history.json</code>. The daemon restricts processes to a single <code translate="no" dir="ltr">pmgd</code>-initiated kill per device reboot.</li> </ul> <h2 id="selinux-configuration">SELinux configuration</h2> <p>PMGD's ability to monitor processes is restricted by SELinux policy. If you configure PMGD to monitor a process whose domain isn't allowed by policy, such as a vendor-specific system process, PMGD can't monitor it, and you might see SELinux denials in logcat.</p> <p>To allow PMGD to monitor processes in additional domains, you must extend PMGD's permissions by updating your device-specific SELinux policy for PMGD.</p> <p>The following is an example <code translate="no" dir="ltr">device/&lt;vendor&gt;/&lt;device&gt;/sepolicy/pmgd.te</code> file that adds access to a new domain:</p> 
+<pre># Allow pmgd to access vendor_system_apps
+r_dir_file(pmgd, vendor_system_apps)
+</pre> <p>For more information about writing device-specific policy, see <a href="../../security/selinux/implement">Implement SELinux</a>.</p> <h2 id="vendor-defined-configuration">Vendor-defined configuration</h2> <p>PMGD configuration is vendor driven, configured by a required JSON file <code translate="no" dir="ltr">/vendor/etc/pmgd/config.json</code>. This lists the processes to track, their configured memory limit profile (using <a href="cgroups#example-task-profiles-json-file">cgroup task profiles</a>), and the hard anonymous memory limit in megabytes.</p> <h3 id="vendor-configuration-fields">Vendor configuration fields</h3> <p>The provided JSON configuration is a list of processes and their limits, defined by the following fields:</p> <table> <tr> <th>Field</th> <th>Type</th> <th>Required</th> <th>Description</th> <th>Default</th> </tr> <tr> <td><code translate="no" dir="ltr">target_cmd</code></td> <td>String</td> <td>Yes</td> <td>The command name of the target process to monitor, for example, <code translate="no" dir="ltr">system_server</code>.</td> <td>N/A</td> </tr> <tr> <td><code translate="no" dir="ltr">uid</code></td> <td>Integer</td> <td>No</td> <td>The user ID (UID) of the process. If omitted, <code translate="no" dir="ltr">pmgd</code> applies the rule globally to any process matching <code translate="no" dir="ltr">target_cmd</code>.</td> <td>N/A</td> </tr> <tr> <td><code translate="no" dir="ltr">reclaim_wait_time_secs</code></td> <td>Integer</td> <td>No</td> <td>The grace period in seconds to wait for the system to reclaim memory before evaluating the memory limit again.</td> <td>5</td> </tr> <tr> <td><code translate="no" dir="ltr">mem_limit_profile</code></td> <td>String</td> <td>Yes</td> <td>The name of the <a href="cgroups#example-task-profiles-json-file">cgroup task profile</a> that sets `memory.high`. This is used to set the process memory limit. </td> <td>N/A</td> </tr> <tr> <td><code translate="no" dir="ltr">anon_limit_in_mb</code></td> <td>Integer</td> <td>Yes</td> <td>The ultimate anonymous memory limit in megabytes. If the anonymous memory utilization surpasses this value, <code translate="no" dir="ltr">pmgd</code> promptly kills the process.</td> <td>N/A</td> </tr> <tr> <td><code translate="no" dir="ltr">additional_task_profiles</code></td> <td>List of strings</td> <td>No</td> <td>A list of any additional task profiles that <code translate="no" dir="ltr">pmgd</code> applies to the process when monitoring starts.</td> <td>Empty list</td> </tr> </table> <p>The following is an example configuration of the cgroup task profile in <code translate="no" dir="ltr">vendor/etc/task_profiles.json</code>:</p> 
+<pre>{
+  "Attributes": [
+    ...
+    {
+      "Name": "MemHigh",
+      "Controller": "memory",
+      "File": "memory.high"
+    }
+  ],
+  "Profiles": [
+    {
+      "Name": "SystemServerMemoryHighLimit",
+      "Actions": [
+        {
+          "Name": "SetAttribute",
+          "Params":
+          {
+            "Name": "MemHigh",
+            "Value": "1080M"
+          }
+        }
+      ]
+    }
+  ]
+}
+</pre> <p>The following is an example configuration of the PMGD config in <code translate="no" dir="ltr">vendor/etc/pmgd/config.json</code>:</p> 
+<pre>{
+  "targets": [
+    {
+      "target_cmd": "system_server",
+      "uid": 1000,
+      "reclaim_wait_time_secs": 5,
+      "mem_limit_profile": "SystemServerMemoryHighLimit",
+      "anon_limit_in_mb": 300
+    }
+  ]
+}
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/perf/pmgd" class="_attribution-link">https://source.android.com/docs/core/perf/pmgd</a>
+  </p>
+</div>

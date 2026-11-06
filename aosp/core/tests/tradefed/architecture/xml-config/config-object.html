@@ -1,0 +1,24 @@
+<h1>Tradefed configuration object</h1>  <p><a href="../xml-config">Tradefed XML configuration</a> is parsed, and a <code translate="no" dir="ltr">Configuration</code> object is created from it that describes the complete configuration.</p> <p>The object is described by the <a href="https://android.googlesource.com/platform/tools/tradefederation/+/refs/heads/android17-release/src/com/android/tradefed/config/IConfiguration.java">IConfiguration interface.</a> it will contain an instance of all the objects defined in the XML.</p> <p>This example:</p> 
+<pre>&lt;configuration description="&lt;description of the configuration&gt;"&gt;
+    &lt;!-- A build provider that takes local device information --&gt;
+    &lt;build_provider class="com.android.tradefed.build.BootstrapBuildProvider" /&gt;
+
+    &lt;!-- Some target preparation, disabled by default --&gt;
+    &lt;target_preparer class="com.android.tradefed.targetprep.PreloadedClassesPreparer"&gt;
+        &lt;option name="disable" value="true" /&gt;
+    &lt;/target_preparer&gt;
+
+    &lt;!-- One test running some unit tests --&gt;
+    &lt;test class="com.android.tradefed.testtype.HostTest"&gt;
+        &lt;option name="class" value="com.android.tradefed.build.BuildInfoTest" /&gt;
+    &lt;/test&gt;
+&lt;/configuration&gt;
+</pre> <p>Will result in:</p> <ul> <li>
+<code translate="no" dir="ltr">IConfiguration#getBuildProvider()</code> to return a <code translate="no" dir="ltr">BootstrapBuildProvider</code> instance.</li> <li>
+<code translate="no" dir="ltr">IConfiguration#getTargetPreparers()</code> to return a list of <code translate="no" dir="ltr">ITargetPreparer</code> containing an instance of <code translate="no" dir="ltr">PreloadedClassesPreparer</code>.</li> <li>
+<code translate="no" dir="ltr">IConfiguration#getTests()</code> to return a list of <code translate="no" dir="ltr">IRemoteTest</code> containing an instance of <code translate="no" dir="ltr">HostTest</code>.</li> </ul> <p>Every single object in the configuration object can be mapped to the XML definition, so understanding the XML definition usually helps to understand what to expect from the configuration object.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/tradefed/architecture/xml-config/config-object" class="_attribution-link">https://source.android.com/docs/core/tests/tradefed/architecture/xml-config/config-object</a>
+  </p>
+</div>

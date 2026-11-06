@@ -1,0 +1,69 @@
+<h1>NPU manager</h1>  <p>Android 17 and higher supports the Neural Processing Unit (NPU) Manager (<code translate="no" dir="ltr">com.android.npumanager</code>), which coordinates the allocation and scheduling of NPU resources across system services and application workloads. By moving resource arbitration from custom vendor daemons to the Android platform, the NPU Manager increases predictability, prevents resource starvation, manages thermal boundaries, and enhances overall device performance.</p> <h2 id="background">Background and motivation</h2> <p>Before the NPU Manager, apps and system modules submitted workloads directly to vendor drivers or proprietary services. This approach had several drawbacks:</p> <ul> <li>
+<strong>Inefficient resource competition:</strong> Heavy machine learning workloads (such as Large Language Model (LLM) inference engines or on-device vision systems) competed directly with other high-priority systems for finite NPU resources (such as SRAM, weights memory, and execution channels).</li> <li>
+<strong>System instability:</strong> Uncoordinated workloads could trigger thermal throttling, memory page faults, or low memory killer daemon (LMKD) if the demands exceeded hardware capacity.</li> <li>
+<strong>Inefficient prioritization:</strong> The system server can't adjust NPU priority in response to context shifts, such as a background task loading a massive model while a latency-sensitive camera pipeline or user assistant is active in the foreground.</li> </ul> <p>The NPU Manager addresses these challenges by acting as a system-level arbiter that gates model loading and dynamically adjusts execution priorities based on current device health and app states.</p> <h2 id="architecture">System architecture</h2> <p>The NPU Manager is implemented as a system service named <code translate="no" dir="ltr">npu</code> running within the Android framework. The NPU Manager isolates the high-level coordination of scheduling policies from the low-level vendor driver implementation.</p> <p>The following diagram illustrates the NPU Manager environment layers:</p> <p><img src="https://source.android.com/static/docs/core/perf/images/npu_arch.png" alt="NPU Manager environment layers"></p> <p><strong>Figure 1.</strong> NPU Manager environment layers.</p> <h3 id="key-components">Key components</h3> <ul> <li>
+<strong>Framework API Client (<code translate="no" dir="ltr">android.npumanager.NpuManager</code>):</strong> The entry point used by clients to request model load reservations</li> <li>
+<strong>System Service (<code translate="no" dir="ltr">npu</code>):</strong> A system service that gates model load approvals and manages preemption commands based on scheduling priority rules</li> <li>
+<strong>NPU Scheduling HAL (<code translate="no" dir="ltr">android.hardware.npu</code>):</strong> An AIDL-based interface that relays that relays Android app priorities callbacks between the framework and the driver</li> <li>
+<strong>Vendor driver:</strong> A low-level driver that controls the hardware execution blocks and implements low-level prioritization mechanisms</li> </ul> <h2 id="framework-api">SDK and framework API</h2> <p>Before calling low-level neural network libraries or loading model files, framework clients must interact with the <code translate="no" dir="ltr">NpuManager</code> service. To do this, clients first define a model load request and then execute the request and approval flow.</p> <h3 id="model-load-request">Model load request</h3> <p>A model load request is represented by <code translate="no" dir="ltr">ModelLoadRequest</code>. This object contains:</p> <ul> <li>Unique request ID</li> <li>Estimated model size class, such as <code translate="no" dir="ltr">NPU_MODEL_SIZE_LESS_THAN_1GB</code> or <code translate="no" dir="ltr">NPU_MODEL_SIZE_GREATER_THAN_2G</code>
+</li> <li>Intended priority, such as <code translate="no" dir="ltr">NPU_MODEL_PRIORITY_BACKGROUND</code>, <code translate="no" dir="ltr">NPU_MODEL_PRIORITY_NORMAL</code>, or <code translate="no" dir="ltr">NPU_MODEL_PRIORITY_OPPORTUNISTIC</code>
+</li> </ul> <p>The following code example builds a <code translate="no" dir="ltr">ModelLoadRequest</code> with a size limit greater than 2 GB and normal execution priority:</p> 
+<pre>ModelLoadRequest request = new ModelLoadRequest.Builder(requestId)
+        .setSize(NPU_MODEL_SIZE_GREATER_THAN_2G)
+        .setPriority(NPU_MODEL_PRIORITY_NORMAL)
+        .build();
+</pre> <h3 id="request-approval">Request and approval flow</h3> <p>Clients invoke <code translate="no" dir="ltr">requestCanLoadModel</code> asynchronously:</p> 
+<pre>npuManager.requestCanLoadModel(request, callback, executor);
+</pre> <p>When NPU resources are available, the framework responds using <code translate="no" dir="ltr">ModelLoadRequestCallback</code> with the following events:</p> <ul> <li>
+<code translate="no" dir="ltr">onCanLoadModel(request, status, listener)</code>: Fired when the request is approved. The client receives an <code translate="no" dir="ltr">NpuManager.ModelLoadStatusListener</code> token. After the client fully loads the model in the driver memory, it must call <code translate="no" dir="ltr">listener.notifyModelLoaded(request)</code>.</li> <li>
+<code translate="no" dir="ltr">onRequestUnloadModel(request)</code> or <code translate="no" dir="ltr">onRequestUnloadModel(request, reason)</code>: Fired when the system experiences resource pressure (such as an incoming foreground request or thermal spike) and requires the client to release its model. After reclaiming the NPU resources, the client calls <code translate="no" dir="ltr">listener.notifyModelUnloaded(request)</code>.</li> <li>
+<code translate="no" dir="ltr">onModelLoadRequestComplete(request, status)</code>: Informs the client of final request lifecycle changes, such as cancellation.</li> </ul> <p>Clients can cancel pending invitations using <code translate="no" dir="ltr">cancelModelLoad(request)</code>.</p> <h2 id="hal-integration">HAL and vendor integration</h2> <p>To support the NPU Manager, device-specific vendor implementations must conform to the <code translate="no" dir="ltr">android.hardware.npu</code> AIDL service interfaces.</p> <h3 id="scheduling-config">Scheduling configuration</h3> <p>The system relays app priority using the SchedulingConfig AIDL the <code translate="no" dir="ltr">SchedulingConfig</code> AIDL structure defined in <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/interfaces/npu/aidl/android/hardware/npu/IScheduling.aidl"><code translate="no" dir="ltr">IScheduling.aidl</code></a>:</p> 
+<pre>package android.hardware.npu;
+
+@VintfStability
+parcelable SchedulingConfig {
+    int minPriority;
+    int maxPriority;
+    int uid;
+    int appPriority;
+    boolean hasDirectAccess;
+    boolean canAttributeOtherUid;
+}
+</pre> <p>Using this structure, the NPU Manager coordinates priority alignments. For example, if a background app submits a high-priority job, the priority is adjusted downwards to prevent interference with foreground graphics.</p> <h3 id="task-status-profiling">Task status and profiling</h3> <p>Vendor drivers must report the lifecycle status of NPU execution groups to the manager. <code translate="no" dir="ltr">WorkInfo</code> tracks the tasks (defined in <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/interfaces/npu/aidl/android/hardware/npu/WorkInfo.aidl"><code translate="no" dir="ltr">WorkInfo.aidl</code></a>):</p> 
+<pre>package android.hardware.npu;
+
+import android.hardware.npu.NpuUuid;
+
+@VintfStability
+parcelable WorkInfo {
+    int id;
+    @nullable NpuUuid groupId;
+    int uid;
+    int debugPid;
+    int originalUid;
+    @nullable String debugFeatureId;
+    int jobPriority;
+    int effectivePriority;
+    long timestampMs;
+    int deviceNumber;
+}
+</pre> <h3 id="event-debouncing">Event debouncing</h3> <p>The scheduling framework supports event debouncing using the <code translate="no" dir="ltr">debounce_duration_ms</code> parameter within the scheduling callback registration. This avoids log flooding and suppresses rapid notifications, for example, consecutive start and end events for repeating models.</p> <p>The callback lifecycle states are reported as follows:</p> <ul> <li>
+<code translate="no" dir="ltr">onWorkRequested</code>: Workload is enqueued by the vendor service.</li> <li>
+<code translate="no" dir="ltr">onWorkStarted</code>: Workload execution begins. <ul> <li>
+<code translate="no" dir="ltr">NPU_START_REASON_INITIAL</code>: First execution run.</li> <li>
+<code translate="no" dir="ltr">NPU_START_REASON_RESUMED</code>: Execution resumed after preemption.</li> </ul>
+</li> <li>
+<code translate="no" dir="ltr">onWorkEnded</code>: Workload execution ended. <ul> <li>
+<code translate="no" dir="ltr">NPU_END_REASON_COMPLETED</code>: Successful run completion.</li> <li>
+<code translate="no" dir="ltr">NPU_END_REASON_CANCELLED_USER</code>: Cancelled by client.</li> <li>
+<code translate="no" dir="ltr">NPU_END_REASON_CANCELLED_SYSTEM</code>: Preempted by system policy.</li> <li>
+<code translate="no" dir="ltr">NPU_END_REASON_FAILED</code>: Execution error or driver failure.</li> <li>
+<code translate="no" dir="ltr">NPU_END_REASON_PAUSED</code>: Temporarily suspended for higher-priority tasks.</li> </ul>
+</li> </ul> <h2 id="readiness-testing">Device readiness and testing</h2> <p>Ensure these configurations are in place before verifying device health.</p> <h3 id="app-declarations">Application declarations</h3> <p>Clients seeking NPU scheduling prioritization must declare the NPU hardware feature in their <code translate="no" dir="ltr">AndroidManifest.xml</code>:</p> 
+<pre>&lt;uses-feature android:name="android.hardware.npu" android:required="false" /&gt;
+</pre> <p>For models deployed on newer generations of partner hardware, this declaration might be required for optimal engine creation.</p> <h3 id="vts-testing">VTS integration testing</h3> <p>NPU HAL implementations can be validated with VTS functional tests, for example, <code translate="no" dir="ltr">VtsHalNpuSchedulingTargetTest</code>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/perf/npu-manager" class="_attribution-link">https://source.android.com/docs/core/perf/npu-manager</a>
+  </p>
+</div>

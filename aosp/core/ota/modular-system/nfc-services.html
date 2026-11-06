@@ -1,0 +1,10 @@
+<h1>NFC Services</h1>  <p>The NFC Services module is an optional updatable Mainline module released in Android 16. This module contains the following components:</p> <ul> <li>NFC API classes: <code translate="no" dir="ltr">framework-nfc.jar</code>
+</li> <li>NFC Java framework handling all the APIs: <code translate="no" dir="ltr">NfcNci.apk</code>
+</li> <li>NCI JNI interface: <code translate="no" dir="ltr">libnfc_nci_jni.so</code>
+</li> <li>NCI built-in stack interfacing with the NFC HAL: <code translate="no" dir="ltr">libnfc_nci.so</code>
+</li> </ul> <h2 id="module-boundary">Module boundary</h2> <p><img src="https://source.android.com/static/docs/core/ota/images/nfc-stack-architecture.png" alt="NFC Mainline stack architecture"></p> <p><strong>Figure 1.</strong> NFC Mainline stack architecture.</p> <p>The NFC Services Mainline APEX <code translate="no" dir="ltr">com.android.nfcservices</code> contains the following:</p> <ul> <li>NFC API surface (Java)</li> <li>NFC system APK (Java)</li> <li>NFC built-in stack (C++)</li> </ul> <p>The codebase is located at <a href="https://cs.android.com/android/platform/superproject/+/android17-release:packages/modules/Nfc/"><code translate="no" dir="ltr">packages/modules/Nfc</code></a>.</p> <h2 id="package-format">Package format</h2> <p>The main function of this module is included in the APEX package <code translate="no" dir="ltr">com.android.nfcservices</code>.</p> <h2 id="dependencies">Dependencies</h2> <ul> <li>HAL implementation dependency on the NFC chip vendor or OEM</li> <li>Secure element for all secure service interactions</li> <li>Core framework for NFC runtime permission enforcement</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/ota/modular-system/nfc-services" class="_attribution-link">https://source.android.com/docs/core/ota/modular-system/nfc-services</a>
+  </p>
+</div>

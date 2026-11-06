@@ -1,0 +1,15 @@
+<h1>ModuleMetadata</h1>  <p>The ModuleMetadata module contains metadata about the list of modules on a given device. The metadata is parsed and cached as soon as the system server starts.</p> <h2 id="metadata-q">Changes in Android 10</h2> <p>The ModuleMetadata APK contains <code translate="no" dir="ltr">ModuleInfoProvider</code>, which implements the <code translate="no" dir="ltr">getModuleInfo</code> and <code translate="no" dir="ltr">getInstalledModules</code> methods from the PackageManager's API. These methods are backed by XML metadata parsed from a module metadata provider package. The package name for the module metadata package is stored in the <code translate="no" dir="ltr">config_defaultModuleMetadataProvider</code> config value.</p> <p>The module metadata provider must contain a <code translate="no" dir="ltr">&lt;metadata&gt;</code> entry for its <code translate="no" dir="ltr">&lt;application&gt;</code> tag. The metadata entry must contain a single key (<code translate="no" dir="ltr">android.content.pm.MODULE_METADATA</code>) whose value is a reference to an XML resource that contains metadata about the list of modules on a given device.</p> <h2 id="metadata-format">Package format</h2> <p>The ModuleMetadata module (<code translate="no" dir="ltr">com.android.modulemetadata</code>) is delivered as an APK file.</p> <h2 id="metadata-elements">Metadata elements</h2> <p>The XML document must consist of a single top level <code translate="no" dir="ltr">&lt;module-metadata&gt;</code> element with one or more children. Each child is a <code translate="no" dir="ltr">&lt;module&gt;</code> element that contains the following attributes:</p> <ul> <li>
+<code translate="no" dir="ltr">name</code> is a resource reference to a user-visible package name. Maps to <code translate="no" dir="ltr">ModuleInfo#getName</code>.</li> <li>
+<code translate="no" dir="ltr">packageName</code> is the package name of the module. Maps to <code translate="no" dir="ltr">ModuleInfo#getPackageName</code>.</li> <li>
+<code translate="no" dir="ltr">isHidden</code> indicates whether the module is hidden. Maps to <code translate="no" dir="ltr">ModuleInfo#isHidden&lt;/code&gt;.</code>
+</li> </ul> <p>Example:</p> 
+<pre>&lt;module-metadata&gt;
+&lt;module name="@string/resource" packageName="package_name" isHidden="false|true"&gt;
+&lt;module .... &gt;
+&lt;/module-metadata&gt;
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/modular-system/metadata" class="_attribution-link">https://source.android.com/docs/core/architecture/modular-system/metadata</a>
+  </p>
+</div>

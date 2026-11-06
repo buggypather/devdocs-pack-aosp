@@ -1,0 +1,41 @@
+<h1>Legacy HALs</h1>  <p>A HAL defines a standard interface for hardware vendors to implement, which enables Android to be agnostic about lower-level driver implementations. Using a HAL allows you to implement functionality without affecting or modifying the higher level system. This page describes the older architecture, which is no longer supported as of Android 8.0. For Android 8.0 and higher, please see the <a href="../hal">HAL Overview</a>.</p> <img src="https://source.android.com/static/docs/core/architecture/images/ape_fwk_hal.png" class="android-image-dark-theme-background" alt="HAL components"> <p class="img-caption"><strong>Figure 1.</strong> HAL components</p> <p>You must implement the corresponding HAL (and driver) for the specific hardware your product provides. HAL implementations are typically built into shared library modules (<code translate="no" dir="ltr">.so</code> files), but as Android does not mandate a standard interaction between a HAL implementation and device drivers, you can do what is best for your situation. However, to enable the Android system to correctly interact with your hardware, you <strong>must</strong> abide by the contract defined in each hardware-specific HAL interface.</p> <p>To guarantee that HALs have a predictable structure, each hardware-specific HAL interface has properties defined in <code translate="no" dir="ltr">hardware/libhardware/include/hardware/hardware.h</code>. This interface allows the Android system to load correct versions of your HAL modules in a consistent way. A HAL interface consists of two components: modules and devices. </p> <h2 id="hal-module">HAL modules</h2> <p>A module represents your packaged HAL implementation, which is stored as a shared library (<code translate="no" dir="ltr">.so file</code>). The <code translate="no" dir="ltr">hardware/libhardware/include/hardware/hardware.h</code> header file defines a struct (<code translate="no" dir="ltr">hw_module_t</code>) that represents a module and contains metadata such as the version, name, and author of the module. Android uses this metadata to find and load the HAL module correctly.</p> <p>In addition, the <code translate="no" dir="ltr">hw_module_t</code> struct contains a pointer to another struct, <code translate="no" dir="ltr">hw_module_methods_t</code>, that contains a pointer to an open function for the module. This open function is used to initiate communication with the hardware for which the HAL is serving as an abstraction. Each hardware-specific HAL usually extends the generic <code translate="no" dir="ltr">hw_module_t</code> struct with additional information for that specific piece of hardware. For example, in the camera HAL, the <code translate="no" dir="ltr">camera_module_t</code> struct contains a <code translate="no" dir="ltr">hw_module_t</code> struct along with other camera-specific function pointers:</p> 
+<pre>
+typedef struct camera_module {
+    hw_module_t common;
+    int (*get_number_of_cameras)(void);
+    int (*get_camera_info)(int camera_id, struct camera_info *info);
+} camera_module_t;
+</pre> <p>When you implement a HAL and create the module struct, you must name it <code translate="no" dir="ltr">HAL_MODULE_INFO_SYM</code>. Example from the Nexus 9 audio HAL:</p> 
+<pre>
+struct audio_module HAL_MODULE_INFO_SYM = {
+    .common = {
+        .tag = HARDWARE_MODULE_TAG,
+        .module_api_version = AUDIO_MODULE_API_VERSION_0_1,
+        .hal_api_version = HARDWARE_HAL_API_VERSION,
+        .id = AUDIO_HARDWARE_MODULE_ID,
+        .name = "NVIDIA Tegra Audio HAL",
+        .author = "The Android Open Source Project",
+        .methods = &amp;hal_module_methods,
+    },
+};
+</pre> <h2 id="hal-device">HAL devices</h2> <p>A device abstracts the hardware of your product. For example, an audio module can contain a primary audio device, a USB audio device, or a Bluetooth A2DP audio device.</p> <p>A device is represented by the <code translate="no" dir="ltr">hw_device_t</code> struct. Similar to a module, each type of device defines a detailed version of the generic <code translate="no" dir="ltr">hw_device_t</code> that contains function pointers for specific features of the hardware. For example, the <code translate="no" dir="ltr">audio_hw_device_t</code> struct type contains function pointers to audio device operations:</p> 
+<pre>
+struct audio_hw_device {
+    struct hw_device_t common;
+
+    /**
+     * used by audio flinger to enumerate what devices are supported by
+     * each audio_hw_device implementation.
+     *
+     * Return value is a bitmask of 1 or more values of audio_devices_t
+     */
+    uint32_t (*get_supported_devices)(const struct audio_hw_device *dev);
+  ...
+};
+typedef struct audio_hw_device audio_hw_device_t;
+</pre> <p>In addition to these standard properties, each hardware-specific HAL interface can define more of its own features and requirements. For details, see the <a href="https://source.android.com/reference/hal">HAL reference documentation</a> as well as the individual instructions for each HAL.</p> <h2 id="hal-building">Build HAL modules</h2> <p>HAL implementations are built into modules (<code translate="no" dir="ltr">.so</code>) files and are dynamically linked by Android when appropriate. You can build your modules by creating <code translate="no" dir="ltr">Android.mk</code> files for each of your HAL implementations and pointing to your source files. In general, your shared libraries must be named in a specific format so they can be found and loaded properly. The naming scheme varies slightly from module to module, but follows the general pattern of: <code translate="no" dir="ltr">&lt;module_type&gt;.&lt;device_name&gt;</code>. </p> <h2 id="legacy">Legacy HAL</h2> The term Legacy HAL refers broadly to all pre-Android 8.0 HALs (deprecated in Android 8). The bulk of Android system interfaces (camera, audio, sensors, etc.) are defined under `hardware/libhardware/include/hardware` and have rough versioning and a roughly stable ABI. A few subsystems (including Wi-Fi, Radio Interface Layer, and Bluetooth) have other non-standardized interfaces in `libhardware_legacy` or interspersed throughout the codebase. Legacy HALs never provided hard stability guarantees.<div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/hal/archive" class="_attribution-link">https://source.android.com/docs/core/architecture/hal/archive</a>
+  </p>
+</div>

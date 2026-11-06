@@ -1,0 +1,15 @@
+<h1>ATS frequently asked questions</h1>  <h2 id="how_do_i_run_a_different_version_of_ats">How do I run a different version of ATS?</h2> <p>You can change the version of ATS by using <code translate="no" dir="ltr">--tag</code> when starting.</p> 
+<pre>
+mtt start --tag=prod_R11.202011.002
+</pre> <p>The available options for <code translate="no" dir="ltr">--tag</code> can be found in the <a href="https://gcr.io/android-mtt/mtt">ATS cloud repository</a> under the <em>Tags</em> column. Common tags to use are:</p> <ul> <li>
+<code translate="no" dir="ltr">prod</code>: The most recent production release (used by default)</li> <li>
+<code translate="no" dir="ltr">dogfood</code>: The most recent validated build, which is a candidate for the next production release</li> <li>
+<code translate="no" dir="ltr">latest</code>: Daily developer build (unstable but contains latest changes and bug fixes)</li> <li>
+<code translate="no" dir="ltr">prod_Rxx.xxxxxx.xxx</code>: For a specific version number</li> </ul> <h2 id="how_do_i_fix_a_lowdiskspaceexception">How do I fix a LowDiskSpaceException?</h2> <p>When executing a test run, you may see the following error in the host logs:</p> 
+<pre>com.android.tradefed.util.FileUtil$LowDiskSpaceException: Available space on /data/tmp is 0.00 MB. Min is 100 MB.
+</pre> <p>This error is due to low host storage. <code translate="no" dir="ltr">/data/tmp</code> is a folder inside the Docker data volume Test Station is using. You can find the actual location by running <code translate="no" dir="ltr">docker inspect mtt-data</code>.</p> <p>To fix the issue, you can delete test run data through the Test Runs page.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/development/android-test-station/faq" class="_attribution-link">https://source.android.com/docs/core/tests/development/android-test-station/faq</a>
+  </p>
+</div>

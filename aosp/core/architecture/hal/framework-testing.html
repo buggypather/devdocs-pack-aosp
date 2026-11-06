@@ -1,0 +1,12 @@
+<h1>HIDL framework backward compatibility verification</h1>  <p><a href="../../architecture#hidl">HIDL HALs</a> guarantee the Android core system (also called <code translate="no" dir="ltr">system.img</code> or the framework) is backward compatible. While <a href="../../../compatibility/vts">Vendor Test Suite (VTS)</a> tests ensure that HALs work as expected (for example, 1.1 HAL tests are run on all 1.2 implementations), framework testing is needed to ensure that when a supported HAL (1.0, 1.1, or 1.2) is provided, the framework works properly with that HAL.</p> <p>For details on HAL interface definition language (HIDL), refer to <a href="../hidl">HIDL</a>, <a href="../hidl/versioning"> HIDL versioning</a>, and <a href="../vintf/fcm#hal-version-deprecation"> HIDL HAL Deprecation</a>.</p> <h2 id="about-HAL-upgrades">About HAL upgrades</h2> <p>There are two types of HAL upgrades: <em>major</em> and <em>minor</em>. Most systems include only one HAL implementation, but multiple implementations are supported. For example:</p> 
+<pre>android.hardware.teleport@1.0 # initial interface
+android.hardware.teleport@1.1 # minor version upgrade
+android.hardware.teleport@1.2 # another minor version upgrade
+...
+android.hardware.teleport@2.0 # major version upgrade
+...</pre> <p>The system partition typically includes a framework daemon (such as <code translate="no" dir="ltr">teleportd</code>) that manages communication with a specific group of HAL implementations. Alternatively, systems might instead include a system library (such as <code translate="no" dir="ltr">android.hardware.configstore-utils</code>) that implements convenient client behavior. In the example above, <code translate="no" dir="ltr">teleportd</code> must work no matter what version of the HAL is installed on the device.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/hal/framework-testing" class="_attribution-link">https://source.android.com/docs/core/architecture/hal/framework-testing</a>
+  </p>
+</div>

@@ -1,0 +1,56 @@
+<h1>Handle suspend and resume</h1>  <p>Virtual machines (VMs) can be suspended, resumed, rebooted, and shut down. When any of these events occur, publishers, subscribers, RPC clients, and RPC servers are affected. Figure 1 shows the lifecycle of a service bundle:</p> <p><img src="https://source.android.com/static/docs/automotive/sdv/images/vsidl-suspend-resume.png" alt="Lifecycle of a service bundle" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> Lifecycle of a service bundle.</p> <p>The service bundle lifecycle follows this sequence:</p> <ol> <li>The <code translate="no" dir="ltr">new</code> method is called to create the service bundle.</li> <li>The lifecycle manager starts the service bundle and, depending on settings in the orchestration configuration, calls <code translate="no" dir="ltr">on_start</code>.</li> <li>When the VM stops or suspends and, depending on settings in the orchestration configuration, lifecycle manager calls <code translate="no" dir="ltr">on_stop</code>. The <code translate="no" dir="ltr">on_stop</code> function should stop the threads for publishers, subscribers, RPC clients, and RPC servers.</li> <li>When the VM is resumed, <code translate="no" dir="ltr">on_start</code> can recreate the threads if the service bundle is configured to be started again by the orchestration configuration.</li> </ol> <h2 id="create-config">Create a configuration to handle suspend and resume</h2> <p>The following example shows a configuration to handle suspend and resume:</p> 
+<pre># Start `auto_start` service bundles when system is started.
+state {
+    condition {
+        or {
+            power_state: "ON"
+            power_state: "POWER_OFF_EXIT"
+            power_state: "SUSPEND_TO_RAM_EXIT"
+        }
+    }
+    groups_states { started: "auto_start" }
+}
+
+# Stop `auto_start` service bundles when system is suspending to RAM.
+state {
+    condition {
+        or {
+            power_state: "SUSPEND_TO_RAM_ENTER"
+            power_state: "WAIT_FOR_FINISH"
+            power_state: "SUSPEND_TO_RAM_POST_FINISH"
+        }
+    }
+    groups_states { created: "auto_start" }
+}
+</pre> <p>Where:</p> <ul> <li>
+<code translate="no" dir="ltr">WAIT_FOR_FINISH</code> is the last power state in which the service bundle should expect software defined vehicle (SDV) agents to be responsive.</li> <li>
+<code translate="no" dir="ltr">SUSPEND_TO_RAM_POST_FINISH</code> indicates that SDV agents might be closing or suspending connection to be able to restore them reliably on resume. It's important not to rely on <code translate="no" dir="ltr">SUSPEND_TO_RAM_POST_FINISH</code> or <code translate="no" dir="ltr">POWER_OFF_POST_FINISH</code> to call <code translate="no" dir="ltr">onStop</code> in the service bundle implementation and, instead, rely on <code translate="no" dir="ltr">SUSPEND_TO_RAM_ENTER</code>, <code translate="no" dir="ltr">POWER_OFF_ENTER</code>, and <code translate="no" dir="ltr">WAIT_FOR_FINISH</code>.</li> </ul> <aside class="note"><strong>Note:</strong><span> By not destroying processes, this example allows processes to resume quickly.</span></aside> <h2 id="determine-avail">Determine service availability</h2> <p>The following example shows how to use the middleware API in your service bundle to determine if a service unit is available:</p> 
+<pre>let mut registration_event_stream =  sdv::mw::clientlib::create_server_registration_event_stream(
+        sdv_comms,
+        // Descriptor of type sdv::mw::clientlib::rpc_descriptor::client::Descriptor
+        // that binds a specific RPC client type to a communication channel.
+        client_descriptor,
+    )
+    .await
+    .expect("unable to generate a registration event");
+
+match registration_event_stream.next().await {
+            Some(sdv::mw::Availability::Available) =&gt; {
+                info!("{unit_name} became Available.");
+                // Create client/subscriber
+            }
+            Some(sdv::mw::Availability::Unavailable) =&gt; {
+                info!("{unit_name} became Unavailable.");
+                // Destroy client/subscriber
+            }
+            None =&gt; {
+                warn!("Registration event stream for {unit_name} terminated.
+                Stopping monitoring for this variant.");
+            }
+        }
+</pre> <p>The <code translate="no" dir="ltr">create_server_registration_event_stream</code> is a middleware API used to create a event called <code translate="no" dir="ltr">unit_name</code>. This registration event stream is notified when a service unit becomes available.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/core-areas/vsidl/handle-suspend-resume" class="_attribution-link">https://source.android.com/docs/automotive/sdv/core-areas/vsidl/handle-suspend-resume</a>
+  </p>
+</div>

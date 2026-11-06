@@ -1,0 +1,16 @@
+<h1>Device-side metrics collectors</h1>  <p>When running device-side tests (for example, instrumentations, UI Automator tests), host-side collectors might not be ideal because it's difficult to synchronize metric collection to a test running on a device. For example, a screenshot taken asynchronously is likely to miss the wanted screen and be useless.</p> <p>To meet these use cases, a device-side version of our collectors exists and can be used in any <code translate="no" dir="ltr">AndroidJUnitRunner</code> instrumentation. <a href="https://android.googlesource.com/platform/platform_testing/+/refs/heads/android17-release/libraries/device-collectors/src/main/java/android/device/collectors/BaseMetricListener.java"><code translate="no" dir="ltr">BaseMetricListener</code></a> can be implemented to automatically report metrics that are collected in a way fully compatible with the Tradefed reporting pipeline.</p> <p>This library is decoupled from Tradefed itself and can be used without Tradefed.</p> <p>If you're using the <a href="https://android.googlesource.com/platform/tools/tradefederation/+/refs/heads/android17-release/test_framework/com/android/tradefed/testtype/AndroidJUnitTest.java"><code translate="no" dir="ltr">AndroidJUnitTest</code></a> runner from Tradefed, you can specify the following command line option to have your collector running with your tests:</p> 
+<pre>  --device-listeners android.device.collectors.ScreenshotListener
+</pre>
+<aside class="caution"><strong>Caution:</strong><span> In order for the collector classes to be resolved at runtime, your instrumentation APK needs to statically include them by adding the following to your makefile:</span></aside>
+<pre>  LOCAL_STATIC_JAVA_LIBRARIES += collector-device-lib
+</pre> <h2 id="implementation">Implementation</h2> <p>When implementing on top of the base class <code translate="no" dir="ltr">BaseMetricListener</code>, you can choose when you would like to collect your metrics during the lifecycle of the instrumentation:</p> <ul> <li>When a test run starts: <code translate="no" dir="ltr">onTestRunStart</code>
+</li> <li>When a test case starts: <code translate="no" dir="ltr">onTestStart</code>
+</li> <li>When a test case ends: <code translate="no" dir="ltr">onTestEnd</code>
+</li> <li>When a test case fails: <code translate="no" dir="ltr">onTestFail</code>
+</li> <li>When a test run ends: <code translate="no" dir="ltr">onTestRunEnd</code>
+</li> </ul> <h2 id="interaction">Interaction</h2> <p>The collection of metrics on the device side is made synchronously to the instrumentation execution itself, and metrics are passed back to the instrumentation results and parsed by Tradefed to be reported as part of the invocation.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/tradefed/architecture/metrics-collector/device-collector" class="_attribution-link">https://source.android.com/docs/core/tests/tradefed/architecture/metrics-collector/device-collector</a>
+  </p>
+</div>

@@ -1,0 +1,357 @@
+<h1>Metrics configuration generation request JSON format</h1>  <p>This guide details the JSON request format for the <code translate="no" dir="ltr">/api/v2/generate_metrics_config</code> endpoint of the Metrics Configuration Generator (MCG) tool. This format lets you define a telemetry campaign—specifying data collection, on-device processing, and report generation—in a human-readable structure.</p> <p>The MCG tool validates this JSON object, checking for issues like type mismatches, circular dependencies, or undefined references, and then compiles it into a <code translate="no" dir="ltr">MetricsConfig</code> protocol buffer (protobuf) message. This <code translate="no" dir="ltr">MetricsConfig</code> message is the binary format that the on-device Telemetry service executes to run the campaign.</p> <p><strong>Prerequisites:</strong> You should be familiar with JSON schemas, protobuf, and basic data structures. For a conceptual overview, see <a href="metrics-configuration">Metrics configuration concepts</a>.</p> <aside class="note"><strong>Note:</strong><span> This guide focuses on the JSON request format for generating metrics configurations. For instructions on running the MCG tool, see the <a href="metrics-configuration-generator">MCG documentation</a>.</span></aside> <h2 id="config-approach">How to approach writing a configuration description</h2> <p>To design a metrics collection campaign, follow this logical flow:</p> <ol> <li>
+<a href="#specify-data-sources">Specify data sources</a>: Define where your data comes from.</li> <li>
+<a href="#define-logic">Define logic and processing</a>: Set up rules for when to collect data and how to process it.</li> <li>
+<a href="#define-report-configs">Create output</a>: Package the processed data into a final message.</li> <li>
+<a href="#top-level-fields">Top-level fields</a>: Add top-level fields like <a href="#set-uuid">UUID</a>, <a href="#supporting-definitions">signal definitions</a>, and <a href="#define-lifecycle">lifecycle control</a>.</li> </ol> <div>  <h4 class="showalways" id="example:-average-speed-report">Example: Average speed report</h4> <p>This guide uses an example to show how all the components fit together. It creates a report that calculates the average vehicle speed every minute. It defines a Data Source (<code translate="no" dir="ltr">SpeedSource</code>) to collect speed data, Triggers (<code translate="no" dir="ltr">OnNewSpeed</code>, <code translate="no" dir="ltr">EveryMinute</code>) to control execution flow, an Aggregator (<code translate="no" dir="ltr">SpeedAggregator</code>) to calculate the average, and a Metrics Report Configuration (<code translate="no" dir="ltr">MinuteReport</code>) to package the result. Examples in expandable sections build on this scenario.</p>  </div> <h2 id="specify-data-sources">Specify data sources</h2> <p>Telemetry supports collecting data from SDV Services (via the SDV Middleware) and Configurable Publisher Registry-based publishers.</p> <ul> <li><p><strong>SDV Services (pub/sub-based):</strong> Data is available from <a href="data-sources#pub-sub-sdv-services">pub/sub channels defined in VSIDL</a>.</p></li> <li><p><strong>SDV Services (RPC-based):</strong> Data is available if the service exposes <a href="data-sources#rpc-sdv-services"><code translate="no" dir="ltr">CreateSubscription</code> or <code translate="no" dir="ltr">GetLatestMessage</code> RPCs</a>.</p></li> <li><p><strong>Configurable Publisher Registry-based publishers:</strong> Data is available if the application registers itself using the <a href="configurable_publisher_registry"><code translate="no" dir="ltr">IConfigurablePublisherRegistry</code> Android Binder interface</a> or the <a href="sdk/configurable_publisher_registry">Configurable Publisher Registry library</a> from the <a href="sdk">Telemetry SDK</a>.</p></li> </ul> <p>To use data in SDV, define a data source (<a href="metrics-configuration#data-sources">concept</a>) and add it to the <code translate="no" dir="ltr">data_sources</code> array.</p> <table class="blue responsive"> <tr> <th colspan="2">Fields of a data source object (item in <code translate="no" dir="ltr">data_sources</code> list)</th> </tr> <tr> <td><code translate="no" dir="ltr">name</code></td> <td>A user-defined string that identifies this data source within the metrics configuration.</td> </tr> <tr> <td><code translate="no" dir="ltr">source_identifier</code></td> <td>The identifier used to discover the service. For details, see <a href="#source-id-format"><code translate="no" dir="ltr">source_identifier</code> format</a>.</td> </tr> <tr> <td><code translate="no" dir="ltr">connection_type</code></td> <td>
+<code translate="no" dir="ltr">SUBSCRIPTION</code> for a continuous data stream (required for <a href="#data-trigger">data triggers</a>), or <code translate="no" dir="ltr">ON_DEMAND</code> for on-demand fetching (for details, see <a href="metrics-configuration#data-source-configuration">configuration of data sources</a>).</td> </tr> <tr> <td>
+<em>optional</em><br><code translate="no" dir="ltr">configuration</code>
+</td> <td> <p style="margin-bottom: 1em;"><b>RPC and Configurable Publisher Registry only.</b> An object to configure the data source with the following fields:</p> <table class="nested responsive"> <tr> <td><code translate="no" dir="ltr">type_url</code></td> <td>The FQN of the protobuf message of the configuration.</td> </tr> <tr> <td> <code translate="no" dir="ltr">value_json</code>,<br> <code translate="no" dir="ltr">value_textproto</code>,<br> or <code translate="no" dir="ltr">value</code> </td> <td>The payload in JSON, textproto, or base64 format.</td> </tr> </table> </td> </tr> <tr class="alt"> <td colspan="2">Fields for <code translate="no" dir="ltr">SUBSCRIPTION</code> connection type</td> </tr> <tr> <td>
+<em>optional</em><br><code translate="no" dir="ltr">sub_sampling_interval_ms</code>
+</td> <td>
+<b>Pub/sub only.</b> A non-negative integer (milliseconds) to throttle message frequency by specifying the minimum interval between messages.</td> </tr> <tr> <td>
+<em>optional</em><br><code translate="no" dir="ltr">fetch_last_message</code><br>(default: <code translate="no" dir="ltr">false</code>)</td> <td>
+<b>Pub/sub only.</b> Boolean. If <code translate="no" dir="ltr">true</code>, retrieves the latest message upon connection.</td> </tr> </table> <p>Not all options are available for all types of data sources. See the <a href="data-sources#data-source-definition">data source integration guide</a> for detailed information.</p> <h3 id="source-id-format">Format of source_identifier</h3> <p>The Telemetry service accepts multiple source identifier formats. See <a href="data-sources#data-source-definition">Data source definition in metrics configurations</a> for an overview.</p> <p>MCG infers the protobuf message type from the <code translate="no" dir="ltr">source_identifier</code> only if it uses the Unit Type Name format. If you use FQIN or a custom name (from the Configurable Publisher Registry), MCG can't infer the type. In these cases, you must provide <a href="#data-source-message-types"><code translate="no" dir="ltr">data_source_message_types</code></a>. If the type isn't in your catalog, you must also provide its definition in <a href="#descriptor-protos"><code translate="no" dir="ltr">descriptor_protos</code></a>.</p> <div>  <h4 class="showalways" id="example:-defining-a-data-source">Example: Defining a data source</h4> <p>This example reports vehicle speed. First, consult the VSIDL catalog to identify the service that publishes this data.</p> <p>Using the sample catalog in the SDV codebase, identify the relevant service. Consistent with the <a href="#source-id-format">Format of <code translate="no" dir="ltr">source_identifier</code></a>, specify the protobuf message type <code translate="no" dir="ltr">mcg.test.subpkg.speed_msg</code>. Because speed is usually published frequently, use <code translate="no" dir="ltr">sub_sampling_interval_ms</code> to limit updates to one message per second:</p> 
+<pre>{
+  "name": "SpeedSource",
+  "source_identifier": "mcg.test.subpkg.speed_msg",
+  "connection_type": "SUBSCRIPTION",
+  "sub_sampling_interval_ms": 1000 // Limit updates to 1 per second
+}</pre>  </div> <h2 id="define-logic">Define logic and processing</h2> <p>Logic is handled by two components working together: Triggers (<a href="metrics-configuration#triggers">concept</a>) define when something happens. Aggregators (<a href="metrics-configuration#aggregation">concept</a>) define how data is processed based on those triggers. Because expressions (<a href="metrics-configuration#expressions">concept</a>) are key to trigger conditions and aggregation logic, this section first describes how to write them.</p> <h3 id="expressions">Expressions</h3> <p>Expressions let you define calculations and conditions using a human-readable syntax. MCG compiles these strings into an executable format optimized for on-device evaluation.</p> <p>Expressions can express arithmetic calculations, logical conditions, and data comparisons. For the complete syntax, including operators and functions, see <a href="#expressions-ref">Expressions syntax</a>.</p> <p><strong>Data freshness:</strong> When an expression accesses a data source, the retrieval behavior depends on the connection type:</p> <ul> <li>
+<code translate="no" dir="ltr">SUBSCRIPTION</code>: Uses the <em>last received</em> message cached by the Telemetry service. (Note: If <code translate="no" dir="ltr">sub_sampling_interval_ms</code> is set, this might differ from the absolute latest published message.)</li> <li>
+<code translate="no" dir="ltr">ON_DEMAND</code>: Triggers an immediate call to fetch the fresh message from the service.</li> </ul> <h4 id="type-constraints">Type constraints</h4> <ul> <li>
+<strong>Arrays:</strong> Direct array index access (for example, <code translate="no" dir="ltr">my_data_source.my_array[0]</code>) isn't supported.</li> <li>
+<strong>Type safety:</strong> Make sure you compare compatible types (for example, don't compare a string field to a list of integers).</li> </ul> <div>  <h4 class="showalways" id="example:-expressions">Example: Expressions</h4> <p>The example needs to extract the speed value to compute its average. It also needs to determine if the vehicle is speeding (over 100 km/h) for the conditional trigger. You can find the field names (in this case <code translate="no" dir="ltr">speed</code>) in the protobuf message definition used by the data source. The following expressions achieve this:</p> <ul> <li>
+<code translate="no" dir="ltr">SpeedSource.speed</code>: Retrieves the value of the <code translate="no" dir="ltr">speed</code> field from the <code translate="no" dir="ltr">SpeedSource</code> data source.</li> <li>
+<code translate="no" dir="ltr">SpeedSource.speed &gt; 27.7</code>: Evaluates to <code translate="no" dir="ltr">true</code> if the speed is greater than 27.7 m/s (approximately 100 km/h).</li> </ul>  </div> <h3 id="define-triggers">Triggers: Define when actions occur</h3> <p>Triggers define when actions execute: evaluating an aggregator, generating a report, or controlling the collection lifecycle. Add all defined triggers to the top-level <code translate="no" dir="ltr">triggers</code> array.</p> <table class="blue responsive"> <tr> <th colspan="2">Fields of a trigger object (item in <code translate="no" dir="ltr">triggers</code> list)</th> </tr> <tr> <td><code translate="no" dir="ltr">name</code></td> <td>A unique identifier for this trigger in the metrics configuration.</td> </tr> <tr> <td>
+<code translate="no" dir="ltr">periodic</code><br><code translate="no" dir="ltr">data</code><br><code translate="no" dir="ltr">conditional</code>
+</td> <td>You must provide exactly one of these fields to define the behavior.</td> </tr> </table> <h4 id="data-trigger">Data trigger</h4> <p>Fires when a <code translate="no" dir="ltr">SUBSCRIPTION</code> data source provides a new message (<a href="metrics-configuration#triggers">concept</a>).</p> <table class="blue responsive"> <tr> <th colspan="2">Fields of the <code translate="no" dir="ltr">data</code> object (in a trigger)</th> </tr> <tr> <td><code translate="no" dir="ltr">source_name</code></td> <td>The <code translate="no" dir="ltr">name</code> of the <a href="#specify-data-sources"><code translate="no" dir="ltr">data_source</code></a> that this trigger listens to.</td> </tr> </table> <div>  <h4 class="showalways" id="example:-data-trigger">Example: Data trigger</h4> <p>In the example, update the average speed calculation each time <code translate="no" dir="ltr">SpeedSource</code> publishes a new message. This data trigger fires each time that happens:</p> 
+<pre>{
+  "name": "OnNewSpeed",
+  "data": {
+    "source_name": "SpeedSource" // Reference to the defined data source
+  }
+}</pre>  </div> <h4 id="periodic-trigger">Periodic trigger</h4> <p>Fires at a regular interval (<a href="metrics-configuration#triggers">concept</a>).</p> <table class="blue responsive"> <tr> <th colspan="2">Fields of the <code translate="no" dir="ltr">periodic</code> object (in a trigger)</th> </tr> <tr> <td><code translate="no" dir="ltr">period_ms</code></td> <td>A non-negative number that defines the interval in milliseconds.</td> </tr> </table> <div>  <h4 class="showalways" id="example:-periodic-trigger">Example: Periodic trigger</h4> <p>The example requires a report every minute. This periodic trigger fires every 60,000 ms to generate that report:</p> 
+<pre>{
+  "name": "EveryMinute",
+  "periodic": {
+    "period_ms": 60000 // 60,000 ms = 60 seconds
+  }
+}</pre>  </div> <h4 id="conditional-trigger">Conditional trigger</h4> <p>Fires based on the evaluation of an expression (<a href="metrics-configuration#conditional-triggers">concept</a>). It requires one or more parent triggers to start its evaluation. This is often a data trigger for the data sources or aggregators in the expression, or a periodic trigger to poll for data.</p> <table class="blue responsive"> <tr> <th colspan="2">Fields of the <code translate="no" dir="ltr">conditional</code> object (in a trigger)</th> </tr> <tr> <td><code translate="no" dir="ltr">triggers</code></td> <td>An array with at least one parent trigger name. When a parent trigger fires, the conditional trigger evaluates the expression.</td> </tr> <tr> <td><code translate="no" dir="ltr">expression</code></td> <td>The expression to evaluate. See <a href="#expressions">Expressions</a>.</td> </tr> <tr> <td><code translate="no" dir="ltr">condition_type</code></td> <td> Specifies when the trigger should fire, based on the expression's evaluation. </td> </tr> </table> <h5 id="condition-types">Condition types</h5> <p>The <code translate="no" dir="ltr">condition_type</code> dictionary must contain exactly one of the available condition types as a key. For more information, see <a href="metrics-configuration#conditional-triggers">Conditional triggers</a>.</p> <table class="blue responsive"> <tr> <th colspan="2">Fields of the <code translate="no" dir="ltr">condition_type</code> object (mutually exclusive)</th> </tr> <tr> <td>
+<code translate="no" dir="ltr">is_true</code><br><br><code translate="no" dir="ltr">is_false</code>
+</td> <td>Fires when a boolean expression evaluates to <code translate="no" dir="ltr">true</code> or <code translate="no" dir="ltr">false</code>, respectively.</td> </tr> <tr> <td><code translate="no" dir="ltr">rising_edge</code></td> <td> <p>If numeric, fires when its value increases. If the expression is boolean, fires when it changes from <code translate="no" dir="ltr">false</code> to <code translate="no" dir="ltr">true</code>.</p> <p>Can contain a <code translate="no" dir="ltr">rising_options</code> object (see <a href="#edge-options">Edge options</a>).</p> </td> </tr> <tr> <td><code translate="no" dir="ltr">falling_edge</code></td> <td> <p>If numeric, fires when its value decreases. If the expression is boolean, fires when it changes from <code translate="no" dir="ltr">true</code> to <code translate="no" dir="ltr">false</code>.</p> <p>Can contain a <code translate="no" dir="ltr">falling_options</code> object (see <a href="#edge-options">Edge options</a>).</p> </td> </tr> <tr> <td><code translate="no" dir="ltr">all_changes</code></td> <td> <p>Fires when the expression's result is different from its previous value. If edge options are set, it supports only numeric and boolean values.</p> <p>Can contain <code translate="no" dir="ltr">rising_options</code>, <code translate="no" dir="ltr">falling_options</code>, or both (see <a href="#edge-options">Edge options</a>).</p> </td> </tr> </table> <h5 id="edge-options">Edge options</h5> <p>The <code translate="no" dir="ltr">rising_options</code> and <code translate="no" dir="ltr">falling_options</code> objects have the following fields. If provided, the corresponding transition must satisfy the duration requirement. Transitions without specified options fire immediately.</p> <table class="blue responsive"> <tr> <th colspan="2">Fields for edge option objects</th> </tr> <tr> <td><code translate="no" dir="ltr">min_duration_ms</code></td> <td>A non-negative number (in milliseconds) specifying how long the condition must hold in the new state before the trigger fires.</td> </tr> <tr> <td>
+<em>optional</em><br><code translate="no" dir="ltr">require_exact</code>
+</td> <td>Boolean. If true, all values published during the duration must be the same for the trigger to fire.</td> </tr> </table> <div>  <h4 class="showalways" id="example:-conditional-trigger">Example: Conditional trigger</h4> <p>The following trigger uses edge options. It fires if the speed exceeds 27.7 m/s and remains high for at least 5 seconds:</p> 
+<pre>{
+  "name": "SpeedingFor5Seconds",
+  "conditional": {
+    "triggers": ["OnNewSpeed"],
+    "expression": "SpeedSource.speed &gt; 27.7",
+    "condition_type": {
+      "rising_edge": {
+        "rising_options": {
+          "min_duration_ms": 5000 // Condition must hold for 5s in new state
+        }
+      }
+    }
+  }
+}</pre>  </div> <h3 id="aggregators">Aggregators: Define how data is processed</h3> <p>Use an aggregator for stateful, intermediate data processing (<a href="metrics-configuration#aggregation">concept</a>). Define an aggregator and add it to the <code translate="no" dir="ltr">aggregators</code> array.</p> <p>An aggregator transforms data and makes it available to other aggregators and reports.</p> <table class="blue responsive"> <tr> <th colspan="2">Fields of an aggregator (item in <code translate="no" dir="ltr">aggregators</code> list)</th> </tr> <tr> <td><code translate="no" dir="ltr">name</code></td> <td>A user-defined string that identifies this aggregator. Expressions can reference this aggregator by name to access its results.</td> </tr> <tr> <td><code translate="no" dir="ltr">trigger_names</code></td> <td>An array of one or more trigger names that cause this aggregation to be evaluated.</td> </tr> <tr> <td>
+<em>optional</em><br><code translate="no" dir="ltr">reset_on_get</code>
+</td> <td>Boolean, default: `false`. If `true`, the system resets the aggregation state after its value is accessed by another aggregator, metrics report or conditional trigger.</td> </tr> <tr> <td><code translate="no" dir="ltr">message_builder</code></td> <td>Defines the data to read, process, and aggregate. The output message's fields then become a data source for other aggregators and reports. It uses <code translate="no" dir="ltr">field_assignments</code>, with each assignment defining a field in the output message.</td> </tr> </table> <h3 id="message-builder">Message builder</h3> <p>A <code translate="no" dir="ltr">message_builder</code> object defines the output message structure and the aggregation logic used to calculate its fields. It is used in both Aggregators and Report Configurations.</p> <table class="blue responsive"> <tr> <th colspan="2">Fields of a <code translate="no" dir="ltr">message_builder</code> object (in aggregator or report)</th> </tr> <tr> <td><code translate="no" dir="ltr">message_type</code></td> <td>The fully qualified name of the protobuf message type for the output. If omitted, MCG creates a custom message type based on the <code translate="no" dir="ltr">field_assignments</code>' inferred output types. Only use this if the message builder is part of a metrics report and your report must match a specific, predefined protobuf message definition.</td> </tr> <tr> <td><code translate="no" dir="ltr">field_assignments</code></td> <td>An array of field definition objects. Each object specifies a field in the output message and the logic to compute its value.</td> </tr> </table> <table class="blue responsive"> <tr> <th colspan="2">Fields of a field assignment object (item in <code translate="no" dir="ltr">field_assignments</code> list)</th> </tr> <tr> <td><code translate="no" dir="ltr">field_name</code></td> <td>A user-defined name for the field. It identifies the specific value within the object when using dot notation in expressions (<code translate="no" dir="ltr">aggregator_name.field_name</code>).</td> </tr> <tr> <td><code translate="no" dir="ltr">aggregation</code></td> <td> <p style="margin-bottom: 1em;">An object that defines how the system computes the field's value with the following fields:</p> <table class="nested responsive fixed"> <colgroup> <col width="15%"> <col> </colgroup> <tr> <td><code translate="no" dir="ltr">@type</code></td> <td>The aggregation function. <ul>  <li>
+<code translate="no" dir="ltr">avg</code>, <code translate="no" dir="ltr">min</code>, <code translate="no" dir="ltr">max</code>, <code translate="no" dir="ltr">sum</code>, <code translate="no" dir="ltr">stddev</code>: Standard math statistics.</li> <li>
+<code translate="no" dir="ltr">count</code>: Counts how many times this aggregator has been triggered.</li> <li>
+<code translate="no" dir="ltr">delta</code>: Difference between current and previous value.</li> <li>
+<code translate="no" dir="ltr">vector</code>: Creates a list of values (ring buffer).</li> <li>
+<code translate="no" dir="ltr">none</code>: Passes the raw value through.</li> </ul> </td> </tr> <tr> <td><code translate="no" dir="ltr">expression</code></td> <td>The input expression for the aggregation. Required for all aggregation types except <code translate="no" dir="ltr">count</code>.</td> </tr> <tr> <td><code translate="no" dir="ltr">max_length</code></td> <td>For <code translate="no" dir="ltr">@type: "vector"</code> only. An optional integer that limits the vector size, creating a ring buffer.</td> </tr> </table> </td> </tr> </table> <div>  <h4 class="showalways" id="example:-aggregator">Example: Aggregator</h4> <p>For the example, calculate statistics between minute reports. This aggregator is triggered by <code translate="no" dir="ltr">OnNewSpeed</code> to calculate the average speed (<code translate="no" dir="ltr">avg</code>), count readings (<code translate="no" dir="ltr">count</code>), and store the last 5 speed values (<code translate="no" dir="ltr">vector</code>). Set <code translate="no" dir="ltr">reset_on_get</code> to <code translate="no" dir="ltr">true</code>. This resets the statistics each time <code translate="no" dir="ltr">MinuteReport</code> reads them, starting a new collection window for the aggregator for the next minute:</p> 
+<pre>{
+  "name": "SpeedAggregator",
+  "trigger_names": ["OnNewSpeed"], // Update aggregation on new speed data
+  "reset_on_get": true, // Reset stats after they are read by the report configuration
+  "message_builder": {
+    "field_assignments": [
+      {
+        "field_name": "average_speed",
+        "aggregation": {
+          "@type": "avg",
+          "expression": "SpeedSource.speed"
+        }
+      },
+      {
+        "field_name": "speed_reading_count",
+        "aggregation": {
+          "@type": "count" // Counts triggers (that is, processed speed readings) since last reset
+        }
+      },
+      {
+        "field_name": "speed_history_last5",
+        "aggregation": {
+          "@type": "vector",
+          "expression": "SpeedSource.speed",
+          "max_length": 5 // Keep last 5 readings
+        }
+      }
+    ]
+  }
+}</pre>  </div> <h2 id="define-report-configs">Create output</h2> <p>To define the final output of your telemetry campaign, add objects to the <code translate="no" dir="ltr">report_configs</code> array (<a href="metrics-configuration#reports">concept</a>). These configurations determine how processed data is packaged and when it is generated. You can define multiple report configurations in one metrics configuration to reuse components.</p> <p>You control report generation using the <code translate="no" dir="ltr">trigger_names</code> field. In addition, you can use <code translate="no" dir="ltr">report_initial</code> to generate a report immediately when the configuration activates, and <code translate="no" dir="ltr">report_incomplete</code> to generate a final report when data collection is interrupted.</p> <p><strong>Note:</strong> To connect processing to output, use the <code translate="no" dir="ltr">none</code> aggregation type (<code translate="no" dir="ltr">@type: "none"</code>) to read pre-calculated values from an Aggregator. Since reports are typically stateless snapshots, this keeps complex stateful logic within aggregators and reserves reports for formatting.</p> <table class="blue responsive"> <tr> <th colspan="2">Fields of a report configuration object (item in <code translate="no" dir="ltr">report_configs</code> list)</th> </tr> <tr> <td><code translate="no" dir="ltr">name</code></td> <td>A unique name for the report. This name appears in the generated report metadata.</td> </tr> <tr> <td><code translate="no" dir="ltr">trigger_names</code></td> <td>An array of trigger names that cause the report to generate and publish.</td> </tr> <tr> <td><code translate="no" dir="ltr">message_builder</code></td> <td> See <a href="#message-builder">Message builder</a> for details. This defines the report's content. Aggregations are evaluated only when the report is triggered. For example, a vector aggregation adds one value per report, and a count aggregation mirrors the report number.</td> </tr> <tr> <td>
+<em>optional</em><br><code translate="no" dir="ltr">report_incomplete</code><br>(default: `false`)</td> <td>A boolean. If `true`, the system generates a final report on shutdown or when data collection ends, even if data is missing.</td> </tr> <tr> <td>
+<em>optional</em><br><code translate="no" dir="ltr">report_initial</code><br>(default: `false`)</td> <td>A boolean. If `true`, the system generates a report immediately when the metrics configuration activates.</td> </tr> </table> <div>  <h4 class="showalways" id="example:-report-configuration">Example: Report configuration</h4> <p>Finally, define the report configuration for the example. It is triggered by <code translate="no" dir="ltr">EveryMinute</code>. It reads the calculated average speed and reading count from <code translate="no" dir="ltr">SpeedAggregator</code> using a <code translate="no" dir="ltr">none</code> aggregation, which passes the pre-aggregated value to the report:</p> 
+<pre>{
+  "name": "MinuteReport",
+  "trigger_names": ["EveryMinute"], // Generate report every minute
+  "message_builder": {
+    "field_assignments": [
+      {
+        "field_name": "average_speed",
+        "aggregation": {
+          "@type": "none", // Read the value directly from the aggregator
+          "expression": "SpeedAggregator.average_speed"
+        }
+      },
+      {
+        "field_name": "reading_count",
+        "aggregation": {
+          "@type": "none",
+          "expression": "SpeedAggregator.speed_reading_count"
+        }
+      }
+    ]
+  }
+}</pre>  </div> <h2 id="top-level-fields">Top-level fields</h2> <p>In addition to the <code translate="no" dir="ltr">data_sources</code>, <code translate="no" dir="ltr">aggregators</code>, <code translate="no" dir="ltr">triggers</code>, and <code translate="no" dir="ltr">report_configs</code> arrays, the description of a metrics configuration requires a reference to the signal catalog. You can also include optional fields to assign a specific UUID and manage the collection lifecycle.</p> <h3 id="set-uuid">Set UUID</h3> <p>Each <code translate="no" dir="ltr">MetricsConfig</code> requires a Universally Unique Identifier (UUID). If you provide an <code translate="no" dir="ltr">existing_uuid</code>, MCG uses it. Otherwise, it creates a random one. For consistency across deployments and tools, specify an <code translate="no" dir="ltr">existing_uuid</code>.</p> <p>The string must be a valid hyphenated UUID containing only lowercase letters.</p> 
+<pre>"existing_uuid": "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
+</pre> <h3 id="supporting-definitions">Signal definitions</h3> <p>To validate signal names and types, MCG requires access to a Vehicle Signal Catalog. This is a protobuf <code translate="no" dir="ltr">FileDescriptorSet</code> containing your VSIDL <code translate="no" dir="ltr">.proto</code> definitions (packaged and uploaded to MCG). For details on creating and uploading a catalog, see <a href="metrics-configuration-generator/vehicle-signals">Vehicle Signal Catalogs</a>.</p> <p>Specify the catalog version in the JSON object's <code translate="no" dir="ltr">vs_version</code> field:</p> 
+<pre>"vs_version": "v1.0",
+</pre> <h3 id="define-lifecycle">Define lifecycle triggers</h3> <p>In the context of a telemetry campaign, the lifecycle of a <code translate="no" dir="ltr">MetricsConfig</code> determines when data is actually recorded. While the campaign management system deploys and activates the configuration on the device, you can use lifecycle triggers to precisely control <em>when</em> data is collected within that deployment.</p> <p>This lets you align data collection with vehicle usage patterns, such as a "Trip" (<code translate="no" dir="ltr">IgnitionOn</code> to <code translate="no" dir="ltr">IgnitionOff</code>) or a "Charge Session", without needing to deactivate the configuration.</p> <ul> <li>
+<p><strong>Session Control (Start/Pause):</strong> Use <code translate="no" dir="ltr">start_trigger_name</code> and <code translate="no" dir="ltr">stop_trigger_name</code> to control when collection happens. For example, to collect data only while the vehicle is driving, use <code translate="no" dir="ltr">IgnitionOn</code> as the start trigger and <code translate="no" dir="ltr">IgnitionOff</code> as the stop trigger. The configuration remains active on the device but effectively "pauses" (stops collecting and processing) when the stop trigger fires, resuming only when the start trigger fires again.</p> <p><strong>Important:</strong> This merely pauses collection. It does <em>not</em> define logical windows, separate data sets, or have any other side effects. Aggregator values are <em>not</em> reset when collection pauses or resumes.</p>
+</li> <li><p><strong>One-off Detection (Finish):</strong> Use <code translate="no" dir="ltr">deactivate_trigger_name</code> if the configuration should run only once (for example, to detect the first occurrence of a specific fault code) and then permanently deactivate itself on that device, even if the campaign is technically still active.</p></li> </ul> <p>If you don't specify any lifecycle triggers, data collection begins immediately when the configuration is activated by the campaign and continues continuously until the campaign ends.</p> <table class="blue responsive"> <tr> <th colspan="2">Top-level lifecycle fields (root object)</th> </tr> <tr> <td>
+<em>optional</em><br><code translate="no" dir="ltr">start_trigger_name</code>
+</td> <td>The name of a trigger that starts the collection session. Can be set without <code translate="no" dir="ltr">stop_trigger_name</code>.</td> </tr> <tr> <td>
+<em>optional</em><br><code translate="no" dir="ltr">stop_trigger_name</code>
+</td> <td>The name of a trigger that pauses the collection session (for example, when the vehicle is stationary). If set, <code translate="no" dir="ltr">start_trigger_name</code> must also be set.</td> </tr> <tr> <td>
+<em>optional</em><br><code translate="no" dir="ltr">deactivate_trigger_name</code>
+</td> <td>The name of a trigger that finalizes and deactivates the `MetricsConfig` entirely.</td> </tr> </table> <h2 id="custom-protos">Advanced: Custom proto definitions</h2> <p>In two main cases, <code translate="no" dir="ltr">vs_version</code> alone isn't enough for MCG to understand all message types in the description of a metrics configuration:</p> <ol> <li>
+<strong>Type inference failure:</strong> As explained in <a href="#source-id-format"><code translate="no" dir="ltr">source_identifier</code> format</a>, MCG can't infer the type when <code translate="no" dir="ltr">source_identifier</code> uses FQIN or a custom name.</li> <li>
+<strong>Custom messages:</strong> The metrics configuration description uses protobuf messages that aren't found in the VSIDL catalog specified in <code translate="no" dir="ltr">vs_version</code>. This happens when setting <code translate="no" dir="ltr">message_type</code> in a <code translate="no" dir="ltr">message_builder</code> for a custom report format.</li> </ol> <p>In these cases, use <code translate="no" dir="ltr">data_source_message_types</code> to help MCG infer types and <code translate="no" dir="ltr">descriptor_protos</code> to provide message definitions.</p> <h3 id="data-source-message-types"><code translate="no" dir="ltr">data_source_message_types</code></h3> <p>Map the <code translate="no" dir="ltr">source_identifier</code> string to its fully-qualified protobuf message type. The key in <code translate="no" dir="ltr">data_source_message_types</code> must match the <code translate="no" dir="ltr">source_identifier</code> value from the <code translate="no" dir="ltr">data_sources</code> entry:</p> 
+<pre>"data_source_message_types": {
+  "MyCustomSpeedService": "com.sdv.example.SampleMessage"
+}
+</pre> <h3 id="descriptor-protos"><code translate="no" dir="ltr">descriptor_protos</code></h3> <p>Provide definitions for any message types used in <code translate="no" dir="ltr">data_source_message_types</code> or <code translate="no" dir="ltr">message_builder</code> that are not in the configured <code translate="no" dir="ltr">vs_version</code>.</p> <p>Pass a base64-encoded <code translate="no" dir="ltr">descriptorpb.FileDescriptorSet</code> in the <code translate="no" dir="ltr">descriptor_protos</code> array. Generate this from <code translate="no" dir="ltr">.proto</code> files using the Protobuf compiler <code translate="no" dir="ltr">protoc</code>.</p> 
+<pre>"descriptor_protos": [
+  "Cu8BCiZtY2cvdGVzdGRhdGEvbWF4YXZnY3..." // Base64 string
+]
+</pre> <div>  <h4 class="showalways" id="example:-complete-configuration-description">Example: Complete configuration description</h4> <p>The preceding sections define all the components for the example: generating a report every minute with the average vehicle speed observed during that minute.</p> <p>The components are:</p> <ul> <li>A data source (<code translate="no" dir="ltr">SpeedSource</code>) to get speed data up to once per second.</li> <li>A data trigger (<code translate="no" dir="ltr">OnNewSpeed</code>) that fires when <code translate="no" dir="ltr">SpeedSource</code> sends data.</li> <li>A periodic trigger (<code translate="no" dir="ltr">EveryMinute</code>) that fires every 60 seconds.</li> <li>An aggregator (<code translate="no" dir="ltr">SpeedAggregator</code>) that uses <code translate="no" dir="ltr">OnNewSpeed</code> to calculate average speed, count readings, and store recent values, resetting when read.</li> <li>A report configuration (<code translate="no" dir="ltr">MinuteReport</code>) that uses <code translate="no" dir="ltr">EveryMinute</code> to trigger a report containing the average speed and count from <code translate="no" dir="ltr">SpeedAggregator</code>.</li> <li>Top-level fields (<code translate="no" dir="ltr">existing_uuid</code>, <code translate="no" dir="ltr">vs_version</code>) to identify the metrics configuration and specify which VSIDL catalog to use for signal definitions.</li> </ul> <p>When combined, these pieces form the complete description of a metrics configuration:</p> 
+<pre>{
+  "existing_uuid": "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8", // Unique identifier for the configuration
+  "vs_version": "example_version", // Version of the VSIDL catalog to use
+  "data_sources": [
+    {
+      "name": "SpeedSource",
+      "source_identifier": "mcg.test.subpkg.speed_msg",
+      "connection_type": "SUBSCRIPTION",
+      "sub_sampling_interval_ms": 1000
+    }
+  ],
+  "aggregators": [
+    {
+      "name": "SpeedAggregator",
+      "trigger_names": ["OnNewSpeed"],
+      "reset_on_get": true,
+      "message_builder": {
+        "field_assignments": [
+          {
+            "field_name": "average_speed",
+            "aggregation": {
+              "@type": "avg",
+              "expression": "SpeedSource.speed"
+            }
+          },
+          {
+            "field_name": "speed_reading_count",
+            "aggregation": { "@type": "count" }
+          },
+          {
+            "field_name": "speed_history_last5",
+            "aggregation": {
+              "@type": "vector",
+              "expression": "SpeedSource.speed",
+              "max_length": 5
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "triggers": [
+    {
+      "name": "OnNewSpeed",
+      "data": { "source_name": "SpeedSource" }
+    },
+    {
+      "name": "EveryMinute",
+      "periodic": { "period_ms": 60000 }
+    }
+  ],
+  "report_configs": [
+    {
+      "name": "MinuteReport",
+      "trigger_names": ["EveryMinute"],
+      "message_builder": {
+        "field_assignments": [
+          {
+            "field_name": "average_speed",
+            "aggregation": {
+              "@type": "none",
+              "expression": "SpeedAggregator.average_speed"
+            }
+          },
+          {
+            "field_name": "reading_count",
+            "aggregation": {
+              "@type": "none",
+              "expression": "SpeedAggregator.speed_reading_count"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}</pre>  </div> <h2 id="reference-template">Reference template</h2> <p>For the API definition, see the <a href="metrics-configuration-generator/api">MCG API reference</a>.</p> <p>The following sections provide a complete reference of the description of a metrics configuration. Use it as a guide to build your own description of a metrics configuration.</p> <h3 id="top-level-fields-ref">Top-level fields</h3> 
+<pre>{
+  "existing_uuid": "1cbec8e6-46f5-4649-9fa2-09f81bc93f8b", // Optional
+  "vs_version": "example_version", // Optional
+  "descriptor_protos": ["..."], // Optional. Base64 encoded FileDescriptorSet
+  "data_source_message_types": {
+    "ExampleServiceName": "com.example.ProtoMessage"
+  }, // Optional
+  "start_trigger_name": "DataTriggerExample", // Optional
+  "stop_trigger_name": "ConditionalTriggerExample", // Optional
+  "deactivate_trigger_name": "PeriodicTriggerExample" // Optional
+}
+</pre> <h3 id="input-ds-agg-ref">Input: data sources and aggregators</h3> 
+<pre>{
+  "data_sources": [
+    {
+      "name": "SubscriptionExample",
+      "source_identifier": "com.example.sdv.ExampleMessage|example-unit",
+      "connection_type": "SUBSCRIPTION", // Options: SUBSCRIPTION (default), ON_DEMAND
+      "sub_sampling_interval_ms": 100, // Optional
+      "fetch_last_message": false // Optional. Default: false
+    },
+    {
+      "name": "RegistryExample",
+      // Configurable Publisher Registry-based publisher (matches data_source_message_types)
+      "source_identifier": "ExampleServiceName",
+      "connection_type": "SUBSCRIPTION"
+    },
+    {
+      "name": "GetterExample",
+      "source_identifier": "com.example.sdv.ExampleConfig|example-unit",
+      "connection_type": "ON_DEMAND",
+      "configuration": {
+        "type_url": "type.googleapis.com/example.Config",
+        "value_json": {} // Or value_textproto, value (base64)
+      }
+    }
+  ],
+  "aggregators": [
+    {
+      "name": "AggregatorExample",
+      "trigger_names": ["DataTriggerExample"],
+      "reset_on_get": false, // Optional. Default: false. If true, resets state after it's read
+      "message_builder": {
+        "message_type": ".com.example.AggregatedMessage", // Optional
+        "field_assignments": [
+          {
+            "field_name": "avg_example",
+            "aggregation": {
+              // Options: avg, count, min, max, sum, stddev, delta, vector, none
+              "@type": "avg",
+              "expression": "SubscriptionExample.value"
+            }
+          },
+          {
+            "field_name": "count_example",
+            "aggregation": {
+              "@type": "count" // Counts number of evaluations. No expression needed
+            }
+          },
+          {
+            "field_name": "vector_example",
+            "aggregation": {
+              "@type": "vector",
+              "expression": "SubscriptionExample.value",
+              "max_length": 10 // Optional. If set, creates a ring buffer
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+</pre> <h3 id="logic-processing-triggers-ref">Logic and processing: triggers</h3> 
+<pre>{
+  "triggers": [
+    {
+      "name": "PeriodicTriggerExample",
+      "periodic": { "period_ms": 1000 }
+    },
+    {
+      "name": "DataTriggerExample",
+      "data": { "source_name": "SubscriptionExample" }
+    },
+    {
+      "name": "ConditionalTriggerExample",
+      "conditional": {
+        "triggers": ["PeriodicTriggerExample"],
+        "expression": "SubscriptionExample.value &gt; 0",
+        "condition_type": {
+          // Options: is_true, is_false, rising_edge, falling_edge, all_changes
+          "rising_edge": {
+            "rising_options": { "min_duration_ms": 0, "require_exact": false }
+          }
+        }
+      }
+    }
+  ]
+}
+</pre> <h3 id="output-report-configurations-ref">Output: report configurations</h3> 
+<pre>{
+  "report_configs": [
+    {
+      "name": "ReportExample",
+      "trigger_names": ["PeriodicTriggerExample"],
+      "report_incomplete": false, // Optional. Default: false
+      "report_initial": false, // Optional. Default: false
+      "message_builder": {
+        "message_type": ".com.example.ReportMessage", // Optional. Must be defined in VSIDL catalog or descriptor_protos. Message type will be inferred if not provided
+        "field_assignments": [
+          {
+            "field_name": "avg_example",
+            "aggregation": {
+              "@type": "none", // Passthrough since aggregation is done in AggregatorExample
+              "expression": "AggregatorExample.avg_example"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+</pre> <h3 id="expressions-ref">Expressions syntax</h3> <table class="blue"> <thead> <tr> <th>Category</th> <th>Syntax</th> <th>Description</th> </tr> </thead> <tbody> <tr> <td><b>Data access</b></td> <td>
+<code translate="no" dir="ltr"><i>source_name</i></code><br><code translate="no" dir="ltr"><i>source_name</i>.field</code><br><code translate="no" dir="ltr"><i>source_name</i>.field.subfield</code>
+</td> <td>Access full message from a data source or aggregator<br>Access specific field in message (including nested fields)</td> </tr> <tr> <td><b>Arithmetic</b></td> <td>
+<code translate="no" dir="ltr">+</code>, <code translate="no" dir="ltr">-</code>, <code translate="no" dir="ltr">*</code>, <code translate="no" dir="ltr">/</code>, <code translate="no" dir="ltr">%</code>, <code translate="no" dir="ltr">**</code>
+</td> <td>Standard math. <code translate="no" dir="ltr">**</code> is exponentiation.</td> </tr> <tr> <td><b>Logical</b></td> <td>
+<code translate="no" dir="ltr">&amp;&amp;</code>, <code translate="no" dir="ltr">||</code>, <code translate="no" dir="ltr">!</code>, <code translate="no" dir="ltr">^</code>
+</td> <td>AND, OR, NOT, XOR.</td> </tr> <tr> <td><b>Relational</b></td> <td>
+<code translate="no" dir="ltr">==</code>, <code translate="no" dir="ltr">!=</code>, <code translate="no" dir="ltr">&lt;</code>, <code translate="no" dir="ltr">&lt;=</code>, <code translate="no" dir="ltr">&gt;</code>, <code translate="no" dir="ltr">&gt;=</code>
+</td> <td>
+<code translate="no" dir="ltr">==</code> and <code translate="no" dir="ltr">!=</code> work on all types. Others require numbers.</td> </tr> <tr> <td><b>List</b></td> <td>
+<code translate="no" dir="ltr">contains(list, item)</code><br><code translate="no" dir="ltr">doesnotcontain(list, item)</code><br><code translate="no" dir="ltr">alleq(list, value)</code>
+</td> <td>Operates on vectors (arrays). <code translate="no" dir="ltr">alleq(list, value)</code> returns <code translate="no" dir="ltr">true</code> if all items in <code translate="no" dir="ltr">list</code> are equal to <code translate="no" dir="ltr">value</code>.</td> </tr> <tr> <td><b>Functions</b></td> <td><code translate="no" dir="ltr">timestamp(clock_type)</code></td> <td>Current time in microseconds.<br><code translate="no" dir="ltr">clock_type</code>: <code translate="no" dir="ltr">REALTIME_CLOCK</code> or<br><code translate="no" dir="ltr">MONOTONIC_TIME_SINCE_BOOT_OR_RESUME</code>
+</td> </tr> <tr> <td></td> <td><code translate="no" dir="ltr">abs(n)</code></td> <td>Absolute value</td> </tr> <tr> <td></td> <td>
+<code translate="no" dir="ltr">floor(n)</code>, <code translate="no" dir="ltr">round(n)</code>, <code translate="no" dir="ltr">ceil(n)</code>
+</td> <td>Rounding functions</td> </tr> <tr> <td><b>Order of operations</b></td> <td><code translate="no" dir="ltr">()</code></td> <td>Standard grouping for precedence</td> </tr> </tbody> </table><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/sdv/workstreams/telemetry/write-metrics-configurations" class="_attribution-link">https://source.android.com/docs/automotive/sdv/workstreams/telemetry/write-metrics-configurations</a>
+  </p>
+</div>

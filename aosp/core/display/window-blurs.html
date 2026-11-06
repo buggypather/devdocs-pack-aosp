@@ -1,0 +1,127 @@
+<h1>Window blurs</h1>  <p>In Android 12, public APIs are available for implementing window-blur effects, such as background blur and blur behind.</p> <p>Window blurs, or cross-window blurs, are used to blur the screen behind the given window. There are two types of window blurs, which can be used to achieve different visual effects:</p> <ul> <li><p><em>Background blur</em> allows you to create windows with blurred backgrounds, creating a frosted glass effect.</p></li> <li><p><em>Blur behind</em> allows you to blur the entire screen behind a (dialog) window, creating a depth of field effect.</p></li> </ul> <p>The two effects can be used separately or combined, as shown in the following figure:</p> <table> <tbody> <tr> <td>
+<img src="https://source.android.com/static/docs/core/display/images/background-blur-only.png" class="android-image-dark-theme-background screenshot" width="90%" alt="background blur only"> <p align="center"><strong>a</strong></p> </td> <td>
+<img src="https://source.android.com/static/docs/core/display/images/blur-behind-only.png" class="android-image-dark-theme-background screenshot" width="90%" alt="blur behind only"> <p align="center"><strong>b</strong></p> </td> <td>
+<img src="https://source.android.com/static/docs/core/display/images/blur-behind-and-background-blur.png" class="android-image-dark-theme-background screenshot" width="90%" alt="blur behind and background blur"><p align="center"> <strong>c</strong> </p> </td> </tr> </tbody> </table> <p><strong>Figure 1.</strong> Background blur only (a), blur behind only (b), background blur and blur behind (c)</p> <p>The window blur feature works across windows, which means it also works when there’s another app behind your window. This effect isn’t the same as the <a href="https://developer.android.com/reference/android/graphics/RenderEffect#createBlurEffect(float,%20float,%20android.graphics.Shader.TileMode)">blur render effect</a>, which blurs the content <strong>inside</strong> the same window. Window blurs are useful for dialogs, bottom sheets, and other floating windows.</p> <aside class="note"><strong>Note:</strong><span> Cross-window blurring is an expensive operation, so it's supported only on selected devices. For more information, see <a href="#guidelines">Guidelines to use window blur in apps</a>.</span></aside> <h2 id="implementation">Implementation</h2> <h3 id="app-developers">App developers</h3> <p>App developers must supply a blur radius to create a blur effect. The blur radius controls how dense the blur is, that is, the higher the radius, the denser the blur. A blur of 0 px means no blur. For blur behind, a radius of 20 px creates a good depth of field effect, while a background blur radius of 80 px creates a good frosted glass effect. Avoid blur radii higher than 150 px, as this will significantly impact performance.</p> <aside class="note"><strong>Note:</strong><span> The GPU samples colors from a bigger area for a higher blur radius, making the operation more performance intensive.</span></aside> <p>To achieve the desired blur effect and increase readability, choose a blur radius value complemented with a translucent layer of color.</p> <h4 id="window-background-blur">Background blur</h4> <p>Use background blur on floating windows to create a window background effect which is a blurred image of the underlying content. To add a blurred background for your window, do the following:</p> <ol> <li><p>Call <a href="https://developer.android.com/reference/android/view/Window#setBackgroundBlurRadius(int)">Window#setBackgroundBlurRadius(int)</a> to set a background blur radius. Or, in the window theme, set <a href="https://developer.android.com/reference/android/R.attr#windowBackgroundBlurRadius">R.attr.windowBackgroundBlurRadius</a>.</p></li> <li><p>Set <a href="https://developer.android.com/reference/android/R.attr#windowIsTranslucent">R.attr.windowIsTranslucent</a> to true to make the window translucent. The blur is drawn under the window surface, so the window needs to be translucent to let the blur be visible.</p></li> <li><p>Optionally, call <a href="https://developer.android.com/reference/android/view/Window#setBackgroundDrawableResource(int)">Window#setBackgroundDrawableResource(int)</a> to add a rectangular window background drawable with a translucent color. Or, in the window theme, set <a href="https://developer.android.com/reference/android/R.attr#windowBackground">R.attr.windowBackground</a>.</p></li> <li><p>For a window with rounded corners, determine the rounded corners for the blurred area by setting a <a href="https://developer.android.com/guide/topics/resources/drawable-resource#Shape">ShapeDrawable</a> with <a href="https://developer.android.com/guide/topics/resources/drawable-resource#corners-element">rounded corners</a> as the window background drawable.</p></li> <li><p>Handle blur enabled and disabled states. Refer to the <a href="#guidelines">Guidelines to use window blur in apps</a> section for more information.</p></li> </ol> <h4 id="window-blur-behind">Blur behind</h4> <p>The blur behind blurs the whole screen behind the window. This effect is used to direct the user's attention towards the window content by blurring anything on the screen behind the window.</p> <p>To blur the content behind your window, follow these steps:</p> <ol> <li><p>Add <a href="https://developer.android.com/reference/android/view/WindowManager.LayoutParams#FLAG_BLUR_BEHIND"><code translate="no" dir="ltr">FLAG_BLUR_BEHIND</code></a> to the window flags, to enable blur behind. Or, in the window theme, set <a href="https://developer.android.com/reference/kotlin/android/R.attr#windowblurbehindenabled">R.attr.windowBlurBehindEnabled</a>.</p></li> <li><p>Call <a href="https://developer.android.com/reference/android/view/WindowManager.LayoutParams#setBlurBehindRadius(int)"><code translate="no" dir="ltr">WindowManager.LayoutParams#setBlurBehindRadius</code></a> to set a blur behind radius. Or, in the window theme, set <a href="https://developer.android.com/reference/kotlin/android/R.attr#windowblurbehindradius">R.attr.windowBlurBehindRadius</a>.</p></li> <li><p>Optionally, choose a complementing <a href="https://developer.android.com/reference/android/view/WindowManager.LayoutParams#dimAmount">dim amount</a>.</p></li> <li><p>Handle blur enabled and disabled states. Refer to the <a href="#guidelines">Guidelines to use window blur in apps</a> section for more information.</p></li> </ol> <h4 id="guidelines">Guidelines to use window blur in apps</h4> <p>Support for windows blur is dependent on the following:</p> <ul> <li><p>Android version: The windows blur APIs are available only on Android 12 and higher. Check the device SDK for the Android version.</p></li> <li><p>Graphics performance: Devices with less performant GPUs might choose not to support window blurs.</p></li> <li><p>System state: The system server might temporarily disable window blurs at runtime, for example, during battery saving mode, while playing certain kinds of video content or due to a developer override.</p></li> </ul> <p>In order to make your app compatible across Android versions, devices and system states, follow these guidelines:</p> <ul> <li><p>Add a listener through <a href="https://developer.android.com/reference/android/view/WindowManager#addCrossWindowBlurEnabledListener(java.util.concurrent.Executor,%20java.util.function.Consumer%3Cjava.lang.Boolean%3E)">WindowManager#addCrossWindowBlurEnabledListener</a>, to notify you when the window blurs are enabled or disabled. Additionally, use <a href="https://developer.android.com/reference/android/view/WindowManager#isCrossWindowBlurEnabled()"><code translate="no" dir="ltr">WindowManager#isCrossWindowBlurEnabled</code></a> to query whether window blurs are currently enabled.</p></li> <li>
+<p>Implement two versions for the window background, to accommodate the enabled or disabled state of window blurs.</p> <p>When blurs are enabled, the window background should be translucent to make the blur visible. In this state, when blurs get disabled, the window content directly overlaps with the content of the underlying window, making the overlapping window less legible. To avoid such an effect, when window blurs are disabled, adapt the app's UI as follows:</p> <ul> <li><p>For background blur, increase the alpha of the window background drawable, making it more opaque.</p></li> <li><p>For blur behind, add a dim layer with a higher dim amount.</p></li> </ul>
+</li> </ul> <h4 id="example-code">Example of blur behind and background blur</h4> <p>This section provides a working example of an activity that uses both blur behind and background blur.</p> <p>The following example of <code translate="no" dir="ltr">MainActivity.java</code> is a dialog with a blur behind radius of 20 px and a background blur radius of 80 px. It has rounded corners, defined in xml in the window background drawable. It correctly handles different Android versions, different devices (that potentially don't support window blurs) and runtime blur enabled or disabled changes. It ensures that the dialog content is readable under any of those conditions by adjusting the window background drawable alpha and the window dim amount.</p> 
+<pre>public class MainActivity extends Activity {
+
+    private final int mBackgroundBlurRadius = 80;
+    private final int mBlurBehindRadius = 20;
+
+    // We set a different dim amount depending on whether window blur is enabled or disabled
+    private final float mDimAmountWithBlur = 0.1f;
+    private final float mDimAmountNoBlur = 0.4f;
+
+    // We set a different alpha depending on whether window blur is enabled or disabled
+    private final int mWindowBackgroundAlphaWithBlur = 170;
+    private final int mWindowBackgroundAlphaNoBlur = 255;
+
+    // Use a rectangular shape drawable for the window background. The outline of this drawable
+    // dictates the shape and rounded corners for the window background blur area.
+    private Drawable mWindowBackgroundDrawable;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        mWindowBackgroundDrawable = getDrawable(R.drawable.window_background);
+        getWindow().setBackgroundDrawable(mWindowBackgroundDrawable);
+
+        if (buildIsAtLeastS()) {
+            // Enable blur behind. This can also be done in xml with R.attr#windowBlurBehindEnabled
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND);
+
+            // Register a listener to adjust window UI whenever window blurs are enabled/disabled
+            setupWindowBlurListener();
+        } else {
+            // Window blurs are not available prior to Android S
+            updateWindowForBlurs(false /* blursEnabled */);
+        }
+
+        // Enable dim. This can also be done in xml, see R.attr#backgroundDimEnabled
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+    }
+
+    /**
+     * Set up a window blur listener.
+     *
+     * Window blurs might be disabled at runtime in response to user preferences or system states
+     * (e.g. battery saving mode). WindowManager#addCrossWindowBlurEnabledListener allows to
+     * listen for when that happens. In that callback we adjust the UI to account for the
+     * added/missing window blurs.
+     *
+     * For the window background blur we adjust the window background drawable alpha:
+     *     - lower when window blurs are enabled to make the blur visible through the window
+     *       background drawable
+     *     - higher when window blurs are disabled to ensure that the window contents are readable
+     *
+     * For window blur behind we adjust the dim amount:
+     *     - higher when window blurs are disabled - the dim creates a depth of field effect,
+     *       bringing the user's attention to the dialog window
+     *     - lower when window blurs are enabled - no need for a high alpha, the blur behind is
+     *       enough to create a depth of field effect
+     */
+    @RequiresApi(api = Build.VERSION_CODES.S)
+    private void setupWindowBlurListener() {
+        Consumer&lt;Boolean&gt; windowBlurEnabledListener = this::updateWindowForBlurs;
+        getWindow().getDecorView().addOnAttachStateChangeListener(
+                new View.OnAttachStateChangeListener() {
+                    @Override
+                    public void onViewAttachedToWindow(View v) {
+                        getWindowManager().addCrossWindowBlurEnabledListener(
+                                windowBlurEnabledListener);
+                    }
+
+                    @Override
+                    public void onViewDetachedFromWindow(View v) {
+                        getWindowManager().removeCrossWindowBlurEnabledListener(
+                                windowBlurEnabledListener);
+                    }
+                });
+    }
+
+    private void updateWindowForBlurs(boolean blursEnabled) {
+        mWindowBackgroundDrawable.setAlpha(blursEnabled &amp;&amp; mBackgroundBlurRadius &gt; 0 ?
+                mWindowBackgroundAlphaWithBlur : mWindowBackgroundAlphaNoBlur);
+        getWindow().setDimAmount(blursEnabled &amp;&amp; mBlurBehindRadius &gt; 0 ?
+                mDimAmountWithBlur : mDimAmountNoBlur);
+
+        if (buildIsAtLeastS()) {
+            // Set the window background blur and blur behind radii
+            getWindow().setBackgroundBlurRadius(mBackgroundBlurRadius);
+            getWindow().getAttributes().setBlurBehindRadius(mBlurBehindRadius);
+            getWindow().setAttributes(getWindow().getAttributes());
+        }
+    }
+
+    private static boolean buildIsAtLeastS() {
+        return Build.VERSION.SDK_INT &gt;= Build.VERSION_CODES.S;
+    }
+}
+
+</pre> <p>To create rounded corners for the window, we define the window background in <code translate="no" dir="ltr">res/drawable/window_background.xml</code> as a <a href="https://developer.android.com/guide/topics/resources/drawable-resource#Shape">ShapeDrawable</a> with <a href="https://developer.android.com/guide/topics/resources/drawable-resource#corners-element">rounded corners</a> with radius 20 dp as follows:</p> 
+<pre>&lt;shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle" &gt;
+    &lt;corners android:radius="20dp"/&gt;
+    &lt;solid android:color="#AAAAAA"/&gt;
+&lt;/shape&gt;
+</pre> <p>Window blurs blur the content of the window underneath the activity. The blurred image is drawn <em>under</em> this activity window, so the activity window needs to be translucent to allow for the blurring to be visible. To make the window translucent we set <a href="https://developer.android.com/reference/android/R.attr#windowIsTranslucent">R.attr.windowIsTranslucent</a> in the activity theme as follows:</p> 
+<pre>&lt;style name="Theme.BlurryDialog" parent="Theme.MaterialComponents.Dialog"&gt;
+    &lt;item name="android:windowIsTranslucent"&gt;true&lt;/item&gt;
+&lt;/style&gt;
+</pre> <h3 id="oems-and-partners">OEMs and partners</h3> <p>To have window blurring on a device, the OEM needs to declare that the device supports window blurs.</p> <p>To check if your device can support window blurs, do the following:</p> <ul> <li><p>Ensure that the device can handle the extra GPU load. Lower-end devices might not be able to handle the extra load, which can cause dropped frames. Only enable window blurs on tested devices with sufficient GPU power.</p></li> <li><p>If you have a customized render engine, ensure that your render engine implements the blurring logic. The default Android 12 <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/native/libs/renderengine/">render engine</a> implements the blurring logic in <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/native/libs/renderengine/skia/filters/BlurFilter.cpp"><code translate="no" dir="ltr">BlurFilter.cpp</code></a>.</p></li> </ul> <p>Once you ensure that your device can support window blurs, set the following surface flinger <code translate="no" dir="ltr">sysprop</code>:</p> 
+<pre>PRODUCT_VENDOR_PROPERTIES += \
+       ro.surface_flinger.supports_background_blur=1
+</pre> <h2 id="guidelines">Validation</h2> <p>To validate that your app window has proper handling when switching between blur enabled and blur disabled states, follow these steps:</p> <ol> <li><p>Open the UI that has blur.</p></li> <li><p>Enable or disable window blurs by <a href="#turn-window-blur-on-and-off">turning window blur on and off</a>.</p></li> <li><p>Verify that the window UI changes to and from a blurred state as expected.</p></li> </ol> <h3 id="turn-window-blur-on-and-off">Turn window blur on and off</h3> <p>To test how the window UI renders with the window blurs effect, enable or disable blurs using one of the following methods:</p> <ul> <li>
+<p>From Developer Options:</p> <p><strong>Settings -&gt; System -&gt; Developer options -&gt; Hardware accelerated rendering -&gt; Allow window-level blurs</strong></p> <aside class="note"><strong>Note:</strong><span> If you can't find the option under Settings, window blurs are not supported on your device.</span></aside>
+</li> <li>
+<p>From the terminal on a rooted device:</p> 
+<pre>adb shell wm disable-blur 1 # 1 disables window blurs, 0 allows them</pre>
+</li> </ul> <aside class="note"><strong>Note:</strong><span> Enabling is only possible on devices that support window blurs .</span></aside> <p>To check whether your Android 12+ device supports window blurs and whether window blurs are currently enabled, run <code translate="no" dir="ltr">adb shell wm disable-blur</code> on a rooted device.</p> <h3 id="troubleshooting">Troubleshooting</h3> <p>Use the following as a guide for troubleshooting during validation.</p> <h4 id="blur-not-drawn">No blur drawn</h4> <ul> <li><p>Verify the blurs are currently enabled and your hardware supports them. Refer to <a href="#turn-window-blur-on-and-off">Turn window blur on and off</a>.</p></li> <li><p>Ensure you set a translucent window background color. An opaque window background color hides the blurred area.</p></li> </ul> <h4 id="not-supporting-window-blur">Test device doesn’t support window blurs</h4> <ul> <li>Test your application on the Android 12 emulator. To set up an Android emulator, refer to <a href="https://developer.android.com/about/versions/12/get#on_emulator">Set up an Android emulator</a>. Any Android virtual device you create with the emulator supports the window blurs.</li> </ul> <h4 id="no-rounded-corners">No rounded corners</h4> <ul> <li>
+<a href="https://developer.android.com/reference/android/view/Window#setBackgroundDrawable(android.graphics.drawable.Drawable)">Set a window background drawable</a> to define rounded corners. This drawable determines the outline of the blurred area.</li> </ul> <h4 id="updated-developer-option-but-blur-not-enabled">Updating the developer option doesn’t enable blurs</h4> <ul> <li>Check whether the device is in battery-saving mode or whether it’s using <a href="../../devices/tv/multimedia-tunneling">multimedia tunneling</a>. On some TV devices window blurs might also be disabled during video playback.</li> </ul> <h4 id="background-blur-drawn-fullscreen">Background blur drawn fullscreen, not within the window bounds</h4> <ul> <li><p>Check <a href="https://developer.android.com/reference/android/R.attr#windowIsFloating">android:windowIsFloating</a> to ensure that your window is marked as floating.</p></li> <li><p>Ensure that a <a href="https://developer.android.com/reference/android/view/Window#setBackgroundDrawable(android.graphics.drawable.Drawable)">window background drawable</a> is set. This setting determines the outline of the blur area.</p></li> </ul> <h4 id="updates-from-listener-not-applied-onscreen">Updates from the listener are not applied on the screen</h4> <ul> <li>The listener updates might be getting applied to an old window instance. Check if the window is getting destroyed and recreated with the right listener update.</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/display/window-blurs" class="_attribution-link">https://source.android.com/docs/core/display/window-blurs</a>
+  </p>
+</div>

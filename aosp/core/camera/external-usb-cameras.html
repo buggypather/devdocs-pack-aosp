@@ -1,0 +1,74 @@
+<h1>External USB cameras</h1> &lt;!-- Copyright 2018 The Android Open Source Project <p>Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at</p> 
+<pre>  http://www.apache.org/licenses/LICENSE-2.0
+</pre> <p>Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License. --&gt;</p> <p>The Android platform supports the use of plug-and-play USB cameras (that is, webcams) using the standard <a href="https://developer.android.com/reference/android/hardware/camera2/package-summary.html">Android Camera2 API</a> and the camera <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:hardware/interfaces/camera/provider/aidl/android/hardware/camera/provider/ICameraProvider.aidl">HAL</a> interface. Webcams generally support <a href="https://en.wikipedia.org/wiki/USB_video_device_class">USB video class (UVC)</a> drivers and on Linux, the standard <a href="https://en.wikipedia.org/wiki/Video4Linux">Video4Linux (V4L)</a> driver is used to control UVC cameras.</p> <p>With support for webcams, devices can be used in lightweight use cases such as video chatting and photo kiosks. This feature doesn't replace typical internal camera HALs on Android phones and isn't designed to support performance-intensive, complex tasks involving high-resolution and high-speed streaming, AR, and manual ISP/sensor/lens control.</p> <p>The USB camera HAL process is part of the external camera provider that listens to USB device availability and enumerates external camera devices accordingly. The process has permissions and an SE policy similar to the built-in camera HAL process. Third-party webcam apps that communicate directly with USB devices require the same camera permissions to access UVC devices as with any regular camera app.</p> <h2 id="examples_and_sources">Examples and sources</h2> <p>For more information on how to implement USB cameras, see the external camera provider reference implementation at <a href="https://android.googlesource.com/platform/hardware/interfaces/+/refs/heads/android17-release/camera/provider/default/ExternalCameraProvider.cpp"><code translate="no" dir="ltr">ExternalCameraProvider</code></a>. The external camera device and session implementations are included in <a href="https://android.googlesource.com/platform/hardware/interfaces/+/refs/heads/android17-release/camera/device/default/ExternalCameraDevice.cpp"><code translate="no" dir="ltr">ExternalCameraDevice</code></a> and <a href="https://android.googlesource.com/platform/hardware/interfaces/+/refs/heads/android17-release/camera/device/default/ExternalCameraDeviceSession.cpp"><code translate="no" dir="ltr">ExternalCameraDeviceSession</code></a>. Starting in API level 28, the Java client API includes the <a href="https://developer.android.com/reference/android/hardware/camera2/CameraMetadata#INFO_SUPPORTED_HARDWARE_LEVEL_EXTERNAL"><code translate="no" dir="ltr">EXTERNAL</code></a> hardware level.</p> <h2 id="implementation">Implementation</h2> <p>The implementation must support the <a href="https://developer.android.com/guide/topics/connectivity/usb/host"><code translate="no" dir="ltr">android.hardware.usb.host</code></a> system feature.</p> <p>Kernel support for UVC devices must also be enabled. You can enable this by adding the following to the respective kernel <code translate="no" dir="ltr">defconfig</code> files.</p> 
+<pre>+CONFIG_USB_VIDEO_CLASS=y
++CONFIG_MEDIA_USB_SUPPORT=y
+</pre>
+<aside class="note"><strong>Note:</strong><span> Make sure you also have this <a href="https://patchwork.kernel.org/patch/6874491/">patch</a> for UVC video.</span></aside> <p>To enable the external camera provider in the respective device build, which adds the necessary SELinux permissions, external camera configuration, and external camera provider dependency, complete the following steps:</p> <ul> <li>
+<p>Add the external camera config file and external camera library to <code translate="no" dir="ltr">device.mk</code>.</p> 
+<pre>+PRODUCT_PACKAGES += android.hardware.camera.provider-V1-external-service
+
++PRODUCT_COPY_FILES += \
++device/manufacturerX/productY/external_camera_config.xml:$(TARGET_COPY_OUT_VENDOR)/etc/external_camera_config.xml
+</pre>
+</li> <li>
+<p>Add the external camera provider name to the device Treble HAL manifest.</p> 
+<pre>&lt;hal format="aidl"&gt;
+    &lt;name&gt;android.hardware.camera.provider&lt;/name&gt;
+    &lt;version&gt;1&lt;/version&gt;
+    &lt;interface&gt;
+        &lt;name&gt;ICameraProvider&lt;/name&gt;
+        &lt;instance&gt;internal/0&lt;/instance&gt;
++       &lt;instance&gt;external/0&lt;/instance&gt;
+    &lt;/interface&gt;
+&lt;/hal&gt;
+</pre>
+</li> <li>
+<p>Bind the <code translate="no" dir="ltr">external/0</code> AIDL camera provider instance to <code translate="no" dir="ltr">hal_camera_service</code> in the device's <code translate="no" dir="ltr">sepolicy/service_contexts</code> file. For more information, see <a href="../architecture/aidl/aidl-hals#sepolicy">SEPolicy for AIDL HALs</a>.</p> 
+<pre>android.hardware.camera.provider.ICameraProvider/external/0 u:object_r:hal_camera_service:s0
+</pre>
+</li> <li>
+<p>(Optional) If the device runs in Treble passthrough mode, update <code translate="no" dir="ltr">sepolicy</code> so <code translate="no" dir="ltr">cameraserver</code> can access the UVC camera.</p> 
+<pre>+# for external camera
++allow cameraserver device:dir r_dir_perms;
++allow cameraserver video_device:dir r_dir_perms;
++allow cameraserver video_device:chr_file rw_file_perms;
+</pre>
+</li> </ul> <p>Here's an example of <code translate="no" dir="ltr">external_camera_config.xml</code> (copyright lines omitted).</p> 
+<pre>&lt;ExternalCamera&gt;
+    &lt;Provider&gt;
+        &lt;ignore&gt; &lt;!-- Internal video devices to be ignored by external camera HAL --&gt;
+            &lt;id&gt;0&lt;/id&gt; &lt;!-- No leading/trailing spaces --&gt;
+            &lt;id&gt;1&lt;/id&gt;
+        &lt;/ignore&gt;
+    &lt;/Provider&gt;
+    &lt;!-- See ExternalCameraUtils.cpp for default values of Device configurations below --&gt;
+    &lt;Device&gt;
+        &lt;!-- Max JPEG buffer size in bytes--&gt;
+        &lt;MaxJpegBufferSize bytes="3145728"/&gt; &lt;!-- 3MB (~= 1080p YUV420) --&gt;
+        &lt;!-- Size of v4l2 buffer queue when streaming &gt;= 30fps --&gt;
+        &lt;!-- Larger value: more request can be cached pipeline (less janky)  --&gt;
+        &lt;!-- Smaller value: use less memory --&gt;
+        &lt;NumVideoBuffers count="4"/&gt;
+        &lt;!-- Size of v4l2 buffer queue when streaming &lt; 30fps --&gt;
+        &lt;NumStillBuffers count="2"/&gt;
+
+        &lt;!-- List of maximum fps for various output sizes --&gt;
+        &lt;!-- Any image size smaller than the size listed in Limit row will report
+            fps (as minimum frame duration) up to the fpsBound value. --&gt;
+        &lt;FpsList&gt;
+            &lt;!-- width/height must be increasing, fpsBound must be decreasing--&gt;
+            &lt;Limit width="640" height="480" fpsBound="30.0"/&gt;
+            &lt;Limit width="1280" height="720" fpsBound="15.0"/&gt;
+            &lt;Limit width="1920" height="1080" fpsBound="10.0"/&gt;
+            &lt;!-- image size larger than the last entry will not be supported--&gt;
+        &lt;/FpsList&gt;
+    &lt;/Device&gt;
+&lt;/ExternalCamera&gt;</pre> <h2 id="customization">Customization</h2> <p>You can enhance the Android camera either through general customization options or device-specific optimizations.</p> <h3 id="general_customizations">General customizations</h3> <p>You can customize the external camera provider by modifying the <code translate="no" dir="ltr">external_camera_config.xml</code> file. Specifically, clients can customize the following parameters:</p> <ul> <li>Excluding video nodes of internal cameras</li> <li>Supported image size and frame rate upper bound</li> <li>Number of inflight buffers (jank vs memory tradeoff)</li> </ul> <p>In addition to these parameters, you can add your own parameters or develop your own configurations.</p> <h3 id="device-specific_optimizations">Device-specific optimizations</h3> <p>You can also improve performance by adding device-specific optimizations.</p> <h4 id="buffer_copyscaling_and_jpeg_decodeencode">Buffer copy/scaling and JPEG decode/encode</h4> <p>Generic implementations use CPU (libyuv/libjpeg) but you can replace this with device-specific optimizations.</p> <h4 id="hal_output_format">HAL output format</h4> <p>Generic implementations use the following output formats:</p> <ul> <li>
+<code translate="no" dir="ltr">YUV_420_888</code> for video <code translate="no" dir="ltr">IMPLEMENTATION_DEFINED</code> buffers</li> <li>
+<code translate="no" dir="ltr">YUV12</code> for all other <code translate="no" dir="ltr">IMPLEMENTATION_DEFINED</code> buffers</li> </ul> <p>To improve performance, you can replace output formats with device-specific efficient formats. You can also support additional formats in a customized implementation</p> <h2 id="validation">Validation</h2> <p>Devices with external camera support must pass <a href="../../compatibility/cts/camera-hal#cts_tests">camera CTS</a>. The external USB webcam must remain plugged in the specific device during the entire test run, otherwise some test cases will fail.</p> <aside class="note"><strong>Note:</strong><span> <code translate="no" dir="ltr">media_profiles</code> entries aren't available for external USB webcams, so <a href="https://developer.android.com/reference/android/media/CamcorderProfile">camcorder profiles</a> are absent.</span></aside><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/camera/external-usb-cameras" class="_attribution-link">https://source.android.com/docs/core/camera/external-usb-cameras</a>
+  </p>
+</div>

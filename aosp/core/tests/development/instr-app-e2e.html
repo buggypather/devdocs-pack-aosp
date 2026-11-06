@@ -1,0 +1,77 @@
+<h1>Target an app example</h1>  <p>This category of instrumentation test isn't that different from those targeting the regular Android applications. It's worth noting that the test application that included the instrumentation needs to be signed with the same certificate as the application that it's targeting.</p> <p>Note that this guide assumes that you already have some knowledge in the platform source tree workflow. If not, please refer to <a href="../../../setup/start/requirements">Requirements</a>. The example covered here is writing an new instrumentation test with target package set at its own test application package. If you are unfamiliar with the concept, please read through the <a href="../development">Platform testing introduction</a>.</p> <p>This guide uses the follow test to serve as an sample:</p> <ul> <li>frameworks/base/packages/Shell/tests</li> </ul> <p>It's recommended to browse through the code first to get a rough impression before proceeding.</p> <h2 id="decide_on_a_source_location">Decide on a source location</h2> <p>Because the instrumentation test will be targeting an application, the convention is to place the test source code in a <code translate="no" dir="ltr">tests</code> directory under the root of your component source directory in platform source tree.</p> <p>See more discussions about source location in the <a href="instr-self-e2e">end-to-end example for self-instrumenting tests</a>.</p> <h2 id="manifest_file">Manifest file</h2> <p>Just like a regular application, each instrumentation test module needs a manifest file. If you name the file as <code translate="no" dir="ltr">AndroidManifest.xml</code> and provide it next to <code translate="no" dir="ltr">Android.mk</code> for your test module, it will get included automatically by the <code translate="no" dir="ltr">BUILD_PACKAGE</code> core makefile.</p> <p>Before proceeding further, it's highly recommended to go through the <a href="https://developer.android.com/guide/topics/manifest/manifest-intro.html">App Manifest Overview</a> first.</p> <p>This gives an overview of basic components of a manifest file and their functionalities.</p> <p>Latest version of the manifest file for the sample gerrit change can be accessed at: https://android.googlesource.com/platform/frameworks/base/+/android17-release/packages/Shell/tests/AndroidManifest.xml</p> <p>A snapshot is included here for convenience:</p> 
+<pre>&lt;manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.android.shell.tests"&gt;
+
+    &lt;application&gt;
+        &lt;uses-library android:name="android.test.runner" /&gt;
+
+        &lt;activity
+            android:name="com.android.shell.ActionSendMultipleConsumerActivity"
+            android:label="ActionSendMultipleConsumer"
+            android:theme="@android:style/Theme.NoDisplay"
+            android:noHistory="true"
+            android:excludeFromRecents="true"&gt;
+            &lt;intent-filter&gt;
+                &lt;action android:name="android.intent.action.SEND_MULTIPLE" /&gt;
+                &lt;category android:name="android.intent.category.DEFAULT" /&gt;
+                &lt;data android:mimeType="*/*" /&gt;
+            &lt;/intent-filter&gt;
+        &lt;/activity&gt;
+    &lt;/application&gt;
+
+    &lt;instrumentation android:name="android.support.test.runner.AndroidJUnitRunner"
+        android:targetPackage="com.android.shell"
+        android:label="Tests for Shell" /&gt;
+
+&lt;/manifest&gt;
+</pre> <p>Some select remarks on the manifest file:</p> 
+<pre>&lt;manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.android.shell.tests"&gt;
+</pre> <p>The <code translate="no" dir="ltr">package</code> attribute is the application package name: this is the unique identifier that the Android application framework uses to identify an application (or in this context: your test application). Each user in the system can only install one application with that package name.</p> <p>Since this is a test application package, independent from the application package under test, a different package name must be used: one common convention is to add a suffix <code translate="no" dir="ltr">.test</code>.</p> <p>Furthermore, this <code translate="no" dir="ltr">package</code> attribute is the same as what <a href="https://developer.android.com/reference/android/content/ComponentName.html#getPackageName()"><code translate="no" dir="ltr">ComponentName#getPackageName()</code></a> returns, and also the same you would use to interact with various <code translate="no" dir="ltr">pm</code> sub commands via <code translate="no" dir="ltr">adb shell</code>.</p> <p>Please also note that although the package name is typically in the same style as a Java package name, it actually has very few things to do with it. In other words, your application (or test) package may contain classes with any package names, though on the other hand, you could opt for simplicity and have your top level Java package name in your application or test identical to the application package name.</p> 
+<pre>&lt;uses-library android:name="android.test.runner" /&gt;
+</pre> <p>This is required for all Instrumentation tests since the related classes are packaged in a separate framework jar library file, therefore requires additional classpath entries when the test package is invoked by application framework.</p> 
+<pre>android:targetPackage="com.android.shell"
+</pre> <p>This sets the target package of the instrumentation to <code translate="no" dir="ltr">com.android.shell</code>. When the instrumentation is invoked via <code translate="no" dir="ltr">am instrument</code> command, the framework restarts <code translate="no" dir="ltr">com.android.shell</code> process, and injects instrumentation code into the process for test execution. This also means that the test code will have access to all the class instances running in the application under test and may be able to manipulate state depends on the test hooks exposed.</p> <h2 id="simple_configuration_file">Simple configuration file</h2> <p>Each new test module must have a configuration file to direct the build system with module metadata, compile-time dependencies and packaging instructions. In most cases, the Soong-based, Blueprint file option is sufficient. See <a href="blueprints">Simple Test Configuration</a> for details.</p> <h2 id="complex_configuration_file">Complex configuration file</h2> <aside class="special"><strong>Important:</strong><span> The instructions in this section are needed only for CTS tests or those that require special setup, such as disabling Bluetooth or collecting sample data. All other cases can be covered through the <a href="blueprints">Simple Test Configuration</a>. See the <a href="test-config">Complex Test Configuration</a> for more details applicable to this section.</span></aside> <p>For more complex tests, you also need to write a test configuration file for Android's test harness, <a href="../tradefed">Trade Federation</a>.</p> <p>The test configuration can specify special device setup options and default arguments to supply the test class.</p> <p>Latest version of the config file for the sample gerrit change can be accessed at: <a href="https://android.googlesource.com/platform/frameworks/base/+/android17-release/packages/Shell/tests/AndroidTest.xml">frameworks/base/packages/Shell/tests/AndroidTest.xml</a></p> <p>A snapshot is included here for convenience:</p> 
+<pre>&lt;configuration description="Runs Tests for Shell."&gt;
+    &lt;target_preparer class="com.android.tradefed.targetprep.TestAppInstallSetup"&gt;
+        &lt;option name="test-file-name" value="ShellTests.apk" /&gt;
+    &lt;/target_preparer&gt;
+
+    &lt;option name="test-suite-tag" value="apct" /&gt;
+    &lt;option name="test-tag" value="ShellTests" /&gt;
+    &lt;test class="com.android.tradefed.testtype.AndroidJUnitTest" &gt;
+        &lt;option name="package" value="com.android.shell.tests" /&gt;
+        &lt;option name="runner" value="android.support.test.runner.AndroidJUnitRunner" /&gt;
+    &lt;/test&gt;
+&lt;/configuration&gt;
+</pre> <p>Some select remarks on the test configuration file:</p> 
+<pre>&lt;target_preparer class="com.android.tradefed.targetprep.TestAppInstallSetup"&gt;
+  &lt;option name="test-file-name" value="ShellTests.apk"/&gt;
+&lt;/target_preparer&gt;
+</pre> <p>This tells Trade Federation to install the ShellTests.apk onto the target device using a specified target_preparer. There are many target preparers available to developers in Trade Federation and these can be used to ensure the device is setup properly prior to test execution.</p> 
+<pre>&lt;test class="com.android.tradefed.testtype.AndroidJUnitTest"&gt;
+  &lt;option name="package" value="com.android.shell.tests"/&gt;
+  &lt;option name="runner" value="android.support.test.runner.AndroidJUnitRunner"/&gt;
+&lt;/test&gt;
+</pre> <p>This specifies the Trade Federation test class to use to execute the test and passes in the package on the device to be executed and the test runner framework which is JUnit in this case.</p> <p>Look here for more information on <a href="test-config">Test Module Configs</a></p> <h2 id="junit4_features">JUnit4 features</h2> <p>Using <code translate="no" dir="ltr">android-support-test</code> library as test runner enables adoptation of new JUnit4 style test classes, and the sample gerrit change contains some very basic use of its features.</p> <p>Latest source code for the sample gerrit change can be accessed at: <a href="https://android.googlesource.com/platform/frameworks/base/+/android17-release/packages/Shell/tests/src/com/android/shell/BugreportReceiverTest.java">frameworks/base/packages/Shell/tests/src/com/android/shell/BugreportReceiverTest.java</a></p> <p>While testing patterns are usually specific to component teams, there are some generally useful usage patterns.</p> 
+<pre>@SmallTest
+@RunWith(AndroidJUnit4.class)
+public final class FeatureFactoryImplTest {
+</pre> <p>A significant difference in JUnit4 is that tests are no longer required to inherit from a common base test class; instead, you write tests in plain Java classes and use annotation to indicate certain test setup and constraints. In this example, we are instructing that this class should be run as an Android JUnit4 test.</p> <p>The <code translate="no" dir="ltr">@SmallTest</code> annotation specified a test size for the entire test class: all test methods added into this test class inherit this test size annotation. pre test class setup, post test tear down, and post test class tear down: similar to <code translate="no" dir="ltr">setUp</code> and <code translate="no" dir="ltr">tearDown</code> methods in JUnit4. <code translate="no" dir="ltr">Test</code> annotation is used for annotating the actual test.</p> <aside class="special"><strong>Important:</strong><span> the test methods themselves are annotated with <code translate="no" dir="ltr">@Test</code> annotation; and note that for tests to be executed via APCT, they must be annotated with test sizes. Such annotation may be applied at method scope, or class scope.</span></aside>
+<pre>    @Before
+    public void setup() {
+    ...
+    @Test
+    public void testGetProvider_shouldCacheProvider() {
+    ...
+</pre> <p>The <code translate="no" dir="ltr">@Before</code> annotation is used on methods by JUnit4 to perform pre test setup. Although not used in this example, there's also <code translate="no" dir="ltr">@After</code> for post test teardown. Similarly, the <code translate="no" dir="ltr">@BeforeClass</code> and <code translate="no" dir="ltr">@AfterClass</code> annotations are can be used on methods by JUnit4 to perform setup before executing all tests in a test class, and teardown afterwards. Note that the class-scope setup and teardown methods must be static.</p> <p>As for the test methods, unlike in earlier version of JUnit, they no longer need to start the method name with <code translate="no" dir="ltr">test</code>, instead, each of them must be annotated with <code translate="no" dir="ltr">@Test</code>. As usual, test methods must be public, declare no return value, take no parameters, and may throw exceptions.</p> 
+<pre>        Context context = InstrumentationRegistry.getTargetContext();
+</pre> <p>Because the JUnit4 tests no longer require a common base class, it's no longer necessary to obtain <code translate="no" dir="ltr">Context</code> instances via <code translate="no" dir="ltr">getContext()</code> or <code translate="no" dir="ltr">getTargetContext()</code> via base class methods; instead, the new test runner manages them via <a href="https://developer.android.com/reference/android/support/test/InstrumentationRegistry.html"><code translate="no" dir="ltr">InstrumentationRegistry</code></a> where contextual and environmental setup created by instrumentation framework is stored. Through this class, you can also call:</p> <ul> <li>
+<code translate="no" dir="ltr">getInstrumentation()</code>: the instance to the <code translate="no" dir="ltr">Instrumentation</code> class</li> <li>
+<code translate="no" dir="ltr">getArguments()</code>: the command line arguments passed to <code translate="no" dir="ltr">am instrument</code> via <code translate="no" dir="ltr">-e &lt;key&gt; &lt;value&gt;</code>
+</li> </ul> <h2 id="build_and_test_locally">Build and test locally</h2> <p>For the most common use cases, employ <a href="atest">Atest</a>.</p> <p>For more complex cases requiring heavier customization, follow the <a href="instrumentation">instrumentation instructions</a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/tests/development/instr-app-e2e" class="_attribution-link">https://source.android.com/docs/core/tests/development/instr-app-e2e</a>
+  </p>
+</div>

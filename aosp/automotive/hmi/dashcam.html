@@ -1,0 +1,127 @@
+<h1>Integrate Dashcam</h1>  <p>The Dashcam app is designed to integrate with AAOS, providing drivers with video recording capabilities for enhanced safety and security. This guide outlines the technical requirements, integration steps, and best practices to ensure a successful implementation.</p> <h2 id="prereqs">Prerequisites</h2> <p>Before you continue, ensure these preconditions are fulfilled:</p> <p>SDK:</p> <ul> <li>SDK 31 or higher is required.</li> </ul> <p>Hardware:</p> <ul> <li>EVS or Camera2 cameras available to AAOS.</li> <li>Sufficient internal storage space or support for removable external storage<br> must be available for video recordings.</li> </ul> <p>Software requirements:</p> <ul> <li>
+<strong>Unbundled support.</strong> To learn more, see <a href="../unbundled_apps">Unbundled Apps</a>.</li> <li>
+<strong>Permissions.</strong> Dashcam requires system permissions.</li> </ul> <h2 id="source">Get the source code</h2> <p>Dashcam is part of AAOS unbundled apps. To check out the unbundled code, see <a href="../unbundled_apps/integration#check-out">Check out the code</a>.</p> <p>Browse the source code with <a href="https://cs.android.com/android/platform/superproject/+/ub-automotive-master-20250219:packages/apps/Car/Dashcam/">Android Code Search</a>.</p> <p>The source code is provided in these three modules:</p> <ul> <li>
+<strong>Dashcam Service.</strong> Streaming, recording, and triggering logic.</li> <li>
+<strong>Dashcam Manager.</strong> Connects to the Dashcam Service and exposes a stable API to clients</li> <li>
+<strong>Dashcam App.</strong> Reference Dashcam application using the Dashcam Manager API</li> </ul> <p><img src="https://source.android.com/static/docs/automotive/hmi/dashcam/ua-dashcam-01.png" alt="Architecture diagram" class="android-image-dark-theme-background"> </p> <h2 id="build">Build Dashcam</h2> <p>Use Soong or Gradle to build Dashcam.</p> <h3 id="soong">Soong</h3> <p>On Soong:</p> 
+<pre>mma DashcamService DashcamManager-lib DashcamApp
+</pre> <p>The APKs are located in <code translate="no" dir="ltr">out/target/product/[lunch-target]/system/priv-app/</code></p> <h3 id="gradle">Gradle</h3> <p>On Gradle:</p> 
+<pre>./gradlew :dashcam-app:assemble
+./gradlew :dashcam-manager:assemble
+./gradlew :dashcam-service:assemble
+</pre> <p>The APKs are located in <code translate="no" dir="ltr">out/aaos-apps-gradle-build/</code></p> <p>Detailed instructions for building Dashcam with Gradle are provided in the <code translate="no" dir="ltr">README</code> file.</p> <h2 id="permissions">Permissions</h2> <p>Several system permissions are required for the Dashcam Service and the Dashcam App.</p> <p>The most staight-forward way to grant these permissions is to include them in a prebuilt setup using either Blueprint or Make.</p> <p>In Blueprint:</p> 
+<pre>Android.bp
+android_app_import {
+    name: "DashcamApp-prebuilt",
+    apk: "DashcamApp.apk",
+    privileged: true,
+    certificate: "platform",
+    required: ["allowed_privapp_com.android.car.dashcam"],
+}
+
+prebuilt_etc {
+    name: "allowed_privapp_com.android.car.dashcam",
+    sub_dir: "default-permissions",
+    src: "allowed_privapp_com.android.car.dashcam.xml",
+    filename_from_src: true,
+}
+</pre> <p>In Make:</p> 
+<pre>dashcam.mk
+PRODUCT_PACKAGES += \
+    DashcamApp
+PRODUCT_COPY_FILES :=\
+vendor/[path-to-vendor-prebuilts]/apps/Dashcam/allowed_privapp_com.android.car.dashcam:$(TARGET_COPY_OUT_PRODUCT)/etc/permissions/com.android.car.dashcam.xml \
+</pre> <p>Create a permissions file named <code translate="no" dir="ltr">allowed_privapp_com.android.car.dashcam.xml</code>:</p> 
+<pre>&lt;permissions&gt;
+  &lt;privapp-permissions package="com.android.car.dashcam.service"&gt;
+      &lt;permission name="" /&gt;
+  &lt;/privapp-permissions&gt;
+  &lt;privapp-permissions package="com.android.car.dashcam.app"&gt;
+      &lt;permission name="" /&gt;
+  &lt;/privapp-permissions&gt;
+&lt;/permissions&gt;
+</pre> <p>Add permissions from Manifest to the permissions file.</p> <p>Before using Dashcam, pregrant Camera2 permissions to the Dashcam Service as shown in <a href="../camera/acs">AAOS Camera</a>.</p> <p>Add the pregranted permissions file to the Blueprint or Make file in the same manner as the permissions file.</p> <p>In <code translate="no" dir="ltr">pre-grant-permissions-com.android.car.dashcam.xml</code>:</p> 
+<pre>&lt;exceptions&gt;
+    &lt;exception package="com.android.car.dashcam.service"&gt;
+        &lt;permission name="android.permission.CAMERA" fixed="false" /&gt;
+        &lt;permission name="android.permission.SYSTEM_CAMERA" fixed="false" /&gt;
+        &lt;permission name="android.permission.CAMERA_HEADLESS_SYSTEM_USER" fixed="false" /&gt;
+    &lt;/exception&gt;
+&lt;/exceptions&gt;
+</pre> <p>In <code translate="no" dir="ltr">Android.bp</code>:</p> 
+<pre>...
+required["pre-grant-permissions-com.android.car.dashcaml"]
+...
+
+prebuilt_etc {
+    name: "pre-grant-permissions-com.android.car.dashcaml",
+    sub_dir: "default-permissions",
+    src: "pre-grant-permissions-com.android.car.dashcam.xml",
+    filename_from_src: true,
+}
+</pre> <p>To learn more, see <a href="../unbundled_apps/integration#integrate-prebuild">Integrate a prebuild into a system image</a> and <a href="../../core/permissions/perms-allowlist#adding-allowlists">Add an allowlist</a>.</p> <h3 id="sideload">Sideload</h3> <p>The permissions file can also be sideloaded. Use this method when the prebuilt Dashcam is not configured.</p> <p>Using the permissions file created in the prebuilts section previously, run:</p> 
+<pre>adb root
+adb remount
+adb push allowed_privapp_com.android.car.dashcam.xml /etc/permissions/allowed_privapp_com.android.car.dashcam.xml
+adb shell chmod 644 /etc/permissions/allowed_privapp_com.android.car.dashcam.xml
+</pre> <p>Add the pregrant permissions file in a similar manner to <code translate="no" dir="ltr">etc/default-permissions/</code>.</p> <h2 id="overlays">Configure overlays</h2> <p>Dashcam service has overlayable configurations.</p> <h3 id="service_configuration">Service configuration</h3> 
+<pre>dashcam-service/res/values/config.xml
+</pre> <p>This file contains configurations for the service:</p> <ul> <li>
+<code translate="no" dir="ltr">config_file</code> The name of the trigger configuration file in <code translate="no" dir="ltr">/assets</code>
+</li> <li>
+<code translate="no" dir="ltr">allow_internal_storage</code> Allow recordings to be saved to internal storage</li> <li>
+<code translate="no" dir="ltr">boot_startup_enabled</code> Dashcam service start on device boot up</li> <li>
+<code translate="no" dir="ltr">notifications_on</code> Show notifications when recording starts</li> <li>
+<code translate="no" dir="ltr">default_app_component</code> The default dashcam app, which has global recordings access and global trigger access</li> <li>
+<code translate="no" dir="ltr">recording_module</code> ComponentName of <code translate="no" dir="ltr">IRecordingModule</code> implementation</li> <li>
+<code translate="no" dir="ltr">streaming_module</code> ComponentName of <code translate="no" dir="ltr">IStreamingModule</code> implementation</li> <li>
+<code translate="no" dir="ltr">trigger_module</code> ComponentName of <code translate="no" dir="ltr">ITriggerModule</code> implementation</li> </ul> <h2 id="triggers">Trigger configuration</h2> <p>To configure the recording triggers, create a copy of:</p> 
+<pre>dashcam-service/src/assets/config.xml
+</pre> <p>and add this to the assets directory. Point to this file in the <code translate="no" dir="ltr">config_file</code> element in the service configuration file.</p> <p>The trigger configuration consists of storage, camera, and trigger parts:</p> <h3 id="storage">Storage</h3> <p>The storage configuration has the following elements:</p> <ul> <li><p><code translate="no" dir="ltr">maxStorageUsagePercent</code> Maximum percent of available storage dashcam uses before pruning recordings.</p></li> <li><p><code translate="no" dir="ltr">maxStorageUsageMegabytes</code> Max amount of storage in megabytes dashcam uses before pruning recordings.</p></li> <li><p><code translate="no" dir="ltr">maxAgeHoursBeforePrune</code> Maximum number of hours before a recording is pruned. A recording can be pruned earlier if storage limits are met.</p></li> </ul> <h3 id="camera">Camera</h3> <p>The camera configuration has the following elements:</p> <ul> <li><p><strong>Camera ID.</strong> ID of the camera with the camera prefix.</p></li> <li><p><code translate="no" dir="ltr">prerollLengthMs</code> Length of the preroll to stored with each event.</p></li> <li><p><code translate="no" dir="ltr">width</code> Optional width of the buffer returned by the camera.</p></li> <li><p><code translate="no" dir="ltr">height</code> Optional height of the buffer returned by the camera.</p></li> </ul> 
+<pre>&lt;CameraConfig&gt;
+  &lt;Camera
+      ID="EVS:1"
+      prerollLengthMs="10000"
+      width="1920"
+      height="1080" /&gt;
+  &lt;Camera
+      ID="Camera2:1"
+      prerollLengthMs="10000" /&gt;
+&lt;/CameraConfig&gt;
+</pre> <p>This example shows camera ID EVS:1 with a 10 second preroll at 1080p and camera ID Camera2:1 with a 10 second preroll and default width and height.</p> <h3 id="trigger">Trigger</h3> <p>The trigger configuration consists of a list of triggers defined by the following:</p> <ul> <li><p><code translate="no" dir="ltr">name</code> The unique trigger name.</p></li> <li><p><code translate="no" dir="ltr">cameras</code> IDs of the cameras.</p></li> <li><p><code translate="no" dir="ltr">sensorPropertyID</code> ID of the sensor prefixed with the sensor group. Prefix options are <code translate="no" dir="ltr">VHAL</code> or <code translate="no" dir="ltr">SENSOR_MANAGER</code>.</p></li> <li><p><code translate="no" dir="ltr">description</code> Description of the trigger that is displayed in the UI.</p></li> <li><p><code translate="no" dir="ltr">recordingLengthMs</code> Duration after the event to record in milliseconds.</p></li> <li><p><code translate="no" dir="ltr">sensorValueType</code> Type of data produced by the sensor. Options are <code translate="no" dir="ltr">INT</code>, <code translate="no" dir="ltr">INT_ARRAY</code>, <code translate="no" dir="ltr">FLOAT</code>, <code translate="no" dir="ltr">FLOAT_ARRAY</code>, and <code translate="no" dir="ltr">BOOLEAN, STRING</code>.</p></li> <li><p><code translate="no" dir="ltr">thresholdType</code> How to evaluate the sensor value against the <code translate="no" dir="ltr">thresholdValue</code>. Options are <code translate="no" dir="ltr">AVERAGE</code>, <code translate="no" dir="ltr">BOOLEAN</code>, <code translate="no" dir="ltr">EQUALS</code>, <code translate="no" dir="ltr">LEAP</code>, <code translate="no" dir="ltr">LEAP_AVERAGE</code>, <code translate="no" dir="ltr">LEAP_OVER</code>, <code translate="no" dir="ltr">PEAK</code>, and <code translate="no" dir="ltr">PEAK_HOLD</code>.</p></li> <li><p><code translate="no" dir="ltr">thresholdValue</code> The value compared with the sensor value.</p></li> <li><p><code translate="no" dir="ltr">thresholdExtra</code> Extra value needed for some threshold types such as range for <code translate="no" dir="ltr">AVERAGE</code>.</p></li> <li><p><code translate="no" dir="ltr">triggerCooldown</code> Cool-down in milliseconds before firing another event of this type.</p></li> </ul> 
+<pre>&lt;EventTriggers&gt;
+  &lt;EventTrigger
+      name="AEB"
+      cameras="EVS:1, EVS:2"
+      sensorPropertyID="VHAL:289411073"
+      description="Automatic Emergency Braking"
+      recordingLengthMs="20000"
+      sensorValueType="INT"
+      thresholdType="EQUALS"
+      thresholdValue="2"
+      triggerCooldown="5000"/&gt;
+&lt;/EventTriggers&gt;
+</pre> <p>This example shows a trigger in which <code translate="no" dir="ltr">TriggerModule</code> monitors a VHAL sensor producing integer values. <code translate="no" dir="ltr">TriggerModule</code> compares equality against the threshold value. When the equality condition is met, a trigger records on EVS cameras 1 and 2.</p> 
+<pre>&lt;EventTrigger
+            name="SPEED"
+            cameras="Camera2:0, Camera2:1,  Camera2:2,  Camera2:3"
+            sensorPropertyID="VHAL:291504648"
+            description="Over speed"
+            recordingLengthMs="10000"
+            sensorValueType="FLOAT"
+            thresholdType="AVERAGE"
+            thresholdValue="20.0"
+            thresholdExtra="10"
+            triggerCooldown="2000"/&gt;
+</pre> <p>This example shows a trigger in which <code translate="no" dir="ltr">TriggerModule</code> monitors a VHAL sensor producing float values. <code translate="no" dir="ltr">TriggerModule</code> compares the sensor average over a range of <code translate="no" dir="ltr">10</code> samples to the threshold value of <code translate="no" dir="ltr">20.0</code>. The sample range is set in <code translate="no" dir="ltr">thresholdExtra</code>. A new event can only be triggered every <code translate="no" dir="ltr">2000</code> milliseconds as set in <code translate="no" dir="ltr">triggerCooldown</code>.</p> <h2 id="modules">Modules</h2> <p>The Dashcam Service consists of three modules:</p> <ul> <li><p><strong>Stream</strong> contains the logic for handling streams from cameras.</p></li> <li><p><strong>Recording</strong> contains the logic for handling recordings.</p></li> <li><p><strong>Trigger</strong> contains the logic for triggering a recording from sensor data. The module APIs are defined in their corresponding interfaces, <code translate="no" dir="ltr">IStreamModule</code>, <code translate="no" dir="ltr">IRecorderModule</code>, and <code translate="no" dir="ltr">ITriggerModule</code> and exposed to the <code translate="no" dir="ltr">DashcamManager</code> through <code translate="no" dir="ltr">DashcamServiceAPI</code>.</p></li> </ul> <h3 id="overlay_modules">Overlay modules</h3> <p>Dashcam Service uses <code translate="no" dir="ltr">dashcam-service/res/values/config.xml</code> to determine where to find the module implementations. Default implementations are provided for each module. However, each module can be overlaid by setting its component in the corresponding config value.</p> <p>Set OEM implementation component name of:</p> <ul> <li>
+<code translate="no" dir="ltr">IRecorderModule</code> to <code translate="no" dir="ltr">recording_module</code>
+</li> <li>
+<code translate="no" dir="ltr">IStreamModule</code> to <code translate="no" dir="ltr">streaming_module</code>
+</li> <li>
+<code translate="no" dir="ltr">ITriggerModule</code> to <code translate="no" dir="ltr">trigger_module</code>
+</li> </ul> <p>At runtime, the Dashcam service instantiates the component name set in <code translate="no" dir="ltr">config.xml</code> for each module.</p> <h2 id="app-developer-guide">App developer's guide</h2> <p>Dashcam is a production ready <strong>and</strong> customizable dashcam solution. Dashcam uses Dashcam Manager APIs to communicate with <code translate="no" dir="ltr">Dashcam  service</code>. The Dashcam Manager API can be found at <code translate="no" dir="ltr">IDashcamManager</code>. <em>Any app with the required permissions can use Dashcam Manager.</em></p> <h2 id="overlayui">OverlayUI</h2> <p>The app can be customized with Runtime Resource Overlays. To learn more, see <a href="car_ui/customize#overlay">Runtime Resource Overlays</a>. To see the list of overlayable elements, see <a href="https://cs.android.com/android/platform/superproject/+/ub-automotive-master-20250219:packages/apps/Car/Dashcam/dashcam-app/res/values/overlayable.xml">overlayable.xml</a>.</p> <h2 id="extend-triggers">Extend triggers</h2> <p>Triggers can be extended for the current session with a call to <code translate="no" dir="ltr">DashcamManager#addTrigger()</code>. Added triggers persist for the current session only.</p> <h2 id="autostart">Autostart</h2> <p>Autostart recording is not supported. However, a manual trigger can be started <code translate="no" dir="ltr">onBoot</code> with a call to <code translate="no" dir="ltr">DashcamManager.startRecording()</code></p> <h2 id="best-practices">Best practices</h2> <ul> <li><p><strong>Storage.</strong> External removable storage is highly recommended.</p></li> <li><p><strong>User experience.</strong> Design the Dashcam app's UI to be intuitive and user-friendly, adhering to AAOS design guidelines.</p></li> <li><p><strong>Performance optimization.</strong> Optimize the app's performance to minimize resource usage and ensure smooth operation in AAOS.</p></li> </ul> <h2 id="troubleshooting">Troubleshooting</h2> <ul> <li><p><strong>Camera Connectivity Issues.</strong> EVS or Camera2 must be supported and available in AAOS IVI.</p></li> <li><p><strong>Storage errors.</strong> Verify available storage space and manage recordings. External storage is highly recommended since using internal storage can prematurely cause storage to wear out.</p></li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/automotive/hmi/dashcam" class="_attribution-link">https://source.android.com/docs/automotive/hmi/dashcam</a>
+  </p>
+</div>

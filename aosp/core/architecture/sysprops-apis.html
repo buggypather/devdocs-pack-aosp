@@ -1,0 +1,192 @@
+<h1>Implement system properties as APIs</h1>  <p>System properties (sysprops) provide a convenient way to share information, usually configurations, system-wide. Each partition can use its own system properties internally. A problem can happen when properties are accessed across partitions, such as <code translate="no" dir="ltr">/vendor</code> accessing <code translate="no" dir="ltr">/system</code>-defined properties. Since Android 8.0, some partitions, such as <code translate="no" dir="ltr">/system</code>, can be upgraded, while <code translate="no" dir="ltr">/vendor</code> is left unchanged. Because system properties are just a global dictionary of string key-value pairs with no schema, it's difficult to stabilize properties. The <code translate="no" dir="ltr">/system</code> partition could change or remove properties that the <code translate="no" dir="ltr">/vendor</code> partition depends on without any notice.</p> <p>In Android 10 and higher, system properties accessed across partitions are schematized into sysprop description files, and APIs to access properties are generated as concrete functions for C++ and Rust, and classes for Java. These APIs are more convenient to use because no magic strings (such as <code translate="no" dir="ltr">ro.build.date</code>) are needed for access, and because they can be statically typed. ABI stability is also checked at build time, and the build breaks if incompatible changes happen. This check acts as explicitly defined interfaces between partitions. These APIs can also provide consistency between Rust, Java, and C++.</p> <h2 id="define-sysprops-apis">Define system properties as APIs</h2> <p>Define system properties as APIs with Sysprop Description files (<code translate="no" dir="ltr">.sysprop</code>), which use a TextFormat of protobuf, with the following schema:</p> 
+<pre>// File: sysprop.proto
+
+syntax = "proto3";
+
+package sysprop;
+
+enum Access {
+  Readonly = 0;
+  Writeonce = 1;
+  ReadWrite = 2;
+}
+
+enum Owner {
+  Platform = 0;
+  Vendor = 1;
+  Odm = 2;
+}
+
+enum Scope {
+  Public = 0;
+  Internal = 2;
+}
+
+enum Type {
+  Boolean = 0;
+  Integer = 1;
+  Long = 2;
+  Double = 3;
+  String = 4;
+  Enum = 5;
+  UInt = 6;
+  ULong = 7;
+
+  BooleanList = 20;
+  IntegerList = 21;
+  LongList = 22;
+  DoubleList = 23;
+  StringList = 24;
+  EnumList = 25;
+  UIntList = 26;
+  ULongList = 27;
+}
+
+message Property {
+  string api_name = 1;
+  Type type = 2;
+  Access access = 3;
+  Scope scope = 4;
+  string prop_name = 5;
+  string enum_values = 6;
+  bool integer_as_bool = 7;
+  string legacy_prop_name = 8;
+}
+
+message Properties {
+  Owner owner = 1;
+  string module = 2;
+  repeated Property prop = 3;
+}
+</pre> <p>A sysprop description file contains a properties message, which describes a set of properties. The meaning of its fields are as follows:</p> <table> <tr> <th>Field</th> <th>Meaning</th> </tr> <tr> <td>
+<code translate="no" dir="ltr">owner</code> </td> <td>Set to the partition that owns the properties: <code translate="no" dir="ltr">platform</code>, <code translate="no" dir="ltr">vendor</code>, or <code translate="no" dir="ltr">odm</code>. </td> </tr> <tr> <td>
+<code translate="no" dir="ltr">module</code> </td> <td>Used to create a namespace (C++) or static final class (Java) in which generated APIs are placed. For example, <code translate="no" dir="ltr">com.android.sysprop.BuildProperties</code> is namespace <code translate="no" dir="ltr">com::android::sysprop::BuildProperties</code> in C++, and the <code translate="no" dir="ltr">BuildProperties</code> class in the package in <code translate="no" dir="ltr">com.android.sysprop</code> in Java. </td> </tr> <tr> <td>
+<code translate="no" dir="ltr">prop</code> </td> <td>List of properties. </td> </tr> </table> <p>The meanings of the <code translate="no" dir="ltr">Property</code> message fields are as follows:</p> <table> <tr> <th>Field</th> <th>Meaning</th> </tr> <tr> <td>
+<code translate="no" dir="ltr">api_name</code> </td> <td>The name of the generated API. </td> </tr> <tr> <td>
+<code translate="no" dir="ltr">type</code> </td> <td>The type of this property. </td> </tr> <tr> <td>
+<code translate="no" dir="ltr">access</code> </td> <td>
+<code translate="no" dir="ltr">Readonly</code>: Generates getter API only <br> <code translate="no" dir="ltr">Writeonce</code>, <code translate="no" dir="ltr">ReadWrite</code>: Generates getter and setter APIs <br> <aside class="note"><b>Note:</b> Properties with the prefix <code translate="no" dir="ltr">ro.</code> can't use <code translate="no" dir="ltr">ReadWrite</code> access.</aside> </td> </tr> <tr> <td>
+<code translate="no" dir="ltr">scope</code> </td> <td>
+<code translate="no" dir="ltr">Internal</code>: Only the owner can access. <br> <code translate="no" dir="ltr">Public</code>: Everyone can access, except for NDK modules. </td> </tr> <tr> <td>
+<code translate="no" dir="ltr">prop_name</code> </td> <td>The name of the underlying system property, for example <code translate="no" dir="ltr">ro.build.date</code>. </td> </tr> <tr> <td>
+<code translate="no" dir="ltr">enum_values</code> </td> <td>(<code translate="no" dir="ltr">Enum</code>, <code translate="no" dir="ltr">EnumList</code> only) A bar(|)-separated string that consists of possible enum values. For example, <code translate="no" dir="ltr">value1|value2</code>. </td> </tr> <tr> <td>
+<code translate="no" dir="ltr">integer_as_bool</code> </td> <td>(<code translate="no" dir="ltr">Boolean</code>, <code translate="no" dir="ltr">BooleanList</code> only) Make setters use <code translate="no" dir="ltr">0</code> and <code translate="no" dir="ltr">1</code> instead of <code translate="no" dir="ltr">false</code> and <code translate="no" dir="ltr">true</code>. </td> </tr> <tr> <td>
+<code translate="no" dir="ltr">legacy_prop_name</code> </td> <td>(optional, <code translate="no" dir="ltr">Readonly</code> properties only) The legacy name of the underlying system property. When calling getter, the getter API tries to read <code translate="no" dir="ltr">prop_name</code> and uses <code translate="no" dir="ltr">legacy_prop_name</code> if <code translate="no" dir="ltr">prop_name</code> doesn't exist. Use <code translate="no" dir="ltr">legacy_prop_name</code> when deprecating an existing property and moving to a new property. </td> </tr> </table> <p>Each type of property maps to the following types in C++, Java, and Rust:</p> <table> <thead> <tr> <th>Type</th> <th>C++ (nullable)</th> <th>Java (nullable)</th> <th><strong>Rust (optional or nullable)</strong></th> </tr> </thead> <tbody> <tr> <td><strong>Boolean</strong></td> <td><code translate="no" dir="ltr">std::optional&lt;bool&gt;</code></td> <td><code translate="no" dir="ltr">Optional&lt;Boolean&gt;</code></td> <td><code translate="no" dir="ltr">Option&lt;bool&gt;</code></td> </tr> <tr> <td><strong>Integer</strong></td> <td><code translate="no" dir="ltr">std::optional&lt;std::int32_t&gt;</code></td> <td><code translate="no" dir="ltr">Optional&lt;Integer&gt;</code></td> <td><code translate="no" dir="ltr">Option&lt;i32&gt;</code></td> </tr> <tr> <td><strong>UInt</strong></td> <td><code translate="no" dir="ltr">std::optional&lt;std::uint32_t&gt;</code></td> <td><code translate="no" dir="ltr">Optional&lt;Integer&gt;</code></td> <td><code translate="no" dir="ltr">Option&lt;u32&gt;</code></td> </tr> <tr> <td><strong>Long</strong></td> <td><code translate="no" dir="ltr">std::optional&lt;std::int64_t&gt;</code></td> <td><code translate="no" dir="ltr">Optional&lt;Long&gt;</code></td> <td><code translate="no" dir="ltr">Option&lt;i64&gt;</code></td> </tr> <tr> <td><strong>ULong</strong></td> <td><code translate="no" dir="ltr">std::optional&lt;std::uint64_t&gt;</code></td> <td><code translate="no" dir="ltr">Optional&lt;Long&gt;</code></td> <td><code translate="no" dir="ltr">Option&lt;u64&gt;</code></td> </tr> <tr> <td><strong>Double</strong></td> <td><code translate="no" dir="ltr">std::optional&lt;double&gt;</code></td> <td><code translate="no" dir="ltr">Optional&lt;Double&gt;</code></td> <td><code translate="no" dir="ltr">Option&lt;f64&gt;</code></td> </tr> <tr> <td><strong>String</strong></td> <td><code translate="no" dir="ltr">std::optional&lt;std::string&gt;</code></td> <td><code translate="no" dir="ltr">Optional&lt;String&gt;</code></td> <td><code translate="no" dir="ltr">Option&lt;String&gt;</code></td> </tr> <tr> <td><strong>Enum</strong></td> <td><code translate="no" dir="ltr">std::optional&lt;{api\_name}\_values&gt;</code></td> <td><code translate="no" dir="ltr">Optional&lt;{api\_name}\_values&gt;</code></td> <td><code translate="no" dir="ltr">Option&lt;{ApiName}Values&gt;</code></td> </tr> <tr> <td><strong>T List</strong></td> <td><code translate="no" dir="ltr">std::vector&lt;std::optional&lt;T&gt;&gt;</code></td> <td><code translate="no" dir="ltr">List&lt;T&gt;</code></td> <td><code translate="no" dir="ltr">Vec&lt;T&gt;</code></td> </tr> </tbody> </table> <p>Here's an example of a Sysprop Description file defining three properties:</p> 
+<pre># File: android/sysprop/PlatformProperties.sysprop
+
+owner: Platform
+module: "android.sysprop.PlatformProperties"
+prop {
+    api_name: "build_date"
+    type: String
+    prop_name: "ro.build.date"
+    scope: Public
+    access: Readonly
+}
+prop {
+    api_name: "date_utc"
+    type: Integer
+    prop_name: "ro.build.date_utc"
+    scope: Internal
+    access: Readonly
+}
+prop {
+    api_name: "device_status"
+    type: Enum
+    enum_values: "on|off|unknown"
+    prop_name: "device.status"
+    scope: Public
+    access: ReadWrite
+}
+</pre> <h2 id="define-sysprop-libraries">Define system properties libraries</h2> <p>You can define <code translate="no" dir="ltr">sysprop_library</code> modules with Sysprop Description files. <code translate="no" dir="ltr">sysprop_library</code> serves as an API for C++, Java, and Rust. The build system internally generates one <code translate="no" dir="ltr">rust_library</code>, one <code translate="no" dir="ltr">java_library</code>, and one <code translate="no" dir="ltr">cc_library</code> for each instance of <code translate="no" dir="ltr">sysprop_library</code>.</p> 
+<pre>// File: Android.bp
+sysprop_library {
+    name: "PlatformProperties",
+    srcs: ["android/sysprop/PlatformProperties.sysprop"],
+    property_owner: "Platform",
+    vendor_available: true,
+}
+</pre> <p>You must include API lists files in the source for API checks. To do this, create API files and an <code translate="no" dir="ltr">api</code> directory. Put the <code translate="no" dir="ltr">api</code> directory in the same directory as <code translate="no" dir="ltr">Android.bp</code>. The API filenames are <code translate="no" dir="ltr">&lt;module_name&gt;-current.txt</code> and <code translate="no" dir="ltr">&lt;module_name&gt;-latest.txt</code>. <code translate="no" dir="ltr">&lt;module_name&gt;-current.txt</code> holds the API signatures of current source codes, and <code translate="no" dir="ltr">&lt;module_name&gt;-latest.txt</code> holds the latest frozen API signatures. The build system checks whether the APIs are changed by comparing these API files with generated API files at build time and emits an error message and instructions to update <code translate="no" dir="ltr">current.txt</code> file if <code translate="no" dir="ltr">current.txt</code> doesn't match with the source codes. Here's an example directory and file organization:</p> 
+<pre>├── api
+│   ├── PlatformProperties-current.txt
+│   └── PlatformProperties-latest.txt
+└── Android.bp
+</pre>
+<aside class="note"><strong>Note:</strong><span> The lower version of <code translate="no" dir="ltr">sysprop_library</code> might have a different set of API signature files, which are <code translate="no" dir="ltr">current.txt</code>, <code translate="no" dir="ltr">removed.txt</code>, <code translate="no" dir="ltr">system-current.txt</code>, <code translate="no" dir="ltr">system-removed.txt</code>, <code translate="no" dir="ltr">test-current.txt</code>, and <code translate="no" dir="ltr">test-removed.txt</code>. If that's the case, you can update them by using the <code translate="no" dir="ltr">m update-api</code> command.</span></aside> <p>Rust, Java, and C++ client modules can link against <code translate="no" dir="ltr">sysprop_library</code> to use generated APIs. The build system creates links from clients to generated C++, Java, and Rust libraries, thus giving clients access to generated APIs.</p> 
+<pre>java_library {
+    name: "JavaClient",
+    srcs: ["foo/bar.java"],
+    libs: ["PlatformProperties"],
+}
+
+cc_binary {
+    name: "cc_client",
+    srcs: ["baz.cpp"],
+    shared_libs: ["libPlatformProperties"],
+}
+
+rust_binary {
+    name: "rust_client",
+    srcs: ["src/main.rs"],
+    rustlibs: ["libplatformproperties_rust"],
+}
+</pre>
+<aside class="note"><strong>Note:</strong><span> You can generate the Rust library name by converting the <code translate="no" dir="ltr">sysprop_library</code> name to lowercase, replacing <code translate="no" dir="ltr">.</code> and <code translate="no" dir="ltr">-</code> with <code translate="no" dir="ltr">_</code>, and then prepending <code translate="no" dir="ltr">lib</code> and appending <code translate="no" dir="ltr">_rust</code>.</span></aside> <p>In the preceding example, you could access defined properties as follows.</p> <p>Rust example:</p> 
+<pre>use platformproperties::DeviceStatusValues;
+
+fn foo() -&gt; Result&lt;(), Error&gt; {
+  // Read "ro.build.date_utc". default value is -1.
+  let date_utc = platformproperties::date_utc()?.unwrap_or_else(-1);
+
+  // set "device.status" to "unknown" if "ro.build.date" is not set.
+  if platformproperties::build_date()?.is_none() {
+    platformproperties::set_device_status(DeviceStatusValues::UNKNOWN);
+  }
+
+  …
+}
+</pre> <p>Java example:</p> 
+<pre>import android.sysprop.PlatformProperties;
+
+…
+
+static void foo() {
+    …
+    // read "ro.build.date_utc". default value is -1
+    Integer dateUtc = PlatformProperties.date_utc().orElse(-1);
+
+    // set "device.status" to "unknown" if "ro.build.date" is not set
+    if (!PlatformProperties.build_date().isPresent()) {
+        PlatformProperties.device_status(
+            PlatformProperties.device_status_values.UNKNOWN
+        );
+    }
+    …
+}
+…
+</pre> <p>C++ example:</p> 
+<pre>#include &lt;android/sysprop/PlatformProperties.sysprop.h&gt;
+using namespace android::sysprop;
+
+…
+
+void bar() {
+    …
+    // read "ro.build.date". default value is "(unknown)"
+    std::string build_date = PlatformProperties::build_date().value_or("(unknown)");
+
+    // set "device.status" to "on" if it's "unknown" or not set
+    using PlatformProperties::device_status_values;
+    auto status = PlatformProperties::device_status();
+    if (!status.has_value() || status.value() == device_status_values::UNKNOWN) {
+        PlatformProperties::device_status(device_status_values::ON);
+    }
+    …
+}
+…
+</pre><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/architecture/sysprops-apis" class="_attribution-link">https://source.android.com/docs/core/architecture/sysprops-apis</a>
+  </p>
+</div>

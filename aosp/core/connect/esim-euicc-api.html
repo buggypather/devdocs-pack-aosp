@@ -1,0 +1,156 @@
+<h1>eUICC APIs</h1>  <p>In Android 9, profile management APIs (public and @SystemApi) are available through the class <code translate="no" dir="ltr">EuiccManager</code>. eUICC communication APIs (@SystemApi only) are available through the class <code translate="no" dir="ltr">EuiccCardManager</code>.</p> <h2 id="euicc">About eUICC</h2> <p>Carriers can make carrier apps using EuiccManager to manage profiles, as shown in Figure 1. Carrier apps don't need to be system apps but need to have carrier privileges granted by eUICC profiles. An <a href="esim-overview#making_an_lpa_app">LPA app</a> (LUI and LPA backend) needs to be a system app (i.e., included in the system image) to call the @SystemApi.</p> <p><img src="https://source.android.com/static/docs/core/connect/images/carrier-oem-lpa.png" alt="Android phone with Carrier App and OEM LPA" class="android-image-dark-theme-background"> </p> <p><strong>Figure 1.</strong> Android phones with carrier app and OEM LPA</p> <p>Besides the logic of calling <code translate="no" dir="ltr">EuiccCardManager</code> and talking to eUICC, LPA apps must implement the following:</p> <ul> <li>SM-DP+ client talking to SM-DP+ server to authenticate and download profiles</li> <li>[Optional] SM-DS to get more potential downloadable profiles</li> <li>Notification handling to send notifications to the server to update the profile state</li> <li>[Optional] Slots management including switching between eSIM and pSIM logic. This is optional if the phone only has an eSIM chip.</li> <li>eSIM OTA</li> </ul> <p>Although more than one LPA app can be present in an Android phone, only one LPA can be selected to be the actual working LPA based on the priority defined in the <code translate="no" dir="ltr">AndroidManifest.xml</code> file of each app.</p> <h2 id="euiccmanager">Use EuiccManager</h2> <p>The LPA APIs are public through <code translate="no" dir="ltr">EuiccManager</code> (under package <code translate="no" dir="ltr">android.telephony.euicc</code>). A carrier app can get the instance of <code translate="no" dir="ltr">EuiccManager</code>, and call the methods in <code translate="no" dir="ltr">EuiccManager</code> to get the eUICC information and manage subscriptions (referred to as profiles in GSMA RSP documents) as SubscriptionInfo instances.</p> <p>To call public APIs including download, switch, and delete subscription operations, the carrier app must have the required privileges. Carrier privileges are added by the mobile carrier in the profile metadata. The eUICC API enforces the carrier privilege rules accordingly.</p> <p>The Android platform does not handle the profile policy rules. If a policy rule is declared in the profile metadata, the LPA can choose how to handle the profile download and installation procedure. For example, it is possible for a third-party OEM LPA to handle policy rules using a special error code (the error code is passed from the OEM LPA to the platform, then the platform passes the code to the OEM LUI).</p> <p>For information on multiple enabled profiles APIs, see <a href="esim-mep">Multiple enabled profiles</a>.</p> <h3 id="api">APIs</h3> <p>The following APIs can be found in the <a href="https://developer.android.com/reference/android/telephony/euicc/EuiccManager"><code translate="no" dir="ltr">EuiccManager</code> reference documentation</a> and <a href="https://android.googlesource.com/platform/frameworks/base/+/android17-release/telephony/java/android/telephony/euicc/EuiccManager.java"><code translate="no" dir="ltr">EuiccManager.java</code></a>.</p> <h4 id="get-instance">Get instance (public)</h4> <p>Gets the instance of <code translate="no" dir="ltr">EuiccManager</code> through <code translate="no" dir="ltr">Context#getSystemService</code>. For details, see <a href="https://developer.android.com/reference/android/content/Context#getSystemService(java.lang.Class%3CT%3E)"><code translate="no" dir="ltr">getSystemService</code></a>.</p> 
+<pre>EuiccManager mgr = (EuiccManager) context.getSystemService(Context.EUICC_SERVICE);
+</pre> <h4 id="check-enabled">Check enabled (public)</h4> <p>Checks whether the embedded subscription is enabled. This should be checked before accessing LPA APIs. For details, see <a href="https://developer.android.com/reference/android/telephony/euicc/EuiccManager#isEnabled()"><code translate="no" dir="ltr">isEnabled</code></a>.</p> 
+<pre>boolean isEnabled = mgr.isEnabled();
+if (!isEnabled) {
+    return;
+}
+</pre> <h4 id="get-eid">Get EID (public)</h4> <p>Gets the EID identifying the eUICC hardware. This may be null if the eUICC is not ready. The caller must have carrier privilege or the <code translate="no" dir="ltr">READ_PRIVILEGED_PHONE_STATE</code> permission. For details, see <a href="https://developer.android.com/reference/android/telephony/euicc/EuiccManager#getEid()"><code translate="no" dir="ltr">getEid</code></a>.</p> 
+<pre>String eid = mgr.getEid();
+if (eid == null) {
+  // Handle null case.
+}
+</pre> <h4 id="get-euiccinfo">Get EuiccInfo (public)</h4> <p>Gets information about the eUICC. This contains the OS version. For details, see <a href="https://developer.android.com/reference/android/telephony/euicc/EuiccManager#getEuiccInfo()"><code translate="no" dir="ltr">getEuiccInfo</code></a>.</p> 
+<pre>EuiccInfo info = mgr.getEuiccInfo();
+String osVer = info.getOsVersion();
+</pre> <h4 id="download-sub">Download subscription (public)</h4> <p>Downloads the given subscription (referred to as "profile" in GSMA RSP documents). The subscription can be created from an activation code. For example, an activation code can be parsed from a QR code. Downloading a subscription is an asynchronous operation.</p> <p>The caller must either have the <code translate="no" dir="ltr">WRITE_EMBEDDED_SUBSCRIPTIONS</code> permission or have carrier privileges for the target subscription. For details, see <a href="https://developer.android.com/reference/android/telephony/euicc/EuiccManager#downloadSubscription(android.telephony.euicc.DownloadableSubscription,%20boolean,%20android.app.PendingIntent)"><code translate="no" dir="ltr">downloadSubscription</code></a>.</p> 
+<pre>// Register receiver.
+String action = "download_subscription";
+BroadcastReceiver receiver =
+        new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (!action.equals(intent.getAction())) {
+                    return;
+                }
+                resultCode = getResultCode();
+                detailedCode = intent.getIntExtra(
+                    EuiccManager.EXTRA_EMBEDDED_SUBSCRIPTION_DETAILED_CODE,
+                    0 /* defaultValue*/);
+                resultIntent = intent;
+            }
+        };
+context.registerReceiver(
+        receiver,
+        new IntentFilter(action),
+        "example.broadcast.permission" /* broadcastPermission*/, null /* handler */);
+
+// Download subscription asynchronously.
+DownloadableSubscription sub =
+        DownloadableSubscription.forActivationCode(code /* encodedActivationCode*/);
+Intent intent = new Intent(action);
+PendingIntent callbackIntent = PendingIntent.getBroadcast(
+        getContext(), 0 /* requestCode */, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+mgr.downloadSubscription(sub, true /* switchAfterDownload */, callbackIntent);
+</pre> <h4 id="switch-sub">Switch subscription (public)</h4> <p>Switches to (enables) the given subscription. The caller must either have <code translate="no" dir="ltr">WRITE_EMBEDDED_SUBSCRIPTIONS</code> or have carrier privileges for the current enabled subscription and the target subscription. For details, see <a href="https://developer.android.com/reference/android/telephony/euicc/EuiccManager#switchToSubscription(int,%20android.app.PendingIntent)"><code translate="no" dir="ltr">switchToSubscription</code></a>.</p> 
+<pre>// Register receiver.
+String action = "switch_to_subscription";
+BroadcastReceiver receiver =
+        new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (!action.equals(intent.getAction())) {
+                    return;
+                }
+                resultCode = getResultCode();
+                detailedCode = intent.getIntExtra(
+                    EuiccManager.EXTRA_EMBEDDED_SUBSCRIPTION_DETAILED_CODE, 0 /* defaultValue*/);
+                resultIntent = intent;
+            }
+        };
+context.registerReceiver(receiver, new IntentFilter(action),
+        "example.broadcast.permission" /* broadcastPermission*/, null /* handler */);
+
+// Switch to a subscription asynchronously.
+Intent intent = new Intent(action);
+PendingIntent callbackIntent = PendingIntent.getBroadcast(
+        getContext(), 0 /* requestCode */, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+mgr.switchToSubscription(1 /* subscriptionId */, callbackIntent);
+</pre> <h4 id="switch-sub-port">Switch subscription with port (public)</h4> <p>(Available from Android 13) Switches to (enables) the given subscription with the port index specified. The caller must either have <code translate="no" dir="ltr">WRITE_EMBEDDED_SUBSCRIPTIONS</code> or have carrier privileges for the current enabled subscription and the target subscription. For details, see <a href="https://developer.android.com/reference/android/telephony/euicc/EuiccManager#switchToSubscription(int,%20int,%20android.app.PendingIntent)"><code translate="no" dir="ltr">switchToSubscription</code></a>.</p> 
+<pre>// Register receiver.
+String action = "switch_to_subscription";
+BroadcastReceiver receiver =
+        new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (!action.equals(intent.getAction())) {
+                    return;
+                }
+                resultCode = getResultCode();
+                detailedCode = intent.getIntExtra(
+                    EuiccManager.EXTRA_EMBEDDED_SUBSCRIPTION_DETAILED_CODE, 0 /* defaultValue*/);
+                resultIntent = intent;
+            }
+        };
+context.registerReceiver(receiver, new IntentFilter(action),
+        "example.broadcast.permission" /* broadcastPermission*/, null /* handler */);
+
+// Switch to a subscription asynchronously.
+Intent intent = new Intent(action);
+PendingIntent callbackIntent = PendingIntent.getBroadcast(
+        getContext(), 0 /* requestCode */, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+mgr.switchToSubscription(1 /* subscriptionId */, 0 /*portIndex*/, callbackIntent);
+</pre> <h4 id="is-port-available">Is SIM port available (public)</h4> 
+<pre>public boolean isSimPortAvailable(int portIndex)
+</pre> <p>(Available from Android 13) Returns whether the passing port index is available. A port is available if it has no subscription enabled or the calling app has carrier privilege over the subscription installed on the selected port. For details, see <a href="https://developer.android.com/reference/android/telephony/euicc/EuiccManager#isSimPortAvailable(int)"><code translate="no" dir="ltr">isSimPortAvailable</code></a>.</p> <h4 id="delete-sub">Delete subscription (public)</h4> <p>Deletes a subscription with a subscription ID. If the subscription is currently active, it is first disabled. The caller must have either <code translate="no" dir="ltr">WRITE_EMBEDDED_SUBSCRIPTIONS</code> or carrier privileges for the target subscription. For details, see <a href="https://developer.android.com/reference/android/telephony/euicc/EuiccManager#deleteSubscription(int,%20android.app.PendingIntent)"><code translate="no" dir="ltr">deleteSubscription</code></a>.</p> 
+<pre>// Register receiver.
+String action = "delete_subscription";
+BroadcastReceiver receiver =
+        new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (!action.equals(intent.getAction())) {
+                    return;
+                }
+                resultCode = getResultCode();
+                detailedCode = intent.getIntExtra(
+                    EuiccManager.EXTRA_EMBEDDED_SUBSCRIPTION_DETAILED_CODE,
+                    0 /* defaultValue*/);
+                resultIntent = intent;
+            }
+        };
+context.registerReceiver(receiver, new IntentFilter(action),
+        "example.broadcast.permission" /* broadcastPermission*/,
+        null /* handler */);
+
+// Delete a subscription asynchronously.
+Intent intent = new Intent(action);
+PendingIntent callbackIntent = PendingIntent.getBroadcast(
+        getContext(), 0 /* requestCode */, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+mgr.deleteSubscription(1 /* subscriptionId */, callbackIntent);
+</pre> <h4 id="erase-subs">Erase all subscriptions (system API)</h4> <p>Erases all subscriptions on a device. Starting in Android 11, you should provide an <code translate="no" dir="ltr">EuiccCardManager#ResetOption</code> enum value to specify whether to erase all test, operational, or both types of subscriptions. The caller must have <code translate="no" dir="ltr">WRITE_EMBEDDED_SUBSCRIPTIONS</code> permission.</p> 
+<pre>// Register receiver.
+String action = "delete_subscription";
+BroadcastReceiver receiver =
+        new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (!action.equals(intent.getAction())) {
+                    return;
+                }
+                resultCode = getResultCode();
+                detailedCode = intent.getIntExtra(
+                    EuiccManager.EXTRA_EMBEDDED_SUBSCRIPTION_DETAILED_CODE,
+                    0 /* defaultValue*/);
+                resultIntent = intent;
+            }
+        };
+context.registerReceiver(receiver, new IntentFilter(action),
+        "example.broadcast.permission" /* broadcastPermission*/,
+        null /* handler */);
+
+// Erase all operational subscriptions asynchronously.
+Intent intent = new Intent(action);
+PendingIntent callbackIntent = PendingIntent.getBroadcast(
+        getContext(), 0 /* requestCode */, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+mgr.eraseSubscriptions(
+        EuiccCardManager.RESET_OPTION_DELETE_OPERATIONAL_PROFILES, callbackIntent);
+</pre> <h4 id="start-resolution-activity">Start resolution activity (public)</h4> <p>Starts an activity to resolve a user-resolvable error. If an operation returns <code translate="no" dir="ltr">EuiccManager#EMBEDDED_SUBSCRIPTION_RESULT_RESOLVABLE_ERROR</code>, this method can be called to prompt the user to resolve the issue. This method can only be called once for a particular error.</p> 
+<pre>...
+mgr.startResolutionActivity(getActivity(), 0 /* requestCode */, resultIntent, callbackIntent);
+</pre> <h3 id="constants">Constants</h3> <p>To see a list of the <code translate="no" dir="ltr">public</code> constants in <code translate="no" dir="ltr">EuiccManager</code>, see <a href="https://developer.android.com/reference/android/telephony/euicc/EuiccManager#constants">Constants</a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
+    <a href="https://source.android.com/docs/core/connect/esim-euicc-api" class="_attribution-link">https://source.android.com/docs/core/connect/esim-euicc-api</a>
+  </p>
+</div>
