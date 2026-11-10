@@ -55,36 +55,36 @@ if (err != OK) {
 OMX_STRING name = const_cast&lt;OMX_STRING&gt;(
         "OMX.google.android.index.configureVideoTunnelMode");
 
-OMX_ERRORTYPE err = OMX_GetExtensionIndex(mHand&amp;le, name, index);
+OMX_ERRORTYPE err = OMX_GetExtensionIndex(mHandle, name, &amp;index);
 
 ConfigureVideoTunnelModeParams tunnelParams;
-Init&amp;OMXParams(tunnelParams);
+InitOMXParams(&amp;tunnelParams);
 tunnelParams.nPortIndex = portIndex;
 tunnelParams.bTunneled = tunneled;
 tunnelParams.nAudioHwSync = audioHwSync;
-err = OMX_SetParameter(mHandl&amp;e, index, tunnelParams);
-err = OMX_GetParameter(mHandl&amp;e, index, tunnelParams);
+err = OMX_SetParameter(mHandle, index, &amp;tunnelParams);
+err = OMX_GetParameter(mHandle, index, &amp;tunnelParams);
 sidebandHandle = (native_handle_t*)tunnelParams.pSidebandWindow;
 </pre> <p>If the component supports this configuration, it should allocate a sideband handle to this codec and pass it back through the <code translate="no" dir="ltr">pSidebandWindow</code> member so that the HWC can identify the associated codec. If the component doesn't support this configuration, it should set <code translate="no" dir="ltr">bTunneled</code> to <code translate="no" dir="ltr">OMX_FALSE</code>.</p> <h3 id="codec2">Codec2</h3> <p>In Android 11 or higher, <code translate="no" dir="ltr">Codec2</code> supports tunneled playback. The decoder component should support the following:</p> <ul> <li><p>Configuring <code translate="no" dir="ltr">C2PortTunneledModeTuning</code>, which configures tunnel mode and passes in the <code translate="no" dir="ltr">HW_AV_SYNC</code> retrieved from either the audio output device or the tuner configuration.</p></li> <li><p>Querying <code translate="no" dir="ltr">C2_PARAMKEY_OUTPUT_TUNNEL_HANDLE</code>, to allocate and retrieve the sideband handle for HWC.</p></li> <li><p>Handling <code translate="no" dir="ltr">C2_PARAMKEY_TUNNEL_HOLD_RENDER</code> when attached to a <code translate="no" dir="ltr">C2Work</code>, which instructs the codec to decode and signal work completion, but not to render the output buffer until either 1) the codec is later instructed to render it or 2) audio playback begins.</p></li> <li><p>Handling <code translate="no" dir="ltr">C2_PARAMKEY_TUNNEL_START_RENDER</code>, which instructs the codec to immediately render the frame that was marked with <code translate="no" dir="ltr">C2_PARAMKEY_TUNNEL_HOLD_RENDER</code>, even if audio playback hasn't started.</p></li> <li>
 <p>Leave <code translate="no" dir="ltr">debug.stagefright.ccodec_delayed_params</code> unconfigured (recommended). If you do configure it, set to <code translate="no" dir="ltr">false</code>.</p> <aside class="note"><strong>Note:</strong><span> Don't set <code translate="no" dir="ltr">debug.stagefright.ccodec_delayed_params</code> to <code translate="no" dir="ltr">true</code> as this causes a delay in sending <code translate="no" dir="ltr">C2_PARAMKEY_TUNNEL_START_RENDER</code> to the codec.</span></aside>
 </li> </ul> <p>The AOSP implementation configures tunnel mode in <a href="https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/av/media/codec2/sfplugin/CCodec.cpp;drc=5dac32ab8ad30001367a1ee4bbc82ed37c785240"><code translate="no" dir="ltr">CCodec</code></a> through <code translate="no" dir="ltr">C2PortTunnelModeTuning</code>, as shown in the following code snippet:</p> 
-<pre>if (msg-&gt;findInt32("audio-hw-sy&amp;nc", tunnele&gt;dPlayback-m.syncId[0])) {
-    tunnele&gt;dPlayback-m.syncType =
+<pre>if (msg-&gt;findInt32("audio-hw-sync", &amp;tunneledPlayback-&gt;m.syncId[0])) {
+    tunneledPlayback-&gt;m.syncType =
             C2PortTunneledModeTuning::Struct::sync_type_t::AUDIO_HW_SYNC;
-} els&gt;e if (msg-findInt32("h&amp;w-av-sync-id&amp;quot&gt;;, tunneledPlayback-m.syncId[0])) {
- &gt;   tunneledPlayback-m.syncType =
+} else if (msg-&gt;findInt32("hw-av-sync-id", &amp;tunneledPlayback-&gt;m.syncId[0])) {
+    tunneledPlayback-&gt;m.syncType =
             C2PortTunneledModeTuning::Struct::sync_type_t::HW_AV_SYNC;
 } else {
- &gt;   tunneledPlayback-m.syncType =
+    tunneledPlayback-&gt;m.syncType =
             C2PortTunneledModeTuning::Struct::sync_type_t::REALTIME;
- &gt;   tunneledPlayback-setFlexCount(0);
+    tunneledPlayback-&gt;setFlexCount(0);
 }
-c2_st&gt;atus_t c2err = comp-config({ tunneledPlayback.get() }, C2_MAY_BLOCK,
-        fa&lt;ilures);
-std::v&lt;ectorst&gt;&gt;d::unique_ptrC2Param p&gt;arams;
-c2err = comp-query({}, {C2PortTunnelHandleTuning::output::PARAM_TYPE},
-   &amp;     C2_DONT_BLOCK, params);&amp;&amp;
-if (c2err == C2_OK  params.size() == 1u) {
+c2_status_t c2err = comp-&gt;config({ tunneledPlayback.get() }, C2_MAY_BLOCK,
+        failures);
+std::vector&lt;std::unique_ptr&lt;C2Param&gt;&gt; params;
+c2err = comp-&gt;query({}, {C2PortTunnelHandleTuning::output::PARAM_TYPE},
+        C2_DONT_BLOCK, &amp;params);
+if (c2err == C2_OK &amp;&amp; params.size() == 1u) {
     C2PortTunnelHandleTuning::output *videoTunnelSideband =
             C2PortTunnelHandleTuning::output::From(params[0].get());
     return OK;
@@ -108,24 +108,24 @@ if (c2err == C2_OK  params.size() == 1u) {
 setParameter</code> extension.</p></li> <li>
 <p>Specify its capabilities in the <code translate="no" dir="ltr">media_codecs.xml</code> file and declare the tunneled playback feature. It should also clarify any limitations on frame size, alignment, or bitrate. An example is shown below:</p> 
 <pre>&lt;MediaCodec name="OMX.OEM_NAME.VIDEO.DECODER.AVC.tunneled"
-type=&amp;q&gt;uot;v&lt;ideo/avc" 
-    Feature name=&amp;&gt;quot;&lt;adaptive-playback" /
-    Feature name="t&gt;unnel&lt;ed-playback" required=”true” /
-    Limit n&gt;ame=&amp;&lt;quot;size" min="32x32&amp;quot&gt;; max&lt;="3840x2160" /
-    Limit name=&amp;&gt;quot;alignmen&lt;t" val&gt;ue="2x2" /
-    Limit name="bitrate" range="1-20000000" /
+type="video/avc" &gt;
+    &lt;Feature name="adaptive-playback" /&gt;
+    &lt;Feature name="tunneled-playback" required=”true” /&gt;
+    &lt;Limit name="size" min="32x32" max="3840x2160" /&gt;
+    &lt;Limit name="alignment" value="2x2" /&gt;
+    &lt;Limit name="bitrate" range="1-20000000" /&gt;
         ...
-/MediaCodec
+&lt;/MediaCodec&gt;
 </pre>
 </li> </ul> <p>If the same OMX component is used to support tunneled and nontunneled decoding, it should leave the tunneled playback feature as non-required. Both tunneled and nontunneled decoders then have the same capability limitations. An example is shown below:</p> 
-<pre>&lt;MediaCodec name="OMX._OEM\_NAME_.VIDEO.DECODER.AVC" type=&amp;q&gt;uot;v&lt;ideo/avc" 
-    Feature name=&amp;&gt;quot;&lt;adaptive-playback" /
-    Feat&gt;ure n&lt;ame="tunneled-playback" /
-    Limit n&gt;ame=&amp;&lt;quot;size" min="32x32&amp;quot&gt;; max&lt;="3840x2160" /
-    Limit name=&amp;&gt;quot;alignmen&lt;t" val&gt;ue="2x2" /
-    Limit name="bitrate" range="1-20000000" /
+<pre>&lt;MediaCodec name="OMX._OEM\_NAME_.VIDEO.DECODER.AVC" type="video/avc" &gt;
+    &lt;Feature name="adaptive-playback" /&gt;
+    &lt;Feature name="tunneled-playback" /&gt;
+    &lt;Limit name="size" min="32x32" max="3840x2160" /&gt;
+    &lt;Limit name="alignment" value="2x2" /&gt;
+    &lt;Limit name="bitrate" range="1-20000000" /&gt;
         ...
-/MediaCodec
+&lt;/MediaCodec&gt;
 </pre> <h3 id="suggestions-hwc">Hardware Composer (HWC)</h3> <p>When there's a tunneled layer (a layer with <code translate="no" dir="ltr">HWC_SIDEBAND</code> <code translate="no" dir="ltr">compositionType</code>) on a display, the layer’s <code translate="no" dir="ltr">sidebandStream</code> is the sideband handle allocated by the OMX video component.</p> <p>The HWC synchronizes decoded video frames (from the tunneled OMX component) to the associated audio track (with the <code translate="no" dir="ltr">audio-hw-sync</code> ID). When a new video frame becomes current, the HWC composites it with the current contents of all layers received during the last prepare or set call, and displays the resulting image. The prepare or set calls happen only when other layers change, or when properties of the sideband layer (such as position or size) change.</p> <p>The following figure represents the HWC working with the hardware (or kernel or driver) synchronizer, to combine video frames (7b) with the latest composition (7a) for display at the correct time, based on audio (7c).</p> <p><img src="https://source.android.com/static/docs/devices/tv/images/hardware_composer_and_synchronizer.png" alt="HWC combining video frames based on audio"></p> <p><strong>Figure 4.</strong> HWC hardware (or kernel or driver) synchronizer.</p><div class="_attribution">
   <p class="_attribution-p">
     &copy; Google LLC<br>Text licensed under the Creative Commons Attribution 4.0 License; code samples under the Apache License 2.0.<br>
